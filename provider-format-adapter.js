@@ -272,6 +272,22 @@
     }
     return result;
   }
+  function getSafeAnthropicUsage(usage) {
+    if (usage && typeof usage === "object") {
+      return {
+        input_tokens: Number.isFinite(Number(usage.input_tokens)) ? Number(usage.input_tokens) : 0,
+        output_tokens: Number.isFinite(Number(usage.output_tokens)) ? Number(usage.output_tokens) : 0,
+        cache_read_input_tokens: Number.isFinite(Number(usage.cache_read_input_tokens)) ? Number(usage.cache_read_input_tokens) : 0,
+        cache_creation_input_tokens: Number.isFinite(Number(usage.cache_creation_input_tokens)) ? Number(usage.cache_creation_input_tokens) : 0
+      };
+    }
+    return {
+      input_tokens: 0,
+      output_tokens: 0,
+      cache_read_input_tokens: 0,
+      cache_creation_input_tokens: 0
+    };
+  }
   function mapChatStopReason(finishReason, hasToolUse) {
     if (finishReason === "tool_calls" || finishReason === "function_call") {
       return "tool_use";
@@ -955,7 +971,7 @@
               stop_reason: "end_turn",
               stop_sequence: null
             },
-            usage: null
+            usage: getSafeAnthropicUsage(null)
           }));
         }
         output.push(sseChunk("message_stop", {
@@ -1085,7 +1101,7 @@
             stop_reason: mapChatStopReason(choice.finish_reason, openToolBlockIndices.size > 0),
             stop_sequence: null
           },
-          usage: chunk.usage ? buildAnthropicUsageFromChat(chunk.usage) : null
+          usage: getSafeAnthropicUsage(chunk.usage ? buildAnthropicUsageFromChat(chunk.usage) : null)
         }));
         hasSentMessageDelta = true;
       }
@@ -1545,7 +1561,7 @@
                 stop_reason: hasToolUse ? "tool_use" : "end_turn",
                 stop_sequence: null
               },
-              usage: null
+              usage: getSafeAnthropicUsage(null)
             }));
             tailOutput.push(sseChunk("message_stop", {
               type: "message_stop"

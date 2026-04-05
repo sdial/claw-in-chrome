@@ -8,11 +8,18 @@
   const BACKUP_KEY = "customProviderOriginalApiKey";
   const STYLE_ID = "cp-options-inline-provider-style";
   const ROOT_ID = "cp-options-enhancements-root";
+  const PROMPT_ROOT_ID = "cp-options-prompt-root";
   const DEBUG_ROOT_ID = "cp-options-debug-root";
   const PANEL_ID = "cp-options-inline-provider-panel";
   const NAV_ITEM_ID = "cp-options-provider-nav-item";
+  const PROMPT_NAV_ITEM_ID = "cp-options-prompt-nav-item";
+  const BUILTIN_PROMPT_PROFILE_ID = "__builtin_default_prompt__";
   const DEBUG_LOGS_KEY = "sidepanelDebugLogs";
   const DEBUG_META_KEY = "sidepanelDebugMeta";
+  const SYSTEM_PROMPT_STORAGE_KEY = "chrome_ext_system_prompt";
+  const PROMPT_PROFILES_STORAGE_KEY = "customSystemPromptProfiles";
+  const PROMPT_ACTIVE_PROFILE_STORAGE_KEY = "customSystemPromptActiveProfileId";
+  const DEFAULT_AGENT_ROLE_PROMPT = "You are Claude CUSTOM, a browser sidepanel assistant inside a Chrome extension. Help the user complete their request accurately and concisely. Use available browser context and tools when needed, but never pretend an action succeeded if you did not actually perform it. If a request could cause irreversible changes, purchases, submissions, account changes, authentication changes, or destructive actions, pause and ask the user to confirm before proceeding.";
   const DEBUG_EXPORT_SENSITIVE_KEYS = new Set(["apikey", "anthropicapikey", "accesstoken", "refreshtoken", "authtoken", "authorization", "token", "secret", "password", "currentapikey", "originalapikey"]);
   const DEBUG_EXPORT_PRIVATE_URL_KEYS = new Set(["baseurl", "providerurl", "requesturl", "url", "href", "uri", "filename", "source", "origin"]);
   const DEBUG_EXPORT_PRIVATE_TEXT_KEYS = new Set(["bodypreview", "notes", "prompt", "content", "requestbody", "responsebody", "rawbody", "inputtext", "outputtext"]);
@@ -138,7 +145,7 @@
   const UI_STRINGS = {
     en: {
       providerName: "Model provider",
-      subtitle: "Configure a compatible provider, endpoint, and default model used by Claw for Chrome.",
+      subtitle: "Configure a compatible provider, endpoint, and default model used by Claw in Chrome.",
       toggleTitle: "Use custom provider",
       toggleHelp: "When enabled, side panel requests are routed through this provider.",
       providerNameLabel: "Provider name",
@@ -215,6 +222,30 @@
       saveSuccessEnabled: "Saved. Reopen the side panel to apply the provider.",
       saveSuccessDisabled: "Saved. The custom provider is turned off.",
       saveFailure: "Failed to save this provider configuration.",
+      promptTitle: "Prompt overrides",
+      promptSubtitle: "Manage reusable agent role prompt profiles for the side panel assistant. The built-in default prompt always stays in the list and cannot be edited or deleted.",
+      promptEmptyProfilesTitle: "No prompt profiles yet",
+      promptEmptyProfilesHelp: "Create a prompt profile, then save and set it as current whenever you want to use it.",
+      promptDefaultProfileName: "Built-in default prompt",
+      promptProfileNameLabel: "Profile name",
+      promptProfileNamePlaceholder: "Default coding role",
+      agentRoleLabel: "Agent role",
+      agentRoleHelp: "This field maps to the main system prompt used by the side panel assistant.",
+      agentRolePlaceholder: "Enter custom system prompt...",
+      promptCreateTitle: "Create prompt profile",
+      promptEditTitle: "Edit prompt profile",
+      promptSummaryTargetLabel: "Target",
+      promptSummaryPreviewLabel: "Preview",
+      promptSummaryLengthLabel: "Length",
+      promptTargetValue: "Main agent role",
+      promptSave: "Save and apply",
+      promptSaved: "Prompt profile saved and applied.",
+      promptActivated: "Current prompt profile updated.",
+      promptDeleted: "Prompt profile deleted.",
+      promptDeleteConfirm: "Delete prompt profile \"{name}\"?",
+      promptNameRequired: "Enter a profile name.",
+      promptContentRequired: "Enter the agent role prompt first.",
+      promptSaveFailure: "Failed to save this prompt profile.",
       inlineModelSaved: "Model updated.",
       inlineReasoningSaved: "Reasoning effort updated.",
       toggleAria: "Toggle custom provider",
@@ -240,7 +271,7 @@
     },
     zh: {
       providerName: "模型供应商",
-      subtitle: "配置 Claw for Chrome 使用的兼容模型供应商、接口地址和默认模型。",
+      subtitle: "配置 Claw in Chrome 使用的兼容模型供应商、接口地址和默认模型。",
       toggleTitle: "启用自定义供应商",
       toggleHelp: "开启后，侧边栏请求会通过这里配置的模型供应商发出。",
       providerNameLabel: "供应商名称",
@@ -317,6 +348,30 @@
       saveSuccessEnabled: "保存成功。重新打开侧边栏后会应用新配置。",
       saveSuccessDisabled: "保存成功。当前已关闭自定义供应商。",
       saveFailure: "保存模型供应商配置失败。",
+      promptTitle: "提示词修改",
+      promptSubtitle: "智能体的角色提示词配置",
+      promptEmptyProfilesTitle: "还没有提示词配置",
+      promptEmptyProfilesHelp: "先新增一套提示词配置，保存后就可以在列表里切换当前使用。",
+      promptDefaultProfileName: "默认提示词",
+      promptProfileNameLabel: "配置名称",
+      promptProfileNamePlaceholder: "例如 默认编码角色",
+      agentRoleLabel: "智能体角色",
+      agentRoleHelp: "这里只编辑侧边栏主助手实际使用的 system prompt。",
+      agentRolePlaceholder: "输入自定义系统提示词...",
+      promptCreateTitle: "新增提示词配置",
+      promptEditTitle: "编辑提示词配置",
+      promptSummaryTargetLabel: "目标",
+      promptSummaryPreviewLabel: "预览",
+      promptSummaryLengthLabel: "长度",
+      promptTargetValue: "主智能体角色",
+      promptSave: "保存并应用",
+      promptSaved: "提示词配置已保存并应用。",
+      promptActivated: "已切换当前使用的提示词配置。",
+      promptDeleted: "提示词配置已删除。",
+      promptDeleteConfirm: "确定删除“{name}”这套提示词配置吗？",
+      promptNameRequired: "请先填写配置名称。",
+      promptContentRequired: "请先填写智能体角色提示词。",
+      promptSaveFailure: "保存提示词配置失败。",
       inlineModelSaved: "模型已更新。",
       inlineReasoningSaved: "思考深度已更新。",
       toggleAria: "切换自定义供应商",
@@ -388,6 +443,149 @@
   const persistFetchedModelsForConfig = helpers.persistFetchedModelsForConfig || async function (config, models) {
     return Array.isArray(models) ? models.slice() : [];
   };
+  function generatePromptProfileId() {
+    if (globalThis.crypto?.randomUUID) {
+      return globalThis.crypto.randomUUID();
+    }
+    return `prompt-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
+  }
+  function normalizePromptProfile(raw) {
+    const source = raw && typeof raw === "object" ? raw : {};
+    const id = String(source.id || "").trim();
+    if (!id) {
+      return null;
+    }
+    return {
+      id,
+      name: String(source.name || "").trim(),
+      prompt: String(source.prompt || "").trim(),
+      createdAt: source.createdAt || null,
+      updatedAt: source.updatedAt || null
+    };
+  }
+  async function readPromptProfilesState() {
+    const stored = await chrome.storage.local.get([PROMPT_PROFILES_STORAGE_KEY, PROMPT_ACTIVE_PROFILE_STORAGE_KEY]);
+    const profiles = Array.isArray(stored[PROMPT_PROFILES_STORAGE_KEY]) ? stored[PROMPT_PROFILES_STORAGE_KEY].map(normalizePromptProfile).filter(Boolean) : [];
+    const activeProfileId = typeof stored[PROMPT_ACTIVE_PROFILE_STORAGE_KEY] === "string" ? stored[PROMPT_ACTIVE_PROFILE_STORAGE_KEY] : null;
+    const activeProfile = profiles.find(function (profile) {
+      return profile.id === activeProfileId;
+    }) || null;
+    return {
+      profiles,
+      activeProfileId: activeProfile ? activeProfile.id : null,
+      activeProfile
+    };
+  }
+  async function writePromptProfilesState(profiles, activeProfileId) {
+    await chrome.storage.local.set({
+      [PROMPT_PROFILES_STORAGE_KEY]: profiles
+    });
+    if (activeProfileId) {
+      await chrome.storage.local.set({
+        [PROMPT_ACTIVE_PROFILE_STORAGE_KEY]: activeProfileId
+      });
+    } else {
+      await chrome.storage.local.remove(PROMPT_ACTIVE_PROFILE_STORAGE_KEY);
+    }
+  }
+  async function readAgentSystemPromptState() {
+    const stored = await chrome.storage.local.get([SYSTEM_PROMPT_STORAGE_KEY]);
+    const raw = stored[SYSTEM_PROMPT_STORAGE_KEY];
+    const record = raw && typeof raw === "object" ? raw : {};
+    const customPrompt = typeof record.systemPrompt === "string" ? record.systemPrompt : "";
+    return {
+      record,
+      customPrompt,
+      effectivePrompt: customPrompt.trim() ? customPrompt : DEFAULT_AGENT_ROLE_PROMPT,
+      isCustom: !!customPrompt.trim()
+    };
+  }
+  async function saveAgentSystemPrompt(promptText) {
+    const stored = await chrome.storage.local.get([SYSTEM_PROMPT_STORAGE_KEY]);
+    const current = stored[SYSTEM_PROMPT_STORAGE_KEY] && typeof stored[SYSTEM_PROMPT_STORAGE_KEY] === "object" ? {
+      ...stored[SYSTEM_PROMPT_STORAGE_KEY]
+    } : {};
+    current.systemPrompt = String(promptText || "");
+    await chrome.storage.local.set({
+      [SYSTEM_PROMPT_STORAGE_KEY]: current
+    });
+    return readAgentSystemPromptState();
+  }
+  async function restoreAgentSystemPrompt() {
+    const stored = await chrome.storage.local.get([SYSTEM_PROMPT_STORAGE_KEY]);
+    const current = stored[SYSTEM_PROMPT_STORAGE_KEY] && typeof stored[SYSTEM_PROMPT_STORAGE_KEY] === "object" ? {
+      ...stored[SYSTEM_PROMPT_STORAGE_KEY]
+    } : {};
+    delete current.systemPrompt;
+    if (Object.keys(current).length) {
+      await chrome.storage.local.set({
+        [SYSTEM_PROMPT_STORAGE_KEY]: current
+      });
+    } else {
+      await chrome.storage.local.remove(SYSTEM_PROMPT_STORAGE_KEY);
+    }
+    return readAgentSystemPromptState();
+  }
+  async function savePromptProfile(next, options) {
+    const settings = options && typeof options === "object" ? options : {};
+    const state = await readPromptProfilesState();
+    const now = new Date().toISOString();
+    const existingIndex = settings.profileId ? state.profiles.findIndex(function (profile) {
+      return profile.id === settings.profileId;
+    }) : -1;
+    const base = existingIndex >= 0 ? state.profiles[existingIndex] : null;
+    const profile = {
+      id: existingIndex >= 0 ? base.id : generatePromptProfileId(),
+      name: String(next?.name || "").trim(),
+      prompt: String(next?.prompt || "").trim(),
+      createdAt: base?.createdAt || now,
+      updatedAt: now
+    };
+    const profiles = state.profiles.slice();
+    if (existingIndex >= 0) {
+      profiles.splice(existingIndex, 1, profile);
+    } else {
+      profiles.push(profile);
+    }
+    const activateOnSave = settings.activateOnSave !== false;
+    const nextActiveProfileId = activateOnSave ? profile.id : state.activeProfileId === profile.id ? profile.id : state.activeProfileId;
+    await writePromptProfilesState(profiles, nextActiveProfileId);
+    if (nextActiveProfileId === profile.id) {
+      await saveAgentSystemPrompt(profile.prompt);
+    } else if (!nextActiveProfileId) {
+      await restoreAgentSystemPrompt();
+    }
+    return readPromptProfilesState();
+  }
+  async function setActivePromptProfile(profileId) {
+    const state = await readPromptProfilesState();
+    if (!profileId) {
+      await writePromptProfilesState(state.profiles, null);
+      await restoreAgentSystemPrompt();
+      return readPromptProfilesState();
+    }
+    const profile = state.profiles.find(function (entry) {
+      return entry.id === profileId;
+    });
+    if (!profile) {
+      throw new Error("Prompt profile not found.");
+    }
+    await writePromptProfilesState(state.profiles, profile.id);
+    await saveAgentSystemPrompt(profile.prompt);
+    return readPromptProfilesState();
+  }
+  async function deletePromptProfile(profileId) {
+    const state = await readPromptProfilesState();
+    const profiles = state.profiles.filter(function (profile) {
+      return profile.id !== profileId;
+    });
+    const nextActiveProfileId = state.activeProfileId === profileId ? null : state.activeProfileId;
+    await writePromptProfilesState(profiles, nextActiveProfileId);
+    if (state.activeProfileId === profileId) {
+      await restoreAgentSystemPrompt();
+    }
+    return readPromptProfilesState();
+  }
   const createEmptyConfig = helpers.createEmptyConfig || function () {
     return {
       enabled: true,
@@ -786,6 +984,7 @@
     .cp-dropdown {
       position: relative;
       width: 100%;
+      overflow: visible;
     }
     .cp-dropdown-trigger {
       display: flex;
@@ -829,17 +1028,22 @@
       background-size: 14px 14px;
     }
     .cp-dropdown-menu {
-      position: fixed;
-      z-index: 9999;
+      position: absolute;
+      z-index: 80;
+      left: 0;
+      right: 0;
+      top: calc(100% + 0.5rem);
+      width: 100%;
       min-width: 0;
-      padding: 0.375rem;
-      background: hsl(var(--bg-000));
-      border: 0.5px solid hsl(var(--border-200));
-      border-radius: 0.75rem;
-      backdrop-filter: blur(12px);
-      box-shadow: 0px 2px 8px 0px hsl(var(--always-black) / 8%);
+      box-sizing: border-box;
+      padding: 0.5rem;
+      box-shadow: none;
       max-height: 300px;
       overflow-y: auto;
+    }
+    .cp-dropdown-menu[data-placement="top"] {
+      top: auto;
+      bottom: calc(100% + 0.5rem);
     }
     .cp-dropdown-item {
       display: flex;
@@ -847,11 +1051,13 @@
       gap: 0.5rem;
       flex: 1 1 auto;
       min-width: 0;
-      padding: 0.5rem 0.625rem;
+      width: 100%;
+      box-sizing: border-box;
+      padding: 0.75rem 0.875rem;
       border: 0;
-      border-radius: 0.5rem;
+      border-radius: 0.875rem;
       background: transparent;
-      color: hsl(var(--text-300));
+      color: hsl(var(--text-100));
       text-align: left;
       cursor: pointer;
       transition: background-color 0.15s ease, color 0.15s ease;
@@ -917,6 +1123,9 @@
     .cp-page-textarea {
       min-height: 5.5rem;
       resize: vertical;
+    }
+    .cp-prompt-textarea {
+      min-height: 14rem;
     }
     .cp-page-input::placeholder,
     .cp-page-textarea::placeholder {
@@ -1072,6 +1281,9 @@
       gap: 0.75rem;
       grid-template-columns: repeat(3, minmax(0, 1fr));
     }
+    .cp-provider-summary[data-layout="single"] {
+      grid-template-columns: minmax(0, 1fr);
+    }
     .cp-provider-summary-item {
       display: grid;
       gap: 0.25rem;
@@ -1094,6 +1306,21 @@
       line-height: 1.45;
       color: hsl(var(--text-100));
       word-break: break-word;
+    }
+    .cp-provider-summary-value[data-truncate="true"] {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      word-break: normal;
+    }
+    .cp-provider-summary-value[data-truncate="multiline"] {
+      display: -webkit-box;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: normal;
+      word-break: break-word;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 3;
     }
     .cp-provider-summary-value[data-mono="true"] {
       font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
@@ -1312,7 +1539,7 @@
       background: hsl(var(--bg-200)) !important;
       color: hsl(var(--text-100)) !important;
     }
-    .cp-options-host-provider-active > :not(#${ROOT_ID}):not(#${DEBUG_ROOT_ID}) {
+    .cp-options-host-provider-active > :not(#${ROOT_ID}):not(#${PROMPT_ROOT_ID}):not(#${DEBUG_ROOT_ID}) {
       display: none !important;
     }
     @media (max-width: 767px) {
@@ -1386,9 +1613,8 @@
     const triggerIcon = createNode("span", "cp-dropdown-trigger-icon");
     trigger.appendChild(triggerLabel);
     trigger.appendChild(triggerIcon);
-    const menu = createNode("div", "cp-dropdown-menu");
+    const menu = createNode("div", `cp-dropdown-menu ${SHARED_FRAME_CLASS}`);
     menu.hidden = true;
-    document.body.appendChild(menu);
     let isOpen = false;
     let isPreparingOpen = false;
     function getOptions() {
@@ -1401,18 +1627,20 @@
     }
     function positionMenu() {
       const rect = trigger.getBoundingClientRect();
-      const menuWidth = Math.max(rect.width, 220);
-      menu.style.width = `${menuWidth}px`;
-      menu.style.left = `${Math.min(rect.left, window.innerWidth - menuWidth - 8)}px`;
-      menu.style.top = `${rect.bottom + 8}px`;
+      menu.style.left = "0";
+      menu.style.right = "0";
+      menu.style.width = "100%";
+      menu.style.top = "calc(100% + 0.5rem)";
+      menu.style.bottom = "auto";
+      menu.dataset.placement = "bottom";
       menu.style.visibility = "hidden";
       menu.hidden = false;
       const menuHeight = menu.offsetHeight;
-      let top = rect.bottom + 8;
-      if (top + menuHeight > window.innerHeight - 8) {
-        top = Math.max(8, rect.top - menuHeight - 8);
+      if (rect.bottom + 8 + menuHeight > window.innerHeight - 8 && rect.top - 8 - menuHeight >= 8) {
+        menu.dataset.placement = "top";
+        menu.style.top = "auto";
+        menu.style.bottom = "calc(100% + 0.5rem)";
       }
-      menu.style.top = `${top}px`;
       menu.style.visibility = "";
     }
     function syncTrigger() {
@@ -1561,6 +1789,7 @@
     select.addEventListener("change", handleSelectChange);
     select.parentNode.insertBefore(shell, select);
     shell.appendChild(trigger);
+    shell.appendChild(menu);
     shell.appendChild(select);
     syncTrigger();
     const controller = {
@@ -1579,9 +1808,6 @@
         window.removeEventListener("resize", handleWindowReflow);
         window.removeEventListener("scroll", handleWindowReflow, true);
         select.removeEventListener("change", handleSelectChange);
-        if (menu.parentNode) {
-          menu.parentNode.removeChild(menu);
-        }
       }
     };
     return controller;
@@ -1656,11 +1882,27 @@
   function isOptionsTabActive() {
     return getActiveTab() === "options";
   }
-  function isProviderViewActive() {
-    return isOptionsTabActive() && getHashQuery().get("provider") === "true";
+  function getCustomSubview() {
+    if (!isOptionsTabActive()) {
+      return "";
+    }
+    const value = String(getHashQuery().get("provider") || "").trim().toLowerCase();
+    if (value === "prompt" || value === "prompts") {
+      return "prompt";
+    }
+    if (value === "true" || value === "provider") {
+      return "provider";
+    }
+    return "";
   }
-  function setProviderViewActive(active) {
-    const nextHash = active ? "options?provider=true" : "options";
+  function isProviderViewActive() {
+    return getCustomSubview() === "provider";
+  }
+  function isPromptViewActive() {
+    return getCustomSubview() === "prompt";
+  }
+  function setCustomSubview(view) {
+    const nextHash = view === "provider" ? "options?provider=true" : view === "prompt" ? "options?provider=prompt" : "options";
     if (window.location.hash.replace(/^#/, "") !== nextHash) {
       window.location.hash = nextHash;
     }
@@ -1691,7 +1933,7 @@
   }
   function getNativeNavButtonClassNames(list, optionsItem) {
     const nativeButtons = Array.from((list || findSidebarNavList())?.children || []).filter(function (node) {
-      return node && node.id !== NAV_ITEM_ID;
+      return node && node.id !== NAV_ITEM_ID && node.id !== PROMPT_NAV_ITEM_ID;
     }).map(findNavButton).filter(Boolean);
     const activeButton = nativeButtons.find(isNativeNavButtonActive) || findNavButton(optionsItem) || nativeButtons[0] || null;
     const inactiveButton = nativeButtons.find(function (button) {
@@ -1701,6 +1943,45 @@
       activeClassName: String(activeButton?.className || ""),
       inactiveClassName: String(inactiveButton?.className || activeButton?.className || "")
     };
+  }
+  function ensureCustomNavItem(options) {
+    const config = options && typeof options === "object" ? options : {};
+    const list = config.list;
+    const optionsItem = config.optionsItem;
+    const optionsButton = config.optionsButton;
+    const id = config.id;
+    if (!list || !optionsItem || !optionsButton || !id) {
+      return null;
+    }
+    let navItem = document.getElementById(id);
+    let button = findNavButton(navItem);
+    if (!navItem || !button) {
+      if (navItem?.parentNode) {
+        navItem.remove();
+      }
+      navItem = document.createElement("li");
+      navItem.id = id;
+      button = optionsButton.cloneNode(true);
+      button.removeAttribute("href");
+      button.type = "button";
+      button.addEventListener("click", function (event) {
+        event.preventDefault();
+        config.onClick?.();
+      });
+      navItem.appendChild(button);
+    }
+    const nativeClassNames = getNativeNavButtonClassNames(list, optionsItem);
+    const nextClassName = config.active ? nativeClassNames.activeClassName : nativeClassNames.inactiveClassName;
+    if (button.textContent !== config.label) {
+      button.textContent = config.label;
+    }
+    if (nextClassName && button.className !== nextClassName) {
+      button.className = nextClassName;
+    }
+    if (button.type !== "button") {
+      button.type = "button";
+    }
+    return navItem;
   }
   function ensureProviderNavItem(strings) {
     const list = findSidebarNavList();
@@ -1715,46 +1996,54 @@
       }, "warn");
       return null;
     }
-    let navItem = document.getElementById(NAV_ITEM_ID);
-    let button = findNavButton(navItem);
-    if (!navItem || !button) {
-      if (navItem?.parentNode) {
-        navItem.remove();
-      }
-      navItem = document.createElement("li");
-      navItem.id = NAV_ITEM_ID;
-      button = optionsButton.cloneNode(true);
-      button.removeAttribute("href");
-      button.type = "button";
-      button.addEventListener("click", function (event) {
-        event.preventDefault();
-        debugLog("customProvider.nav.click", {
-          currentHash: location.hash
-        });
-        setProviderViewActive(true);
-      });
-      navItem.appendChild(button);
-    }
     const providerActive = isProviderViewActive();
+    const promptActive = isPromptViewActive();
+    const providerNavItem = ensureCustomNavItem({
+      list,
+      optionsItem,
+      optionsButton,
+      id: NAV_ITEM_ID,
+      label: strings.providerName,
+      active: providerActive,
+      onClick() {
+        debugLog("customProvider.nav.click", {
+          currentHash: location.hash,
+          target: "provider"
+        });
+        setCustomSubview("provider");
+      }
+    });
+    const promptNavItem = ensureCustomNavItem({
+      list,
+      optionsItem,
+      optionsButton,
+      id: PROMPT_NAV_ITEM_ID,
+      label: strings.promptTitle,
+      active: promptActive,
+      onClick() {
+        debugLog("customProvider.nav.click", {
+          currentHash: location.hash,
+          target: "prompt"
+        });
+        setCustomSubview("prompt");
+      }
+    });
     const nativeClassNames = getNativeNavButtonClassNames(list, optionsItem);
-    const nextClassName = providerActive ? nativeClassNames.activeClassName : nativeClassNames.inactiveClassName;
-    if (button.textContent !== strings.providerName) {
-      button.textContent = strings.providerName;
+    if (providerNavItem && optionsItem.nextElementSibling !== providerNavItem) {
+      optionsItem.insertAdjacentElement("afterend", providerNavItem);
     }
-    if (nextClassName && button.className !== nextClassName) {
-      button.className = nextClassName;
+    if (promptNavItem && providerNavItem?.nextElementSibling !== promptNavItem) {
+      (providerNavItem || optionsItem).insertAdjacentElement("afterend", promptNavItem);
     }
-    if (button.type !== "button") {
-      button.type = "button";
-    }
-    if (optionsItem.nextElementSibling !== navItem) {
-      optionsItem.insertAdjacentElement("afterend", navItem);
-    }
-    const nextInactive = providerActive;
+    const nextInactive = providerActive || promptActive;
     if (optionsItem.classList.contains("cp-nav-override-inactive") !== nextInactive) {
       optionsItem.classList.toggle("cp-nav-override-inactive", nextInactive);
     }
-    return navItem;
+    return {
+      providerNavItem,
+      promptNavItem,
+      nativeClassNames
+    };
   }
   function findOptionsContentRoot() {
     const list = findSidebarNavList();
@@ -1983,6 +2272,77 @@
     stack.appendChild(listView);
     stack.appendChild(editorView);
     panel.appendChild(stack);
+    const promptRoot = createNode("div", "space-y-6");
+    promptRoot.id = PROMPT_ROOT_ID;
+    const promptPanel = createNode("section", "cp-page-card cp-page-panel bg-bg-100 border border-border-300 rounded-xl px-6 pt-6 pb-6 md:px-8 md:pt-8 md:pb-8");
+    const promptStack = createNode("div", "cp-page-stack");
+    const promptHeader = createNode("div", "cp-provider-header");
+    promptHeader.appendChild(createNode("h3", "cp-page-heading text-text-100 font-xl-bold", strings.promptTitle));
+    promptHeader.appendChild(createNode("p", "cp-page-subheading text-text-300 font-base", strings.promptSubtitle));
+    const promptHeaderAction = createNode("div", "cp-provider-header-action");
+    const promptHeaderButtons = createNode("div", "cp-page-btn-row");
+    const addPromptProfileButton = createNode("button", "px-6 py-3 bg-brand-100 text-oncolor-100 rounded-xl hover:bg-brand-100/90 transition-all font-large disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2", strings.newProfile);
+    addPromptProfileButton.type = "button";
+    promptHeaderButtons.appendChild(addPromptProfileButton);
+    promptHeaderAction.appendChild(promptHeaderButtons);
+    promptHeader.appendChild(promptHeaderAction);
+    const promptListView = createNode("div", "cp-provider-view");
+    const promptListStatus = createNode("div", "cp-page-status");
+    const promptEmptyState = createNode("div", "cp-provider-empty");
+    promptEmptyState.appendChild(createNode("h4", "cp-provider-empty-title", strings.promptEmptyProfilesTitle));
+    promptEmptyState.appendChild(createNode("p", "cp-provider-empty-help", strings.promptEmptyProfilesHelp));
+    const promptCardList = createNode("div", "cp-provider-card-list");
+    promptListView.appendChild(promptListStatus);
+    promptListView.appendChild(promptEmptyState);
+    promptListView.appendChild(promptCardList);
+    const promptEditorView = createNode("div", "cp-provider-view");
+    promptEditorView.hidden = true;
+    const promptEditorToolbar = createNode("div", "cp-provider-editor-toolbar");
+    const promptEditorToolbarCopy = createNode("div");
+    const promptEditorTitle = createNode("h4", "cp-provider-editor-title", strings.promptCreateTitle);
+    promptEditorToolbarCopy.appendChild(promptEditorTitle);
+    const promptBackButton = createNode("button", "cp-provider-floating-btn px-6 py-3 bg-bg-100 text-text-200 border border-border-300 rounded-xl hover:bg-bg-200 hover:text-text-100 transition-all font-large disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2", strings.backToList);
+    promptBackButton.type = "button";
+    promptEditorToolbar.appendChild(promptEditorToolbarCopy);
+    const promptForm = document.createElement("form");
+    promptForm.id = "cp-prompt-editor-form";
+    promptForm.className = "cp-page-stack cp-page-fieldset";
+    const promptNameField = createNode("label", "cp-page-field");
+    const promptNameInput = createNode("input", `cp-page-input ${SHARED_FRAME_CLASS}`);
+    promptNameInput.placeholder = strings.promptProfileNamePlaceholder;
+    promptNameField.appendChild(createNode("span", "cp-page-label", strings.promptProfileNameLabel));
+    promptNameField.appendChild(promptNameInput);
+    const promptField = createNode("label", "cp-page-field");
+    const promptLabelRow = createNode("div", "cp-page-label-row");
+    const promptTextarea = createNode("textarea", `cp-page-textarea cp-prompt-textarea ${SHARED_FRAME_CLASS}`);
+    promptTextarea.placeholder = strings.agentRolePlaceholder;
+    promptTextarea.spellcheck = false;
+    promptTextarea.wrap = "soft";
+    promptLabelRow.appendChild(createNode("span", "cp-page-label", strings.agentRoleLabel));
+    promptLabelRow.appendChild(createNode("span", "cp-page-help", strings.agentRoleHelp));
+    promptField.appendChild(promptLabelRow);
+    promptField.appendChild(promptTextarea);
+    const promptStatus = createNode("div", "cp-page-status");
+    const promptSaveButton = createNode("button", "cp-provider-floating-btn px-6 py-3 bg-brand-100 text-oncolor-100 rounded-xl hover:bg-brand-100/90 transition-all font-large disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2", strings.promptSave);
+    promptSaveButton.type = "submit";
+    promptSaveButton.setAttribute("form", promptForm.id);
+    const promptFloatingShell = createNode("div", "cp-provider-floating-shell");
+    promptFloatingShell.hidden = true;
+    const promptFloatingCapsule = createNode("div", `cp-provider-floating-capsule ${SHARED_FRAME_CLASS}`);
+    promptFloatingCapsule.appendChild(promptBackButton);
+    promptFloatingCapsule.appendChild(promptSaveButton);
+    promptFloatingShell.appendChild(promptFloatingCapsule);
+    promptForm.appendChild(promptNameField);
+    promptForm.appendChild(promptField);
+    promptForm.appendChild(promptStatus);
+    promptEditorView.appendChild(promptEditorToolbar);
+    promptEditorView.appendChild(promptForm);
+    promptStack.appendChild(promptHeader);
+    promptStack.appendChild(promptListView);
+    promptStack.appendChild(promptEditorView);
+    promptPanel.appendChild(promptStack);
+    promptRoot.appendChild(promptPanel);
+    promptRoot.appendChild(promptFloatingShell);
     const debugPanel = createNode("section", "cp-page-card cp-page-panel bg-bg-100 border border-border-300 rounded-xl px-6 pt-6 pb-6 md:px-8 md:pt-8 md:pb-8");
     const debugStack = createNode("div", "cp-page-stack");
     const debugHeader = createNode("div");
@@ -2023,6 +2383,13 @@
       isFetchingModels: false,
       isCheckingHealth: false,
       cardDropdownControllers: []
+    };
+    const promptProfilesState = {
+      profiles: [],
+      activeProfileId: null,
+      editorMode: "list",
+      editingProfileId: null,
+      isSaving: false
     };
     const formatDropdown = enhanceSelect(formatSelect);
     const modelDropdown = enhanceSelect(modelSelect);
@@ -2303,6 +2670,242 @@
       editorFloatingShell.hidden = !isEditing;
       addProfileButton.hidden = isEditing;
       editorTitle.textContent = state.editingProfileId ? strings.editProfileTitle : strings.createProfileTitle;
+    }
+    function applyPromptProfilesStoredState(stored) {
+      promptProfilesState.profiles = Array.isArray(stored?.profiles) ? stored.profiles.slice() : [];
+      promptProfilesState.activeProfileId = stored?.activeProfileId || null;
+    }
+    function isBuiltinPromptProfileId(profileId) {
+      return String(profileId || "") === BUILTIN_PROMPT_PROFILE_ID;
+    }
+    function createBuiltinPromptProfile() {
+      return {
+        id: BUILTIN_PROMPT_PROFILE_ID,
+        name: strings.promptDefaultProfileName,
+        prompt: DEFAULT_AGENT_ROLE_PROMPT,
+        isBuiltin: true
+      };
+    }
+    function getRenderablePromptProfiles() {
+      return [createBuiltinPromptProfile()].concat(promptProfilesState.profiles.slice());
+    }
+    function getPromptProfileDisplayName(profile, index) {
+      if (profile?.isBuiltin || isBuiltinPromptProfileId(profile?.id)) {
+        return strings.promptDefaultProfileName;
+      }
+      const name = String(profile?.name || "").trim();
+      if (name) {
+        return name;
+      }
+      return `${strings.promptTitle} ${index + 1}`;
+    }
+    function getPromptPreview(prompt) {
+      const normalized = String(prompt || "").trim().replace(/\s+/g, " ");
+      if (!normalized) {
+        return strings.notConfigured;
+      }
+      return normalized;
+    }
+    function updatePromptControls() {
+      promptSaveButton.disabled = promptProfilesState.isSaving;
+      addPromptProfileButton.disabled = promptProfilesState.isSaving;
+    }
+    function updatePromptEditorModeUi() {
+      const isEditing = promptProfilesState.editorMode === "edit";
+      promptListView.hidden = isEditing;
+      promptEditorView.hidden = !isEditing;
+      promptFloatingShell.hidden = !isEditing;
+      addPromptProfileButton.hidden = isEditing;
+      promptEditorTitle.textContent = promptProfilesState.editingProfileId ? strings.promptEditTitle : strings.promptCreateTitle;
+    }
+    function renderPromptProfileCards() {
+      promptCardList.innerHTML = "";
+      const profiles = getRenderablePromptProfiles();
+      promptEmptyState.hidden = profiles.length > 0;
+      profiles.forEach(function (profile, index) {
+        const isBuiltin = !!profile?.isBuiltin || isBuiltinPromptProfileId(profile?.id);
+        const isActive = isBuiltin ? !promptProfilesState.activeProfileId : profile.id === promptProfilesState.activeProfileId;
+        const card = createNode("div", "cp-provider-card cp-page-card cp-page-panel bg-bg-100 border border-border-300 rounded-xl px-6 pt-6 pb-6 md:px-8 md:pt-8 md:pb-8");
+        const cardHeader = createNode("div", "cp-provider-card-header");
+        const titleWrap = createNode("div", "cp-provider-card-title-wrap");
+        titleWrap.appendChild(createNode("h4", "cp-provider-card-title", getPromptProfileDisplayName(profile, index)));
+        cardHeader.appendChild(titleWrap);
+        if (isActive) {
+          const badge = createNode("span", "cp-provider-badge", strings.currentBadge);
+          badge.dataset.tone = "brand";
+          cardHeader.appendChild(badge);
+        }
+        const summary = createNode("div", "cp-provider-summary");
+        summary.dataset.layout = "single";
+        [[strings.promptSummaryPreviewLabel, getPromptPreview(profile.prompt), false]].forEach(function (entry) {
+          const item = createNode("div", "cp-provider-summary-item");
+          item.appendChild(createNode("span", "cp-provider-summary-label", entry[0]));
+          const value = createNode("span", "cp-provider-summary-value", entry[1]);
+          value.dataset.truncate = "multiline";
+          if (entry[2]) {
+            value.dataset.mono = "true";
+          }
+          item.appendChild(value);
+          summary.appendChild(item);
+        });
+        const actionRow = createNode("div", "cp-provider-card-actions");
+        const activateButton = createNode("button", "px-6 py-3 bg-bg-100 text-text-200 border border-border-300 rounded-xl hover:bg-bg-200 hover:text-text-100 transition-all font-large disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2", isActive ? strings.activeProfile : strings.activateProfile);
+        activateButton.type = "button";
+        activateButton.disabled = isActive;
+        activateButton.addEventListener("click", function () {
+          handleActivatePromptProfile(profile.id).catch(function () {});
+        });
+        actionRow.appendChild(activateButton);
+        if (!isBuiltin) {
+          const editButton = createNode("button", "px-6 py-3 bg-bg-100 text-text-200 border border-border-300 rounded-xl hover:bg-bg-200 hover:text-text-100 transition-all font-large disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2", strings.editProfile);
+          editButton.type = "button";
+          editButton.addEventListener("click", function () {
+            openPromptEditor(profile.id);
+          });
+          const deleteButton = createNode("button", "px-6 py-3 bg-bg-100 text-danger-100 border border-border-300 rounded-xl hover:bg-bg-200 transition-all font-large disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2", strings.deleteProfile);
+          deleteButton.type = "button";
+          deleteButton.addEventListener("click", function () {
+            handleDeletePromptProfile(profile.id).catch(function () {});
+          });
+          actionRow.appendChild(editButton);
+          actionRow.appendChild(deleteButton);
+        }
+        card.appendChild(cardHeader);
+        card.appendChild(summary);
+        card.appendChild(actionRow);
+        promptCardList.appendChild(card);
+      });
+    }
+    function readPromptForm() {
+      return {
+        name: String(promptNameInput.value || "").trim(),
+        prompt: String(promptTextarea.value || "").trim()
+      };
+    }
+    function writePromptForm(profile) {
+      const next = profile && typeof profile === "object" ? profile : {
+        name: "",
+        prompt: ""
+      };
+      promptNameInput.value = String(next.name || "");
+      promptTextarea.value = String(next.prompt || "");
+    }
+    function openPromptList(kind, message) {
+      promptProfilesState.editorMode = "list";
+      promptProfilesState.editingProfileId = null;
+      setStatus(promptStatus, "", "");
+      renderPromptProfileCards();
+      updatePromptEditorModeUi();
+      setStatus(promptListStatus, kind || "", message || "");
+      updatePromptControls();
+    }
+    function openPromptEditor(profileId) {
+      if (isBuiltinPromptProfileId(profileId)) {
+        return;
+      }
+      promptProfilesState.editorMode = "edit";
+      promptProfilesState.editingProfileId = profileId || null;
+      const profile = profileId ? promptProfilesState.profiles.find(function (entry) {
+        return entry.id === profileId;
+      }) : null;
+      writePromptForm(profile || {
+        name: "",
+        prompt: DEFAULT_AGENT_ROLE_PROMPT
+      });
+      setStatus(promptListStatus, "", "");
+      setStatus(promptStatus, "", "");
+      updatePromptEditorModeUi();
+      updatePromptControls();
+    }
+    async function refreshPromptProfiles(resetToList) {
+      const stored = await readPromptProfilesState();
+      applyPromptProfilesStoredState(stored);
+      if (resetToList || promptProfilesState.editorMode === "list") {
+        if (resetToList) {
+          setStatus(promptListStatus, "", "");
+        }
+        openPromptList("", "");
+        return;
+      }
+      if (promptProfilesState.editingProfileId) {
+        const profile = promptProfilesState.profiles.find(function (entry) {
+          return entry.id === promptProfilesState.editingProfileId;
+        });
+        if (profile) {
+          writePromptForm(profile);
+          updatePromptEditorModeUi();
+        } else {
+          openPromptList("", "");
+        }
+      } else {
+        writePromptForm({
+          name: "",
+          prompt: DEFAULT_AGENT_ROLE_PROMPT
+        });
+        updatePromptEditorModeUi();
+      }
+      setStatus(promptStatus, "", "");
+      updatePromptControls();
+    }
+    async function handleActivatePromptProfile(profileId) {
+      try {
+        setStatus(promptListStatus, "", "");
+        const stored = await setActivePromptProfile(isBuiltinPromptProfileId(profileId) ? null : profileId);
+        applyPromptProfilesStoredState(stored);
+        openPromptList("success", strings.promptActivated);
+      } catch (error) {
+        setStatus(promptListStatus, "error", error && typeof error.message === "string" ? error.message : strings.promptSaveFailure);
+      }
+    }
+    async function handleDeletePromptProfile(profileId) {
+      if (isBuiltinPromptProfileId(profileId)) {
+        return;
+      }
+      const profile = promptProfilesState.profiles.find(function (entry) {
+        return entry.id === profileId;
+      });
+      const label = getPromptProfileDisplayName(profile, Math.max(0, promptProfilesState.profiles.findIndex(function (entry) {
+        return entry.id === profileId;
+      })));
+      if (!window.confirm(strings.promptDeleteConfirm.replace("{name}", label))) {
+        return;
+      }
+      try {
+        setStatus(promptListStatus, "", "");
+        const stored = await deletePromptProfile(profileId);
+        applyPromptProfilesStoredState(stored);
+        openPromptList("success", strings.promptDeleted);
+      } catch (error) {
+        setStatus(promptListStatus, "error", error && typeof error.message === "string" ? error.message : strings.promptSaveFailure);
+      }
+    }
+    async function handlePromptSave() {
+      const next = readPromptForm();
+      if (!next.name) {
+        setStatus(promptStatus, "error", strings.promptNameRequired);
+        promptNameInput.focus();
+        return;
+      }
+      if (!next.prompt) {
+        setStatus(promptStatus, "error", strings.promptContentRequired);
+        promptTextarea.focus();
+        return;
+      }
+      try {
+        promptProfilesState.isSaving = true;
+        updatePromptControls();
+        setStatus(promptStatus, "", "");
+        const stored = await savePromptProfile(next, {
+          profileId: promptProfilesState.editingProfileId || undefined
+        });
+        applyPromptProfilesStoredState(stored);
+        openPromptList("success", strings.promptSaved);
+      } catch (error) {
+        setStatus(promptStatus, "error", error && typeof error.message === "string" ? error.message : strings.promptSaveFailure);
+      } finally {
+        promptProfilesState.isSaving = false;
+        updatePromptControls();
+      }
     }
     function renderProfileCards() {
       cleanupCardDropdowns();
@@ -2659,6 +3262,28 @@
     backToListButton.addEventListener("click", function () {
       openList("", "");
     });
+    addPromptProfileButton.addEventListener("click", function () {
+      openPromptEditor(null);
+    });
+    promptBackButton.addEventListener("click", function () {
+      openPromptList("", "");
+    });
+    promptNameInput.addEventListener("input", function () {
+      setStatus(promptStatus, "", "");
+    });
+    promptTextarea.addEventListener("input", function () {
+      setStatus(promptStatus, "", "");
+    });
+    promptForm.addEventListener("submit", function (event) {
+      event.preventDefault();
+      handlePromptSave().catch(function () {});
+    });
+    writePromptForm({
+      name: "",
+      prompt: DEFAULT_AGENT_ROLE_PROMPT
+    });
+    updatePromptEditorModeUi();
+    updatePromptControls();
     healthCheckButton.addEventListener("click", function () {
       handleHealthCheck().catch(function () {});
     });
@@ -2825,6 +3450,11 @@
       if (DEBUG_LOGS_KEY in changes || DEBUG_META_KEY in changes) {
         refreshDebug().catch(function () {});
       }
+      if (PROMPT_PROFILES_STORAGE_KEY in changes || PROMPT_ACTIVE_PROFILE_STORAGE_KEY in changes || SYSTEM_PROMPT_STORAGE_KEY in changes) {
+        if (isPromptViewActive()) {
+          refreshPromptProfiles(false).catch(function () {});
+        }
+      }
       if (STORAGE_KEY in changes || PROFILES_STORAGE_KEY in changes || ACTIVE_PROFILE_STORAGE_KEY in changes || BACKUP_KEY in changes || "anthropicApiKey" in changes) {
         if (isProviderViewActive()) {
           refresh(false).catch(function () {});
@@ -2832,11 +3462,11 @@
       }
     };
     chrome.storage.onChanged.addListener(handleStorageChange);
-    function updateOptionsContentVisibility(host, providerActive) {
+    function updateOptionsContentVisibility(host, customViewActive) {
       if (!host) {
         return;
       }
-      host.classList.toggle("cp-options-host-provider-active", providerActive);
+      host.classList.toggle("cp-options-host-provider-active", customViewActive);
     }
     async function syncMount() {
       const nextLocaleKey = getUiLocaleKey();
@@ -2851,6 +3481,8 @@
       }
       ensureProviderNavItem(strings);
       const providerActive = isProviderViewActive();
+      const promptActive = isPromptViewActive();
+      const customViewActive = providerActive || promptActive;
       if (!isOptionsTabActive()) {
         closeManualModelDialog();
         debugLog("customProvider.syncMount.skip", {
@@ -2862,6 +3494,9 @@
         }
         if (providerRoot.parentNode) {
           providerRoot.remove();
+        }
+        if (promptRoot.parentNode) {
+          promptRoot.remove();
         }
         if (debugMountRoot.parentNode) {
           debugMountRoot.remove();
@@ -2878,6 +3513,9 @@
         if (providerRoot.parentNode) {
           providerRoot.remove();
         }
+        if (promptRoot.parentNode) {
+          promptRoot.remove();
+        }
         if (debugMountRoot.parentNode) {
           debugMountRoot.remove();
         }
@@ -2888,27 +3526,47 @@
         updateOptionsContentVisibility(lastHost, false);
       }
       const providerNeedsRefresh = providerRoot.parentNode !== host || lastHost !== host;
+      const promptNeedsRefresh = promptRoot.parentNode !== host || lastHost !== host;
       const debugNeedsRefresh = debugMountRoot.parentNode !== host || lastHost !== host;
       debugLog("customProvider.syncMount.host", {
         providerActive,
+        promptActive,
         providerNeedsRefresh,
+        promptNeedsRefresh,
         debugNeedsRefresh,
         hostTag: host.tagName,
         hostClassName: host.className || "",
         hostChildCount: host.children.length
       });
-      updateOptionsContentVisibility(host, providerActive);
+      updateOptionsContentVisibility(host, customViewActive);
       if (providerActive) {
+        if (promptRoot.parentNode) {
+          promptRoot.remove();
+        }
         if (debugMountRoot.parentNode) {
           debugMountRoot.remove();
         }
         if (providerRoot.parentNode !== host) {
           host.appendChild(providerRoot);
         }
+      } else if (promptActive) {
+        closeManualModelDialog();
+        if (providerRoot.parentNode) {
+          providerRoot.remove();
+        }
+        if (debugMountRoot.parentNode) {
+          debugMountRoot.remove();
+        }
+        if (promptRoot.parentNode !== host) {
+          host.appendChild(promptRoot);
+        }
       } else {
         closeManualModelDialog();
         if (providerRoot.parentNode) {
           providerRoot.remove();
+        }
+        if (promptRoot.parentNode) {
+          promptRoot.remove();
         }
         if (debugMountRoot.parentNode !== host) {
           host.appendChild(debugMountRoot);
@@ -2920,10 +3578,17 @@
         debugLog("customProvider.syncMount.refreshed", {
           providerActive
         });
-      } else if (!providerActive && debugNeedsRefresh) {
+      } else if (promptActive && promptNeedsRefresh) {
+        await refreshPromptProfiles(true);
+        debugLog("customProvider.syncMount.refreshed", {
+          providerActive,
+          promptActive
+        });
+      } else if (!customViewActive && debugNeedsRefresh) {
         await refreshDebug();
         debugLog("customProvider.syncMount.refreshed", {
-          providerActive
+          providerActive,
+          promptActive
         });
       }
     }
@@ -3006,12 +3671,19 @@
       if (providerRoot.parentNode) {
         providerRoot.remove();
       }
+      if (promptRoot.parentNode) {
+        promptRoot.remove();
+      }
       if (debugMountRoot.parentNode) {
         debugMountRoot.remove();
       }
       const navItem = document.getElementById(NAV_ITEM_ID);
       if (navItem) {
         navItem.remove();
+      }
+      const promptNavItem = document.getElementById(PROMPT_NAV_ITEM_ID);
+      if (promptNavItem) {
+        promptNavItem.remove();
       }
       lastHost = null;
     };

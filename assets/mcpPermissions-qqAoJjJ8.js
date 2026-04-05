@@ -11788,7 +11788,7 @@ async function Pa() {
                       error: {
                         content: [{
                           type: "text",
-                          text: "Authentication failed. Please check your custom provider or API key settings in Claw for Chrome."
+                          text: "Authentication failed. Please check your custom provider or API key settings in Claw in Chrome."
                         }]
                       }
                     });

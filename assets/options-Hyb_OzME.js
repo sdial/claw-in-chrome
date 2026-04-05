@@ -354,7 +354,7 @@ const J = () => {
       }), n.jsx("p", {
         className: "text-text-300 font-base mt-2 mb-6",
         children: n.jsx(t, {
-          defaultMessage: "Configure the keyboard shortcut used to open Claw for Chrome.",
+          defaultMessage: "Configure the keyboard shortcut used to open Claw in Chrome.",
           id: "CcjsWsUTac"
         })
       }), n.jsxs("div", {
@@ -1679,7 +1679,7 @@ function ce() {
         className: "flex flex-col pl-3",
         children: n.jsx("span", {
           children: n.jsx(t, {
-            defaultMessage: "Claw for Chrome settings",
+            defaultMessage: "Claw in Chrome settings",
             id: "eDHTgRaIJG"
           })
         })

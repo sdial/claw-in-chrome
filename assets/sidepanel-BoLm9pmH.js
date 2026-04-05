@@ -1029,9 +1029,8 @@ const ks = ut(e => ({
   setLastGroupAnimationCompletedAt: t => e(n => n.lastGroupAnimationCompletedAt === t ? n : {
     lastGroupAnimationCompletedAt: t
   }),
-  resetOnSessionClear: () => e(t => !t.hasBlockingWarning && !t.skipPermissionsWarningDismissed && !t.lastGroupShowExpandedTimeline && t.lastGroupAnimationCompletedAt === 0 ? t : {
+  resetOnSessionClear: () => e(t => !t.hasBlockingWarning && !t.lastGroupShowExpandedTimeline && t.lastGroupAnimationCompletedAt === 0 ? t : {
     hasBlockingWarning: false,
-    skipPermissionsWarningDismissed: false,
     lastGroupShowExpandedTimeline: false,
     lastGroupAnimationCompletedAt: 0
   })
@@ -1464,13 +1463,13 @@ function Rs({
           }), l.jsx("p", {
             className: "font-base-sm text-danger-000 mt-1 break-words whitespace-pre-wrap",
             children: m ? c ? l.jsx(e, {
-              defaultMessage: "Another extension you're using is preventing Claw for Chrome from operating. Turn off extensions such as {extensionName} to use Claw in your browser.",
+              defaultMessage: "Another extension you're using is preventing Claw in Chrome from operating. Turn off extensions such as {extensionName} to use Claw in your browser.",
               id: "6zfn3n4+te",
               values: {
                 extensionName: c
               }
             }) : l.jsx(e, {
-              defaultMessage: "Another extension you're using is preventing Claw for Chrome from operating.",
+              defaultMessage: "Another extension you're using is preventing Claw in Chrome from operating.",
               id: "a7x0CkSo6z"
             }) : n
           }), f && i && l.jsx(Q, {
@@ -46991,7 +46990,7 @@ const uA = ({
         className: "flex justify-between items-center w-full",
         children: [l.jsx("span", {
           children: l.jsx(e, {
-            defaultMessage: "Claw for Chrome requires a paid plan",
+            defaultMessage: "Claw in Chrome requires a paid plan",
             id: "hg/DxQvpUn"
           })
         }), l.jsx("button", {
@@ -84197,6 +84196,48 @@ function MX({
     })]
   });
 }
+function TX({
+  isOpen: n,
+  onClose: s,
+  currentLocale: a,
+  onSelectLocale: o
+}) {
+  const c = t();
+  return l.jsxs(_e, {
+    isOpen: n,
+    onClose: s,
+    title: c.formatMessage({
+      defaultMessage: "Language",
+      id: "y1Z3orIe9Z"
+    }),
+    modalSize: "sm",
+    className: "bg-bg-100",
+    hasCloseButton: true,
+    autoCloseOnFocusOut: true,
+    overlayClassName: "[background-color:hsl(var(--always-black)/0.5)!important]",
+    children: [l.jsx("p", {
+      className: "text-text-200 font-base mt-4",
+      children: l.jsx(e, {
+        defaultMessage: "Select the preferred language for the extension interface.",
+        id: "QXrOGus6PR"
+      })
+    }), l.jsx("div", {
+      className: "mt-4 max-h-[320px] overflow-y-auto space-y-1",
+      children: r.map(e => l.jsxs("button", {
+        type: "button",
+        onClick: () => o(e),
+        className: "w-full flex items-center justify-between gap-3 rounded-lg px-3 py-2 text-left transition-colors " + (a === e ? "bg-bg-200 text-text-100" : "text-text-200 hover:bg-bg-200"),
+        children: [l.jsx("span", {
+          className: "text-sm",
+          children: i[e]
+        }), a === e ? l.jsx(En, {
+          size: 14,
+          className: "text-accent-200 flex-shrink-0"
+        }) : null]
+      }, e))
+    })]
+  });
+}
 const SX = ({
   onConvertToScheduledTask: n,
   isConvertingToTask: o,
@@ -84211,26 +84252,23 @@ const SX = ({
     setLocale: g
   } = s();
   const [y, v] = a.useState(null);
-  const x = a.useCallback(e => {
-    if (e) {
-      requestAnimationFrame(() => {
-        const t = e.closest("[data-radix-popper-content-wrapper]");
-        if (!t) {
-          return;
-        }
-        const n = document.querySelector("[data-radix-popper-content-wrapper]:not(:has(.language-submenu))");
-        if (!n) {
-          return;
-        }
-        const s = n.getBoundingClientRect();
-        t.style.left = `${s.left}px`;
-        t.style.top = `${s.top + 96}px`;
-        t.style.transform = "none";
-      });
-    }
-  }, []);
+  const [x, b] = a.useState(false);
   return l.jsxs(l.Fragment, {
-    children: [l.jsx(MX, {
+    children: [l.jsx(TX, {
+      isOpen: x,
+      onClose: () => b(false),
+      currentLocale: f,
+      onSelectLocale: e => {
+        b(false);
+        if (e !== f) {
+          if (d) {
+            v(e);
+          } else {
+            g(e);
+          }
+        }
+      }
+    }), l.jsx(MX, {
       pendingLocale: y,
       onClose: () => v(null),
       onConfirm: e => {
@@ -84284,51 +84322,25 @@ const SX = ({
             id: "D3idYvSLF9"
           })
         })
-      }), l.jsxs(Pe, {
-        children: [l.jsx(Fe, {
-          children: l.jsxs("div", {
-            className: "flex items-center gap-2 w-full",
-            children: [l.jsx(Vn, {
-              size: 16,
-              className: "text-text-300"
-            }), l.jsx("span", {
-              className: "flex-1 text-sm",
-              children: l.jsx(e, {
-                defaultMessage: "Language",
-                id: "y1Z3orIe9Z"
-              })
-            }), l.jsx(Mn, {
-              size: 16,
-              className: "text-text-300"
-            })]
+      }), l.jsx(Re, {
+        onSelect: () => {
+          m(false);
+          b(true);
+        },
+        icon: l.jsx(Vn, {
+          size: 16
+        }),
+        trailing: l.jsx(Mn, {
+          size: 16,
+          className: "text-text-300"
+        }),
+        children: l.jsx("span", {
+          className: "text-sm",
+          children: l.jsx(e, {
+            defaultMessage: "Language",
+            id: "y1Z3orIe9Z"
           })
-        }), l.jsx(ze, {
-          children: l.jsx(Ve, {
-            ref: x,
-            sideOffset: 0,
-            className: "font-base !min-w-44 language-submenu",
-            children: r.map(e => l.jsx(Re, {
-              onSelect: () => {
-                var t;
-                if ((t = e) !== f) {
-                  if (d) {
-                    v(t);
-                  } else {
-                    g(t);
-                  }
-                }
-              },
-              trailing: f === e ? l.jsx(En, {
-                size: 14,
-                className: "text-accent-200"
-              }) : undefined,
-              children: l.jsx("span", {
-                className: "text-sm",
-                children: i[e]
-              })
-            }, e))
-          })
-        })]
+        })
       })]
     })]
   });
@@ -84475,7 +84487,7 @@ function EX({
     })
   });
 }
-const TX = ({
+const __cpSkipPermissionsOverlay = ({
   isOpen: t,
   onClose: n,
   onConfirm: s
@@ -85793,6 +85805,18 @@ const ZX = new class {
     return `${e.totalTokens.toLocaleString()} / ${e.contextWindow.toLocaleString()} tokens${e.cacheTokens > 0 ? ` (${e.cacheTokens.toLocaleString()} cached)` : ""}`;
   }
 }();
+const __cpSafeUsage = e => e && typeof e == "object" ? {
+  input_tokens: Number.isFinite(Number(e.input_tokens)) ? Number(e.input_tokens) : 0,
+  output_tokens: Number.isFinite(Number(e.output_tokens)) ? Number(e.output_tokens) : 0,
+  cache_read_input_tokens: Number.isFinite(Number(e.cache_read_input_tokens)) ? Number(e.cache_read_input_tokens) : 0,
+  cache_creation_input_tokens: Number.isFinite(Number(e.cache_creation_input_tokens)) ? Number(e.cache_creation_input_tokens) : 0
+} : {
+  input_tokens: 0,
+  output_tokens: 0,
+  cache_read_input_tokens: 0,
+  cache_creation_input_tokens: 0
+};
+const __CP_HIGH_RISK_WARNING_DISMISSED_KEY = "skipPermissionsHighRiskWarningDismissed";
 class WX {
   createMessage;
   constructor(e) {
@@ -89642,6 +89666,7 @@ function FQ(e) {
               t.setAttribute("command_count", I.length);
               if (I.length === 0) {
                 j("");
+                const __cpUsage = __cpSafeUsage(L.usage);
                 YX({
                   mode: "lightning",
                   iteration: h,
@@ -89653,12 +89678,7 @@ function FQ(e) {
                   outputTokens: s,
                   model: ee(),
                   messageId: L.id,
-                  usage: L.usage ? {
-                    input_tokens: L.usage.input_tokens,
-                    output_tokens: L.usage.output_tokens,
-                    cache_read_input_tokens: L.usage.cache_read_input_tokens ?? undefined,
-                    cache_creation_input_tokens: L.usage.cache_creation_input_tokens ?? undefined
-                  } : undefined
+                  usage: __cpUsage
                 });
                 return;
               }
@@ -90282,6 +90302,7 @@ function FQ(e) {
                 _syntheticResult: true
               });
               m([...r]);
+              const __cpUsage = __cpSafeUsage(L.usage);
               YX({
                 mode: "lightning",
                 iteration: h,
@@ -90297,12 +90318,7 @@ function FQ(e) {
                 outputTokens: s,
                 model: ee(),
                 messageId: L.id,
-                usage: L.usage ? {
-                  input_tokens: L.usage.input_tokens,
-                  output_tokens: L.usage.output_tokens,
-                  cache_read_input_tokens: L.usage.cache_read_input_tokens ?? undefined,
-                  cache_creation_input_tokens: L.usage.cache_creation_input_tokens ?? undefined
-                } : undefined
+                usage: __cpUsage
               });
               if (p > 0 || U) {
                 l = true;
@@ -92932,6 +92948,8 @@ function o1() {
   const Y = g("chrome_ext_announcement", __cpStableEmptyObject);
   const X = a.useRef(false);
   const [Q, ee] = at(v.NOTIFICATIONS_ENABLED, undefined);
+  const [__cpHighRiskWarningDismissed, __cpSetHighRiskWarningDismissed] = at(__CP_HIGH_RISK_WARNING_DISMISSED_KEY, null);
+  const [__cpHighRiskWarningReady, __cpSetHighRiskWarningReady] = a.useState(__cpHighRiskWarningDismissed !== null);
   const te = g("chrome_ext_flash_enabled", false);
   const [ne, se] = a.useState(false);
   const [re, ie] = a.useState(false);
@@ -94226,6 +94244,29 @@ function o1() {
     });
   }, [Y, u]);
   a.useEffect(() => {
+    let e = true;
+    (async () => {
+      let t = __cpHighRiskWarningDismissed;
+      if (t === null) {
+        t = await y(__CP_HIGH_RISK_WARNING_DISMISSED_KEY);
+        if (t === undefined) {
+          t = false;
+          try {
+            await __cpSetHighRiskWarningDismissed(false);
+          } catch (n) {}
+        }
+      }
+      if (!e) {
+        return;
+      }
+      u.setSkipPermissionsWarningDismissed(t === true);
+      __cpSetHighRiskWarningReady(true);
+    })();
+    return () => {
+      e = false;
+    };
+  }, [__cpHighRiskWarningDismissed, __cpSetHighRiskWarningDismissed, u]);
+  a.useEffect(() => {
     if (X.current) {
       x(v.LAST_PERMISSION_MODE_PREFERENCE, i.permissionMode);
     }
@@ -94386,9 +94427,6 @@ function o1() {
     u.setIsMessageLimitDismissed(false);
   }, [_t, u]);
   a.useEffect(() => {
-    u.setSkipPermissionsWarningDismissed(false);
-  }, [o.sessionId, u]);
-  a.useEffect(() => {
     if (Re.current) {
       Re.current.style.height = "auto";
       Re.current.style.height = `${Re.current.scrollHeight}px`;
@@ -94518,7 +94556,7 @@ function o1() {
     if ((_t.type === "exceeded_limit" || _t.type === "approaching_limit") && !r.isMessageLimitDismissed) {
       return "messageLimit";
     }
-    if (i.permissionMode === "skip_all_permission_checks" && !r.skipPermissionsWarningDismissed) {
+    if (i.permissionMode === "skip_all_permission_checks" && __cpHighRiskWarningReady && !r.skipPermissionsWarningDismissed) {
       return "highRisk";
     }
     if (r.showNotificationBanner && Q === undefined) {
@@ -94530,7 +94568,7 @@ function o1() {
     } else {
       return null;
     }
-  }, [Ct, jt, D, $, $e, q, Gt, _t, r.isMessageLimitDismissed, i.permissionMode, r.skipPermissionsWarningDismissed, Ue, r.showNotificationBanner, Q, Y, r.announcementDismissed]);
+  }, [Ct, jt, D, $, $e, q, Gt, _t, r.isMessageLimitDismissed, i.permissionMode, r.skipPermissionsWarningDismissed, __cpHighRiskWarningReady, Ue, r.showNotificationBanner, Q, Y, r.announcementDismissed]);
   const tn = a.useCallback(async () => {
     const e = Ze.some(e => !e.error);
     const {
@@ -94813,6 +94851,12 @@ function o1() {
     r.setAnnouncementDismissed(true);
     await x(v.ANNOUNCEMENT_DISMISSED, e);
   }, [Y, r]);
+  const __cpHandleDismissHighRiskWarning = a.useCallback(async e => {
+    const t = e === true;
+    r.setSkipPermissionsWarningDismissed(t);
+    __cpSetHighRiskWarningReady(true);
+    await __cpSetHighRiskWarningDismissed(t);
+  }, [r, __cpSetHighRiskWarningDismissed]);
   const hn = a.useCallback(async e => {
     try {
       if (j !== null && j >= 0) {
@@ -95132,7 +95176,7 @@ function o1() {
               selectedModel: D,
               modelConfig: $,
               skipPermissionsWarningDismissed: r.skipPermissionsWarningDismissed,
-              setSkipPermissionsWarningDismissed: r.setSkipPermissionsWarningDismissed,
+              setSkipPermissionsWarningDismissed: __cpHandleDismissHighRiskWarning,
               isMessageLimitDismissed: r.isMessageLimitDismissed,
               setIsMessageLimitDismissed: r.setIsMessageLimitDismissed,
               showNotificationBanner: r.showNotificationBanner,
@@ -95206,7 +95250,7 @@ function o1() {
               messageId: T ? jt?.messageId : null
             })
           })
-        }), l.jsx(TX, {
+        }), l.jsx(__cpSkipPermissionsOverlay, {
           isOpen: r.showSkipPermissionsOverlay,
           onClose: () => r.setShowSkipPermissionsOverlay(false),
           onConfirm: async () => {
