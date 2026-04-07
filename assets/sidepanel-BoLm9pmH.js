@@ -84358,25 +84358,29 @@ const jX = ({
   isAgentRunning: p,
   onOpenOptions: m,
   hasMessages: f,
-  isPurlMode: g,
-  onTogglePurlMode: b,
-  analytics: w
+  onToggleRecentChats: g,
+  showRecentChats: b,
+  hasRecentChats: w,
+  recentChatsDisabled: k,
+  isPurlMode: C,
+  onTogglePurlMode: _,
+  analytics: M
 }) => {
-  const k = t();
-  const [C, _] = a.useState(false);
-  const M = !!b;
+  const S = t();
+  const [j, E] = a.useState(false);
+  const T = !!_;
   a.useEffect(() => {
-    if (M) {
+    if (T) {
       y(v.QUICK_MODE_TIP_DISMISSED).then(e => {
         if (!e) {
-          _(true);
-          w?.track("claude_chrome.quick_mode.tip_shown");
+          E(true);
+          M?.track("claude_chrome.quick_mode.tip_shown");
         }
       });
     }
-  }, [M, w]);
-  const S = () => {
-    _(false);
+  }, [T, M]);
+  const A = () => {
+    E(false);
     x(v.QUICK_MODE_TIP_DISMISSED, true);
   };
   return l.jsxs("div", {
@@ -84391,7 +84395,7 @@ const jX = ({
           options: o
         },
         onModelChange: c,
-        isQuickMode: g
+        isQuickMode: C
       }) : l.jsx("span", {
         className: "text-[12px] text-text-300 font-ui font-normal leading-[140%] tracking-[-0.3px]",
         children: l.jsx(e, {
@@ -84401,8 +84405,30 @@ const jX = ({
       })
     }), l.jsxs("div", {
       className: "flex items-center gap-2.5",
-      children: [b && l.jsx(J, {
-        tooltipContent: C ? l.jsxs("div", {
+      children: [l.jsx(J, {
+        tooltipContent: S.formatMessage({
+          defaultMessage: "Recent chats",
+          id: "Cd4uvaQFKD"
+        }),
+        children: l.jsx("button", {
+          onClick: () => {
+            if (!k && w) {
+              g?.();
+            }
+          },
+          disabled: k || !w,
+          className: `px-2.5 py-1.5 rounded-md transition-colors text-[12px] font-ui font-medium leading-[140%] ${b ? "bg-bg-300 text-text-100" : "text-text-300 hover:bg-bg-300 hover:text-text-100"} ${k || !w ? "opacity-40 cursor-not-allowed hover:bg-transparent hover:text-text-300" : ""}`,
+          "aria-label": S.formatMessage({
+            defaultMessage: "Recent chats",
+            id: "Cd4uvaQFKD"
+          }),
+          children: l.jsx(e, {
+            defaultMessage: "Recent chats",
+            id: "Cd4uvaQFKD"
+          })
+        })
+      }), _ && l.jsx(J, {
+        tooltipContent: j ? l.jsxs("div", {
           className: "relative",
           children: [l.jsx("div", {
             className: "absolute -top-[9px] right-0 w-2.5 h-[6px] bg-[hsl(var(--always-black)/0.8)]",
@@ -84419,8 +84445,8 @@ const jX = ({
             }), l.jsx("button", {
               onClick: e => {
                 e.stopPropagation();
-                S();
-                w?.track("claude_chrome.quick_mode.tip_dismissed");
+                A();
+                M?.track("claude_chrome.quick_mode.tip_dismissed");
               },
               className: "shrink-0 p-0.5 rounded hover:bg-always-white/20 transition-colors",
               children: l.jsx(Rl, {
@@ -84431,35 +84457,35 @@ const jX = ({
         }) : "Quick mode",
         side: "bottom",
         align: "end",
-        open: C || undefined,
+        open: j || undefined,
         children: l.jsx("button", {
           onClick: () => {
-            if (C) {
-              S();
+            if (j) {
+              A();
             }
-            w?.track("claude_chrome.quick_mode.clicked", {
-              was_active: !!g
+            M?.track("claude_chrome.quick_mode.clicked", {
+              was_active: !!C
             });
-            b();
+            _();
           },
           disabled: p,
-          className: `p-1.5 rounded-md transition-colors ${g ? "text-brand-100 bg-bg-300" : "text-text-300 hover:bg-bg-300 hover:text-text-100"} ${p ? "opacity-40 cursor-not-allowed" : ""}`,
+          className: `p-1.5 rounded-md transition-colors ${C ? "text-brand-100 bg-bg-300" : "text-text-300 hover:bg-bg-300 hover:text-text-100"} ${p ? "opacity-40 cursor-not-allowed" : ""}`,
           "aria-label": "Toggle quick mode",
-          "data-test-id": g ? "lightning-mode-active" : "lightning-mode-inactive",
+          "data-test-id": C ? "lightning-mode-active" : "lightning-mode-inactive",
           children: l.jsx(wl, {
             size: 12,
-            weight: g ? "fill" : "regular"
+            weight: C ? "fill" : "regular"
           })
         })
       }), l.jsx(J, {
-        tooltipContent: k.formatMessage({
+        tooltipContent: S.formatMessage({
           defaultMessage: "Clear chat",
           id: "I4AiMx3dsz"
         }),
         children: l.jsx("button", {
           onClick: u,
           className: "p-1.5 rounded-md transition-colors text-text-300 hover:bg-bg-300 hover:text-text-100",
-          "aria-label": k.formatMessage({
+          "aria-label": S.formatMessage({
             defaultMessage: "Clear chat",
             id: "I4AiMx3dsz"
           }),
@@ -84474,6 +84500,135 @@ const jX = ({
         onOpenSettings: m,
         hasMessages: f
       })]
+    })]
+  });
+};
+function __cpFormatRecentSessionMeta(e) {
+  const t = [];
+  t.push(e.mode === "quick" ? "Quick" : "Standard");
+  if (e.messageCount > 0) {
+    t.push(`${e.messageCount} msg`);
+  }
+  if (e.updatedAt) {
+    try {
+      t.push(new Date(e.updatedAt).toLocaleString());
+    } catch (n) {}
+  }
+  return t.join(" · ");
+}
+const __cpRecentChatsPanel = ({
+  sessions: n,
+  isOpen: s,
+  notice: r,
+  currentSessionId: i,
+  isAgentRunning: o,
+  onOpenSession: c,
+  onDeleteSession: u,
+  onDismissNotice: d
+}) => {
+  const h = t();
+  if (!s && !r) {
+    return null;
+  }
+  return l.jsxs("div", {
+    className: "px-4 pb-2",
+    children: [r && l.jsxs("div", {
+      className: "mx-auto mb-2 flex w-full max-w-3xl items-start justify-between gap-3 rounded-[14px] border border-border-300 bg-bg-100 px-4 py-3 text-sm text-text-200 md:px-5",
+      children: [l.jsx("span", {
+        className: "leading-[140%]",
+        children: r
+      }), l.jsx("button", {
+        onClick: () => d?.(),
+        className: "shrink-0 rounded-md p-1 text-text-300 transition-colors hover:bg-bg-300 hover:text-text-100",
+        "aria-label": h.formatMessage({
+          defaultMessage: "Dismiss",
+          id: "jj2zx3gW9Y"
+        }),
+        children: l.jsx(Rl, {
+          size: 12
+        })
+      })]
+    }), s && l.jsx("div", {
+      className: "mx-auto w-full max-w-3xl md:px-2",
+      children: l.jsxs("div", {
+        className: "rounded-[14px] border border-border-300 bg-bg-100 shadow-[0_4px_20px_0_rgba(0,0,0,0.04)]",
+        children: [l.jsxs("div", {
+          className: "flex items-center justify-between border-b border-border-300 px-4 py-3",
+          children: [l.jsx("div", {
+            className: "text-sm font-ui font-medium text-text-100",
+            children: l.jsx(e, {
+              defaultMessage: "Recent chats",
+              id: "Cd4uvaQFKD"
+            })
+          }), l.jsx("button", {
+            onClick: () => d?.("panel"),
+            className: "rounded-md p-1 text-text-300 transition-colors hover:bg-bg-300 hover:text-text-100",
+            "aria-label": h.formatMessage({
+              defaultMessage: "Close recent chats",
+              id: "8mLdVnQF6A"
+            }),
+            children: l.jsx(Rl, {
+              size: 12
+            })
+          })]
+        }), n.length === 0 ? l.jsx("div", {
+          className: "px-4 py-5 text-sm text-text-300",
+          children: l.jsx(e, {
+            defaultMessage: "No recent chats yet.",
+            id: "PR9xg+g2yM"
+          })
+        }) : l.jsx("div", {
+          className: "flex flex-col gap-2 p-3",
+          children: n.map(t => {
+            const n = t.id === i;
+            const s = o || n;
+            return l.jsxs("div", {
+              className: `flex items-center gap-3 rounded-[14px] border px-3 py-3 transition-colors ${n ? "border-border-400 bg-bg-200" : "border-border-300 bg-bg-100 hover:bg-bg-200"}`,
+              children: [l.jsxs("button", {
+                onClick: () => {
+                  if (!o && !n) {
+                    c?.(t.id);
+                  }
+                },
+                disabled: o || n,
+                className: "min-w-0 flex-1 text-left",
+                children: [l.jsx("div", {
+                  className: `truncate text-sm font-ui font-medium ${n ? "text-text-100" : "text-text-100"}`,
+                  children: t.title || h.formatMessage({
+                    defaultMessage: "New chat",
+                    id: "jT6B8zP7rC"
+                  })
+                }), t.preview && l.jsx("div", {
+                  className: "mt-1 truncate text-xs text-text-300",
+                  children: t.preview
+                }), l.jsx("div", {
+                  className: "mt-1 text-[11px] text-text-300",
+                  children: n ? h.formatMessage({
+                    defaultMessage: "Current chat",
+                    id: "FQ2x43mWm4"
+                  }) : __cpFormatRecentSessionMeta(t)
+                })]
+              }), l.jsx("button", {
+                onClick: e => {
+                  e.stopPropagation();
+                  if (!s) {
+                    u?.(t.id);
+                  }
+                },
+                disabled: s,
+                className: `shrink-0 rounded-md p-1.5 text-text-300 transition-colors ${s ? "opacity-40 cursor-not-allowed" : "hover:bg-bg-300 hover:text-text-100"}`,
+                "aria-label": h.formatMessage({
+                  defaultMessage: "Delete chat",
+                  id: "wAfIfvkoJr"
+                }),
+                children: l.jsx(wb, {
+                  size: 12
+                })
+              })]
+            }, t.id);
+          })
+        })]
+      })
     })]
   });
 };
@@ -89095,6 +89250,7 @@ function CQ({
     error: F,
     messageLimit: V,
     setMessages: w,
+    setLastStopReason: Z,
     tokensSaved: H,
     createAnthropicMessage: we,
     lastStopReason: U,
@@ -90525,6 +90681,7 @@ function FQ(e) {
         error: b,
         messageLimit: RQ,
         setMessages: m,
+        setLastStopReason: _,
         tokensSaved: null,
         createAnthropicMessage: se,
         lastStopReason: k,
@@ -91291,6 +91448,439 @@ const qQ = ut(e => ({
 A().then(e => {
   qQ.getState().setDeviceId(e);
 });
+const __CP_CHAT_SESSION_INDEX_KEY = "claw.chat.sessions.index";
+const __CP_CHAT_SESSION_DRAFT_KEY = "claw.chat.sessions.activeDraft";
+const __CP_CHAT_SESSION_PREFIX = "claw.chat.sessions.byId.";
+const __CP_CHAT_SESSION_LIMIT = 20;
+const __CP_CHAT_SESSION_TITLE_LIMIT = 80;
+const __CP_CHAT_SESSION_PREVIEW_LIMIT = 160;
+const __CP_CHAT_SESSION_TEXT_LIMIT = 4000;
+const __CP_CHAT_SESSION_JSON_TEXT_LIMIT = 800;
+const __CP_CHAT_SESSION_MAX_SNAPSHOT_CHARS = 180000;
+function __cpChatSessionStorageKey(e) {
+  return `${__CP_CHAT_SESSION_PREFIX}${String(e || "").trim()}`;
+}
+function __cpNormalizeSessionNumber(e, t = Date.now()) {
+  const n = Number(e);
+  return Number.isFinite(n) && n > 0 ? Math.round(n) : t;
+}
+function __cpTrimSessionText(e, t = __CP_CHAT_SESSION_TEXT_LIMIT) {
+  const n = String(e || "").replace(/\s+/g, " ").trim();
+  if (!n) {
+    return "";
+  }
+  return n.length > t ? `${n.slice(0, Math.max(0, t - 1)).trimEnd()}…` : n;
+}
+function __cpSanitizeSessionJsonValue(e, t = 0) {
+  if (t > 4 || e === undefined) {
+    return undefined;
+  }
+  if (e === null || typeof e == "boolean" || typeof e == "number") {
+    return e;
+  }
+  if (typeof e == "string") {
+    return __cpTrimSessionText(e, __CP_CHAT_SESSION_JSON_TEXT_LIMIT);
+  }
+  if (Array.isArray(e)) {
+    const n = [];
+    for (const s of e.slice(0, 20)) {
+      const r = __cpSanitizeSessionJsonValue(s, t + 1);
+      if (r !== undefined) {
+        n.push(r);
+      }
+    }
+    return n;
+  }
+  if (typeof e == "object") {
+    const n = {};
+    let s = 0;
+    for (const [r, i] of Object.entries(e)) {
+      if (s >= 20) {
+        break;
+      }
+      const o = __cpSanitizeSessionJsonValue(i, t + 1);
+      if (o !== undefined) {
+        n[r] = o;
+        s += 1;
+      }
+    }
+    return n;
+  }
+  return undefined;
+}
+function __cpExtractSessionText(e) {
+  if (typeof e == "string") {
+    return __cpTrimSessionText(e);
+  }
+  if (Array.isArray(e)) {
+    return __cpTrimSessionText(e.map(__cpExtractSessionText).filter(Boolean).join("\n\n"));
+  }
+  if (e && typeof e == "object") {
+    if (typeof e.text == "string") {
+      return __cpTrimSessionText(e.text);
+    }
+    if ("content" in e) {
+      return __cpExtractSessionText(e.content);
+    }
+    try {
+      const t = __cpSanitizeSessionJsonValue(e);
+      return t === undefined ? "" : __cpTrimSessionText(JSON.stringify(t), __CP_CHAT_SESSION_JSON_TEXT_LIMIT);
+    } catch (t) {
+      return "";
+    }
+  }
+  return "";
+}
+function __cpSerializeSessionToolResult(e) {
+  const t = __cpExtractSessionText(e.content);
+  if (!t && !e.is_error) {
+    return null;
+  }
+  return {
+    type: "tool_result",
+    tool_use_id: String(e.tool_use_id || e.toolUseId || "").trim(),
+    is_error: !!e.is_error,
+    content: [{
+      type: "text",
+      text: t || (e.is_error ? "Tool result unavailable." : "")
+    }]
+  };
+}
+function __cpSerializeSessionContent(e) {
+  if (typeof e == "string") {
+    return __cpTrimSessionText(e);
+  }
+  if (!Array.isArray(e)) {
+    return __cpExtractSessionText(e);
+  }
+  const t = [];
+  for (const n of e) {
+    if (!n || typeof n != "object") {
+      continue;
+    }
+    if (n.type === "text") {
+      const e = __cpTrimSessionText(n.text || "");
+      if (e) {
+        t.push({
+          type: "text",
+          text: e
+        });
+      }
+    } else if (n.type === "tool_use") {
+      const e = String(n.name || "").trim();
+      if (e) {
+        t.push({
+          type: "tool_use",
+          id: String(n.id || `tool_use_${t.length}`),
+          name: e,
+          input: __cpSanitizeSessionJsonValue(n.input) || {}
+        });
+      }
+    } else if (n.type === "tool_result") {
+      const e = __cpSerializeSessionToolResult(n);
+      if (e) {
+        t.push(e);
+      }
+    }
+  }
+  return t;
+}
+function __cpSerializeSessionMessage(e) {
+  if (!e || typeof e != "object") {
+    return null;
+  }
+  const t = String(e.role || "").trim();
+  if (!t) {
+    return null;
+  }
+  const n = __cpSerializeSessionContent(e.content);
+  if (Array.isArray(n) && n.length === 0 || typeof n == "string" && !n.trim()) {
+    return null;
+  }
+  const s = {
+    role: t,
+    content: n
+  };
+  if (e.isCompactSummary === true) {
+    s.isCompactSummary = true;
+  }
+  if (e.isCompactionMessage === true) {
+    s.isCompactionMessage = true;
+  }
+  return s;
+}
+function __cpSessionHasMeaningfulMessages(e) {
+  return Array.isArray(e) && e.map(__cpSerializeSessionMessage).filter(Boolean).length > 0;
+}
+function __cpGetSessionTitle(e) {
+  for (const t of Array.isArray(e) ? e : []) {
+    if (t.role !== "user") {
+      continue;
+    }
+    const n = __cpExtractSessionText(t.content);
+    if (n) {
+      return __cpTrimSessionText(n, __CP_CHAT_SESSION_TITLE_LIMIT);
+    }
+  }
+  return "New chat";
+}
+function __cpGetSessionPreview(e) {
+  const t = Array.isArray(e) ? [...e].reverse() : [];
+  for (const n of t) {
+    const e = __cpExtractSessionText(n.content);
+    if (e) {
+      return __cpTrimSessionText(e, __CP_CHAT_SESSION_PREVIEW_LIMIT);
+    }
+  }
+  return "";
+}
+function __cpBuildSessionMeta(e, t, n = {}) {
+  const s = __cpNormalizeSessionNumber(n.createdAt, Date.now());
+  const r = __cpNormalizeSessionNumber(n.updatedAt, Date.now());
+  const i = String(n.selectedModel || "").trim();
+  const o = n.quickMode === true ? "quick" : "standard";
+  return {
+    id: String(e || "").trim(),
+    title: __cpGetSessionTitle(t),
+    preview: __cpGetSessionPreview(t),
+    createdAt: s,
+    updatedAt: r,
+    messageCount: Array.isArray(t) ? t.length : 0,
+    mode: o,
+    selectedModel: i
+  };
+}
+function __cpBuildSessionSnapshot(e = {}) {
+  const t = String(e.sessionId || "").trim();
+  if (!t) {
+    return null;
+  }
+  let n = (Array.isArray(e.messages) ? e.messages : []).map(__cpSerializeSessionMessage).filter(Boolean);
+  if (n.length === 0) {
+    return null;
+  }
+  let s = null;
+  while (n.length > 0) {
+    const r = __cpBuildSessionMeta(t, n, {
+      createdAt: e.createdAt,
+      updatedAt: Date.now(),
+      selectedModel: e.selectedModel,
+      quickMode: e.quickMode
+    });
+    s = {
+      meta: r,
+      messages: n,
+      lastStopReason: e.lastStopReason && typeof e.lastStopReason == "object" ? {
+        reason: String(e.lastStopReason.reason || "").trim(),
+        messageId: String(e.lastStopReason.messageId || "").trim()
+      } : null,
+      selectedModel: r.selectedModel,
+      quickMode: r.mode === "quick"
+    };
+    if (JSON.stringify(s).length <= __CP_CHAT_SESSION_MAX_SNAPSHOT_CHARS || n.length <= 1) {
+      break;
+    }
+    n = n.slice(1);
+  }
+  return s && Array.isArray(s.messages) && s.messages.length > 0 ? s : null;
+}
+function __cpNormalizeSessionMeta(e) {
+  if (!e || typeof e != "object") {
+    return null;
+  }
+  const t = String(e.id || "").trim();
+  if (!t) {
+    return null;
+  }
+  return {
+    id: t,
+    title: __cpTrimSessionText(e.title || "New chat", __CP_CHAT_SESSION_TITLE_LIMIT) || "New chat",
+    preview: __cpTrimSessionText(e.preview || "", __CP_CHAT_SESSION_PREVIEW_LIMIT),
+    createdAt: __cpNormalizeSessionNumber(e.createdAt, Date.now()),
+    updatedAt: __cpNormalizeSessionNumber(e.updatedAt, Date.now()),
+    messageCount: Math.max(0, Number(e.messageCount) || 0),
+    mode: e.mode === "quick" ? "quick" : "standard",
+    selectedModel: String(e.selectedModel || "").trim()
+  };
+}
+function __cpNormalizeSessionSnapshot(e) {
+  if (!e || typeof e != "object") {
+    return null;
+  }
+  const t = (Array.isArray(e.messages) ? e.messages : []).map(__cpSerializeSessionMessage).filter(Boolean);
+  if (t.length === 0) {
+    return null;
+  }
+  const n = __cpNormalizeSessionMeta(e.meta) || __cpBuildSessionMeta(e.meta?.id || "", t, {
+    createdAt: e.meta?.createdAt,
+    updatedAt: e.meta?.updatedAt,
+    selectedModel: e.selectedModel,
+    quickMode: e.quickMode
+  });
+  if (!n.id) {
+    return null;
+  }
+  return {
+    meta: {
+      ...n,
+      messageCount: t.length,
+      selectedModel: String(e.selectedModel || n.selectedModel || "").trim(),
+      mode: e.quickMode === true || n.mode === "quick" ? "quick" : "standard"
+    },
+    messages: t,
+    lastStopReason: e.lastStopReason && typeof e.lastStopReason == "object" ? {
+      reason: String(e.lastStopReason.reason || "").trim(),
+      messageId: String(e.lastStopReason.messageId || "").trim()
+    } : null,
+    selectedModel: String(e.selectedModel || n.selectedModel || "").trim(),
+    quickMode: e.quickMode === true || n.mode === "quick"
+  };
+}
+function __cpBuildSessionDraft(e = {}) {
+  const t = String(e.sessionId || "").trim() || crypto.randomUUID();
+  return {
+    sessionId: t,
+    inputText: String(e.inputText || ""),
+    selectedModel: String(e.selectedModel || "").trim(),
+    quickMode: e.quickMode === true,
+    createdAt: __cpNormalizeSessionNumber(e.createdAt, Date.now()),
+    updatedAt: Date.now()
+  };
+}
+function __cpNormalizeSessionDraft(e) {
+  if (!e || typeof e != "object") {
+    return null;
+  }
+  const t = String(e.sessionId || "").trim();
+  if (!t) {
+    return null;
+  }
+  return {
+    sessionId: t,
+    inputText: String(e.inputText || ""),
+    selectedModel: String(e.selectedModel || "").trim(),
+    quickMode: e.quickMode === true,
+    createdAt: __cpNormalizeSessionNumber(e.createdAt, Date.now()),
+    updatedAt: __cpNormalizeSessionNumber(e.updatedAt, Date.now())
+  };
+}
+function __cpCollectAvailableModelIds(e) {
+  return Array.isArray(e) ? e.map(e => typeof e == "string" ? e : e?.model).filter(Boolean) : [];
+}
+class LocalSessionRepository {
+  static async readIndex() {
+    try {
+      const e = await chrome.storage.local.get(__CP_CHAT_SESSION_INDEX_KEY);
+      const t = Array.isArray(e[__CP_CHAT_SESSION_INDEX_KEY]) ? e[__CP_CHAT_SESSION_INDEX_KEY] : [];
+      return t.map(__cpNormalizeSessionMeta).filter(Boolean).sort((e, t) => t.updatedAt - e.updatedAt).slice(0, __CP_CHAT_SESSION_LIMIT);
+    } catch (e) {
+      return [];
+    }
+  }
+  static async readValidatedIndex() {
+    const e = await this.readIndex();
+    if (e.length === 0) {
+      return [];
+    }
+    try {
+      const t = e.map(e => __cpChatSessionStorageKey(e.id));
+      const n = await chrome.storage.local.get(t);
+      const s = [];
+      const r = [];
+      for (const t of e) {
+        const e = __cpNormalizeSessionSnapshot(n[__cpChatSessionStorageKey(t.id)]);
+        if (e) {
+          s.push({
+            ...e.meta,
+            updatedAt: Math.max(t.updatedAt, e.meta.updatedAt)
+          });
+        } else {
+          r.push(__cpChatSessionStorageKey(t.id));
+        }
+      }
+      if (s.length !== e.length) {
+        await chrome.storage.local.set({
+          [__CP_CHAT_SESSION_INDEX_KEY]: s
+        });
+      }
+      if (r.length > 0) {
+        await chrome.storage.local.remove(r);
+      }
+      return s.sort((e, t) => t.updatedAt - e.updatedAt).slice(0, __CP_CHAT_SESSION_LIMIT);
+    } catch (t) {
+      return e;
+    }
+  }
+  static async readSession(e) {
+    const t = String(e || "").trim();
+    if (!t) {
+      return null;
+    }
+    const n = __cpChatSessionStorageKey(t);
+    try {
+      const e = await chrome.storage.local.get(n);
+      const s = __cpNormalizeSessionSnapshot(e[n]);
+      if (!s) {
+        await this.deleteSession(t);
+        return null;
+      }
+      return s;
+    } catch (s) {
+      return null;
+    }
+  }
+  static async saveSession(e) {
+    const t = __cpNormalizeSessionSnapshot(e);
+    if (!t) {
+      return [];
+    }
+    const n = await this.readIndex();
+    const s = [t.meta, ...n.filter(e => e.id !== t.meta.id)].sort((e, t) => t.updatedAt - e.updatedAt);
+    const r = s.slice(__CP_CHAT_SESSION_LIMIT).map(e => e.id);
+    const i = s.slice(0, __CP_CHAT_SESSION_LIMIT);
+    await chrome.storage.local.set({
+      [__CP_CHAT_SESSION_INDEX_KEY]: i,
+      [__cpChatSessionStorageKey(t.meta.id)]: t
+    });
+    if (r.length > 0) {
+      await chrome.storage.local.remove(r.map(__cpChatSessionStorageKey));
+    }
+    return i;
+  }
+  static async deleteSession(e) {
+    const t = String(e || "").trim();
+    if (!t) {
+      return [];
+    }
+    const n = (await this.readIndex()).filter(e => e.id !== t);
+    await chrome.storage.local.set({
+      [__CP_CHAT_SESSION_INDEX_KEY]: n
+    });
+    await chrome.storage.local.remove(__cpChatSessionStorageKey(t));
+    return n;
+  }
+  static async saveDraft(e) {
+    const t = __cpNormalizeSessionDraft(e);
+    if (!t) {
+      return null;
+    }
+    await chrome.storage.local.set({
+      [__CP_CHAT_SESSION_DRAFT_KEY]: t
+    });
+    return t;
+  }
+  static async readDraft() {
+    try {
+      const e = await chrome.storage.local.get(__CP_CHAT_SESSION_DRAFT_KEY);
+      return __cpNormalizeSessionDraft(e[__CP_CHAT_SESSION_DRAFT_KEY]);
+    } catch (e) {
+      return null;
+    }
+  }
+  static async clearDraft() {
+    await chrome.storage.local.remove(__CP_CHAT_SESSION_DRAFT_KEY);
+  }
+}
 const GQ = ({
   tabId: e,
   onCapture: n,
@@ -93831,6 +94421,8 @@ function o1() {
     tokensSaved: Mt,
     createAnthropicMessage: St,
     lastStopReason: jt,
+    setMessages: __cpSetChatMessages,
+    setLastStopReason: __cpSetLastStopReason,
     currentStatus: Et,
     conversationUuid: Tt
   } = FQ({
@@ -94803,6 +95395,269 @@ function o1() {
       i.setPermissionPrompt(null);
     }
   }, [i]);
+  const __cpSessionCreatedAtRef = a.useRef(Date.now());
+  const __cpHydratingSessionRef = a.useRef(false);
+  const __cpLoadedInitialSessionRef = a.useRef(false);
+  const __cpPersistedSessionSignatureRef = a.useRef("");
+  const __cpPersistedDraftSignatureRef = a.useRef("");
+  const [__cpRecentSessions, __cpSetRecentSessions] = a.useState([]);
+  const [__cpRecentSessionsOpen, __cpSetRecentSessionsOpen] = a.useState(false);
+  const [__cpSessionNotice, __cpSetSessionNotice] = a.useState("");
+  const __cpRefreshRecentSessions = a.useCallback(async () => {
+    const e = await LocalSessionRepository.readValidatedIndex();
+    __cpSetRecentSessions(e);
+    return e;
+  }, []);
+  const __cpResolveSessionModeAndModel = a.useCallback((e, t) => {
+    let s = e === true;
+    let r = "";
+    if (s && (!te || hasCustomProviderAuth_)) {
+      s = false;
+      r = n.formatMessage({
+        defaultMessage: "Quick mode isn't available right now. Continued in standard mode.",
+        id: "cZd2tWHfFY"
+      });
+    }
+    const i = __cpCollectAvailableModelIds(z);
+    const o = s ? $.quick_mode?.fast_model || $.default || D : $.default || D;
+    let a = String(t || "").trim();
+    if (a && i.length > 0 && !i.includes(a)) {
+      r = r || n.formatMessage({
+        defaultMessage: "Saved model isn't available anymore. Using {modelName} instead.",
+        id: "fv3GBqFcIT",
+        values: {
+          modelName: o || a
+        }
+      });
+      a = o;
+    }
+    if (!a) {
+      a = o;
+    }
+    return {
+      quickMode: s,
+      selectedModel: a,
+      notice: r
+    };
+  }, [te, hasCustomProviderAuth_, n, z, $, D]);
+  const __cpPersistDraftState = a.useCallback(async () => {
+    if (__cpHydratingSessionRef.current) {
+      return;
+    }
+    const e = __cpBuildSessionDraft({
+      sessionId: o.sessionId,
+      inputText: o.inputText,
+      selectedModel: D,
+      quickMode: ne,
+      createdAt: __cpSessionCreatedAtRef.current
+    });
+    const t = JSON.stringify(e);
+    if (t === __cpPersistedDraftSignatureRef.current) {
+      return;
+    }
+    __cpPersistedDraftSignatureRef.current = t;
+    await LocalSessionRepository.saveDraft(e);
+  }, [o.sessionId, o.inputText, D, ne]);
+  const __cpPersistSessionSnapshot = a.useCallback(async () => {
+    if (__cpHydratingSessionRef.current || !__cpSessionHasMeaningfulMessages(dt)) {
+      return null;
+    }
+    const e = __cpBuildSessionSnapshot({
+      sessionId: o.sessionId,
+      messages: dt,
+      selectedModel: D,
+      quickMode: ne,
+      lastStopReason: jt,
+      createdAt: __cpSessionCreatedAtRef.current
+    });
+    if (!e) {
+      return null;
+    }
+    const t = JSON.stringify(e);
+    if (t === __cpPersistedSessionSignatureRef.current) {
+      return e;
+    }
+    __cpPersistedSessionSignatureRef.current = t;
+    __cpPersistedDraftSignatureRef.current = "";
+    const n = await LocalSessionRepository.saveSession(e);
+    await LocalSessionRepository.clearDraft();
+    __cpSetRecentSessions(n);
+    return e;
+  }, [dt, o.sessionId, D, ne, jt]);
+  const __cpApplySessionSnapshot = a.useCallback(async e => {
+    const t = __cpNormalizeSessionSnapshot(e);
+    if (!t) {
+      return false;
+    }
+    const {
+      quickMode: s,
+      selectedModel: i,
+      notice: a
+    } = __cpResolveSessionModeAndModel(t.quickMode, t.selectedModel || t.meta.selectedModel);
+    await yt();
+    Qe();
+    r.resetOnSessionClear();
+    o.setPendingPrompt(null);
+    o.setPromptToSave(null);
+    o.setPromptToEdit(null);
+    o.setInputText("");
+    o.setSessionId(t.meta.id);
+    __cpSessionCreatedAtRef.current = t.meta.createdAt || Date.now();
+    __cpPersistedSessionSignatureRef.current = JSON.stringify(t);
+    __cpPersistedDraftSignatureRef.current = "";
+    chrome.storage.local.set({
+      purlMode: s
+    }).catch(() => {});
+    se(s);
+    if (i) {
+      P(i);
+      U(i, s).catch(() => {});
+    }
+    __cpSetChatMessages(t.messages);
+    __cpSetLastStopReason(t.lastStopReason || null);
+    __cpSetSessionNotice(a);
+    __cpSetRecentSessionsOpen(false);
+    await LocalSessionRepository.clearDraft();
+    return true;
+  }, [__cpResolveSessionModeAndModel, yt, Qe, r, o, te, se, P, U, __cpSetChatMessages, __cpSetLastStopReason]);
+  const __cpOpenRecentSession = a.useCallback(async e => {
+    if (!e || xt) {
+      return;
+    }
+    sn();
+    try {
+      if (__cpSessionHasMeaningfulMessages(dt)) {
+        await __cpPersistSessionSnapshot();
+      } else {
+        await __cpPersistDraftState();
+      }
+      const t = await LocalSessionRepository.readSession(e);
+      if (!t) {
+        await __cpRefreshRecentSessions();
+        return;
+      }
+      __cpHydratingSessionRef.current = true;
+      await __cpApplySessionSnapshot(t);
+    } catch (t) {} finally {
+      setTimeout(() => {
+        __cpHydratingSessionRef.current = false;
+      }, 0);
+    }
+  }, [xt, sn, dt, __cpPersistSessionSnapshot, __cpPersistDraftState, __cpRefreshRecentSessions, __cpApplySessionSnapshot]);
+  const __cpDeleteRecentSession = a.useCallback(async e => {
+    if (!e || xt || e === o.sessionId) {
+      return;
+    }
+    try {
+      const t = await LocalSessionRepository.deleteSession(e);
+      __cpSetRecentSessions(t);
+      if (t.length === 0) {
+        __cpSetRecentSessionsOpen(false);
+      }
+    } catch (t) {}
+  }, [xt, o.sessionId]);
+  const __cpToggleRecentSessions = a.useCallback(() => {
+    if (__cpRecentSessions.length === 0 || xt) {
+      return;
+    }
+    __cpSetRecentSessionsOpen(e => !e);
+  }, [__cpRecentSessions.length, xt]);
+  const __cpDismissSessionSurface = a.useCallback(e => {
+    if (e === "panel") {
+      __cpSetRecentSessionsOpen(false);
+    } else {
+      __cpSetSessionNotice("");
+    }
+  }, []);
+  a.useEffect(() => {
+    if (__cpLoadedInitialSessionRef.current) {
+      return;
+    }
+    __cpLoadedInitialSessionRef.current = true;
+    let e = false;
+    (async () => {
+      const [t, s] = await Promise.all([LocalSessionRepository.readValidatedIndex(), LocalSessionRepository.readDraft()]);
+      if (e) {
+        return;
+      }
+      __cpSetRecentSessions(t);
+      if (s && dt.length === 0) {
+        __cpHydratingSessionRef.current = true;
+        try {
+          const {
+            quickMode: e,
+            selectedModel: t,
+            notice: r
+          } = __cpResolveSessionModeAndModel(s.quickMode, s.selectedModel);
+          o.setSessionId(s.sessionId);
+          o.setInputText(s.inputText || "");
+          __cpSessionCreatedAtRef.current = s.createdAt || Date.now();
+          __cpPersistedDraftSignatureRef.current = JSON.stringify(s);
+          chrome.storage.local.set({
+            purlMode: e
+          }).catch(() => {});
+          se(e);
+          if (t) {
+            P(t);
+            U(t, e).catch(() => {});
+          }
+          __cpSetSessionNotice(r);
+        } catch (r) {} finally {
+          setTimeout(() => {
+            __cpHydratingSessionRef.current = false;
+          }, 0);
+        }
+      }
+    })();
+    return () => {
+      e = true;
+    };
+  }, [dt.length, __cpResolveSessionModeAndModel, o, te, se, P, U]);
+  a.useEffect(() => {
+    if (__cpHydratingSessionRef.current || dt.length === 0 || kt || bt) {
+      return;
+    }
+    const e = dt[dt.length - 1];
+    if (xt && (!e || e.role !== "user")) {
+      return;
+    }
+    const t = setTimeout(() => {
+      __cpPersistSessionSnapshot().catch(() => {});
+    }, e?.role === "user" ? 80 : 180);
+    return () => clearTimeout(t);
+  }, [dt, xt, kt, bt, __cpPersistSessionSnapshot]);
+  a.useEffect(() => {
+    if (__cpHydratingSessionRef.current || dt.length > 0) {
+      return;
+    }
+    const e = setTimeout(() => {
+      __cpPersistDraftState().catch(() => {});
+    }, 200);
+    return () => clearTimeout(e);
+  }, [dt.length, o.inputText, o.sessionId, D, ne, __cpPersistDraftState]);
+  a.useEffect(() => {
+    const e = () => {
+      if (__cpHydratingSessionRef.current) {
+        return;
+      }
+      if (__cpSessionHasMeaningfulMessages(dt)) {
+        __cpPersistSessionSnapshot().catch(() => {});
+      } else {
+        __cpPersistDraftState().catch(() => {});
+      }
+    };
+    const t = () => {
+      if (document.visibilityState === "hidden") {
+        e();
+      }
+    };
+    window.addEventListener("pagehide", e);
+    document.addEventListener("visibilitychange", t);
+    return () => {
+      window.removeEventListener("pagehide", e);
+      document.removeEventListener("visibilitychange", t);
+    };
+  }, [dt, __cpPersistSessionSnapshot, __cpPersistDraftState]);
   (function ({
     tabId: e,
     isSecondaryTab: t,
@@ -94965,22 +95820,37 @@ function o1() {
   });
   const an = a.useCallback(() => {
     sn();
-    const e = () => {
-      yt();
-      o.generateNewSessionId();
+    const e = async () => {
+      if (__cpSessionHasMeaningfulMessages(dt)) {
+        await __cpPersistSessionSnapshot().catch(() => {});
+      } else {
+        await LocalSessionRepository.clearDraft().catch(() => {});
+      }
+      await yt();
+      const e = o.generateNewSessionId();
+      __cpSessionCreatedAtRef.current = Date.now();
+      __cpPersistedSessionSignatureRef.current = "";
+      __cpPersistedDraftSignatureRef.current = "";
+      __cpSetLastStopReason(null);
+      __cpSetSessionNotice("");
+      __cpSetRecentSessionsOpen(false);
+      o.setSessionId(e);
       R(new Map());
       r.resetOnSessionClear();
+      await __cpRefreshRecentSessions().catch(() => {});
       setTimeout(() => {
         Re.current?.focus();
       }, 50);
     };
     if (xt) {
       ft();
-      setTimeout(e, 100);
+      setTimeout(() => {
+        e().catch(() => {});
+      }, 100);
     } else {
-      e();
+      e().catch(() => {});
     }
-  }, [xt, ft, yt, sn, R, o, r]);
+  }, [xt, ft, yt, sn, R, o, r, dt, __cpPersistSessionSnapshot, __cpSetLastStopReason, __cpRefreshRecentSessions]);
   const cn = a.useCallback(async () => {
     await ee("enabled");
     r.setShowNotificationBanner(false);
@@ -95191,6 +96061,10 @@ function o1() {
           isAgentRunning: xt,
           onOpenOptions: () => chrome.runtime.openOptionsPage(),
           hasMessages: dt.length > 0,
+          onToggleRecentChats: __cpToggleRecentSessions,
+          showRecentChats: __cpRecentSessionsOpen,
+          hasRecentChats: __cpRecentSessions.length > 0,
+          recentChatsDisabled: xt,
           isPurlMode: !hasCustomProviderAuth_ && te && !!ne,
           analytics: He,
           onTogglePurlMode: te && !hasCustomProviderAuth_ ? () => {
@@ -95234,7 +96108,16 @@ function o1() {
           pageTitle: me
         }) : l.jsxs("div", {
           className: "flex-1 flex flex-col overflow-hidden relative",
-          children: [l.jsx(ak, {
+          children: [l.jsx(__cpRecentChatsPanel, {
+            sessions: __cpRecentSessions,
+            isOpen: __cpRecentSessionsOpen || dt.length === 0 && __cpRecentSessions.length > 0,
+            notice: __cpSessionNotice,
+            currentSessionId: o.sessionId,
+            isAgentRunning: xt,
+            onOpenSession: __cpOpenRecentSession,
+            onDeleteSession: __cpDeleteRecentSession,
+            onDismissNotice: __cpDismissSessionSurface
+          }), l.jsx(ak, {
             messages: dt,
             messageGroups: At,
             messageHistory: ht,

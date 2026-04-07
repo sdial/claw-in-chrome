@@ -323,13 +323,382 @@ const K = ({
     return null;
   }
 };
-const J = () => {
-  const [e, a] = s.useState();
+const cpGithubUpdateStrings = String(navigator.language || "").toLowerCase().startsWith("zh") ? {
+  title: "扩展更新",
+  subtitle: "你可以在这里检查新版本，并跳转到发布页下载最新版插件。",
+  currentVersion: "当前版本",
+  latestVersion: "最新版本",
+  lastCheckedAt: "最后检查",
+  notes: "更新说明",
+  latestReady: "已是最新版本",
+  updateAvailable: "发现新版本，建议尽快手动升级。",
+  neverChecked: "尚未检查更新",
+  notesFallback: "当前发布没有附带详细更新说明。",
+  autoCheckLabel: "自动检查更新",
+  autoCheckHelp: "开启后会在启动扩展时和每 24 小时自动检查 GitHub Release。",
+  autoCheckOn: "已开启",
+  autoCheckOff: "已关闭",
+  autoCheckSavedOn: "已开启自动检查更新。",
+  autoCheckSavedOff: "已关闭自动检查更新。",
+  viewRelease: "查看发布页",
+  downloadZip: "下载最新版本",
+  checkNow: "立即检查更新",
+  checking: "正在检查 GitHub Release...",
+  checkFailed: "检查更新失败：{message}",
+  checkSucceeded: "已刷新到最新发布信息。",
+  openReleaseFailed: "打开发布页失败：{message}",
+  openDownloadFailed: "打开下载页失败：{message}",
+  unknown: "未知"
+} : {
+  title: "Extension updates",
+  subtitle: "GitHub builds are updated manually. Check for new releases here and jump to the release page to download the latest ZIP.",
+  currentVersion: "Current version",
+  latestVersion: "Latest version",
+  lastCheckedAt: "Last checked",
+  notes: "Release notes",
+  latestReady: "You are on the latest version",
+  updateAvailable: "A newer version is available. Manual upgrade is recommended.",
+  neverChecked: "No update check yet",
+  notesFallback: "This release does not include detailed notes.",
+  autoCheckLabel: "Auto-check updates",
+  autoCheckHelp: "When enabled, the extension checks GitHub Releases on startup and once every 24 hours.",
+  autoCheckOn: "Enabled",
+  autoCheckOff: "Disabled",
+  autoCheckSavedOn: "Automatic update checks enabled.",
+  autoCheckSavedOff: "Automatic update checks disabled.",
+  viewRelease: "Open release",
+  downloadZip: "Download ZIP",
+  checkNow: "Check now",
+  checking: "Checking GitHub Release...",
+  checkFailed: "Update check failed: {message}",
+  checkSucceeded: "Release metadata refreshed.",
+  openReleaseFailed: "Failed to open release page: {message}",
+  openDownloadFailed: "Failed to open download page: {message}",
+  unknown: "Unknown"
+};
+function cpGithubUpdateInterpolate(e, t) {
+  return String(e || "").replace(/\{(\w+)\}/g, (e, a) => t && t[a] != null ? String(t[a]) : "");
+}
+const cpOptionsNavStrings = String(navigator.language || "").toLowerCase().startsWith("zh") ? {
+  provider: "模型供应商",
+  prompt: "提示词修改"
+} : {
+  provider: "Model provider",
+  prompt: "Prompt overrides"
+};
+function cpGetSettingsTabFromHash(e) {
+  const t = String(e || window.location.hash || "").replace(/^#/, "").split("?")[0];
+  return ["permissions", "prompts", "options", "internal"].includes(t) ? t : "permissions";
+}
+function cpGetOptionsSubviewFromHash(e) {
+  const t = String(e || window.location.hash || "").replace(/^#/, "");
+  const a = t.split("?");
+  if ((a[0] || "permissions").toLowerCase() !== "options") {
+    return "";
+  }
+  const s = String(new URLSearchParams(a[1] || "").get("provider") || "").trim().toLowerCase();
+  if (s === "true" || s === "provider") {
+    return "provider";
+  }
+  if (s === "prompt" || s === "prompts") {
+    return "prompt";
+  }
+  return "";
+}
+function cpGithubSendRuntimeMessage(e) {
+  return new Promise(t => {
+    try {
+      chrome.runtime.sendMessage(e, a => {
+        if (chrome.runtime.lastError) {
+          t({
+            ok: false,
+            error: chrome.runtime.lastError.message
+          });
+          return;
+        }
+        t(a || {
+          ok: true
+        });
+      });
+    } catch (e) {
+      t({
+        ok: false,
+        error: String(e?.message || e || "")
+      });
+    }
+  });
+}
+const cpGithubUpdateSection = () => {
+  const e = globalThis.__CP_GITHUB_UPDATE_SHARED__;
+  if (!e || !globalThis.chrome?.runtime?.id) {
+    return null;
+  }
+  const {
+    STORAGE_KEYS: a,
+    MESSAGE_TYPES: r,
+    formatTimestamp: i,
+    summarizeNotes: o,
+    readStoredState: l,
+    openReleasePage: d,
+    openDownloadPage: c,
+    createDefaultUpdateInfo: m
+  } = e;
+  const h = cpGithubUpdateStrings;
+  const p = String(navigator.language || "").toLowerCase().startsWith("zh") ? "zh-CN" : "en-US";
+  const u = globalThis.chrome?.runtime?.getManifest?.().version || "";
+  const [x, f] = s.useState(() => ({
+    info: m(u),
+    autoCheckEnabled: true
+  }));
+  const [g, b] = s.useState("");
+  const [y, v] = s.useState("");
+  s.useEffect(() => {
+    let e = true;
+    const t = async () => {
+      const t = await l();
+      if (e) {
+        f(t);
+      }
+    };
+    t().catch(() => {});
+    const s = (t, n) => {
+      if (n !== "local") {
+        return;
+      }
+      if (t[a.INFO] || t[a.AUTO_CHECK_ENABLED]) {
+        l().then(t => {
+          if (e) {
+            f(t);
+          }
+        }).catch(() => {});
+      }
+    };
+    chrome.storage.onChanged.addListener(s);
+    return () => {
+      e = false;
+      chrome.storage.onChanged.removeListener(s);
+    };
+  }, [a.AUTO_CHECK_ENABLED, a.INFO, l]);
+  const j = x?.info || m(u);
+  const w = async e => {
+    try {
+      await chrome.storage.local.set({
+        [a.AUTO_CHECK_ENABLED]: e
+      });
+      f(t => ({
+        ...(t || {}),
+        autoCheckEnabled: e,
+        info: t?.info || j
+      }));
+      v("success");
+      b(e ? h.autoCheckSavedOn : h.autoCheckSavedOff);
+    } catch (e) {
+      v("error");
+      b(cpGithubUpdateInterpolate(h.checkFailed, {
+        message: String(e?.message || e || h.unknown)
+      }));
+    }
+  };
+  const k = async () => {
+    v("info");
+    b(h.checking);
+    const e = await cpGithubSendRuntimeMessage({
+      type: r.CHECK_NOW
+    });
+    if (!e?.ok) {
+      v("error");
+      b(cpGithubUpdateInterpolate(h.checkFailed, {
+        message: e?.error || h.unknown
+      }));
+      return;
+    }
+    v("success");
+    b(h.checkSucceeded);
+    try {
+      f(await l());
+    } catch {}
+  };
+  const M = async () => {
+    const e = await d(j);
+    if (!e) {
+      v("error");
+      b(cpGithubUpdateInterpolate(h.openReleaseFailed, {
+        message: h.unknown
+      }));
+    }
+  };
+  const N = async () => {
+    const e = await c(j);
+    if (!e) {
+      v("error");
+      b(cpGithubUpdateInterpolate(h.openDownloadFailed, {
+        message: h.unknown
+      }));
+    }
+  };
+  const C = {
+    success: {
+      color: "#166534",
+      background: "rgba(220, 252, 231, 0.72)"
+    },
+    error: {
+      color: "#b91c1c",
+      background: "rgba(254, 226, 226, 0.8)"
+    },
+    info: {
+      color: "#1d4ed8",
+      background: "rgba(219, 234, 254, 0.8)"
+    }
+  }[y || "info"];
+  const A = (e, t) => n.jsxs("div", {
+    style: {
+      borderRadius: "16px",
+      border: "1px solid var(--border-subtle, rgba(148, 163, 184, 0.25))",
+      background: "rgba(248, 250, 252, 0.55)",
+      padding: "14px 16px",
+      flex: "1 1 220px",
+      minWidth: "0"
+    },
+    children: [n.jsx("div", {
+      style: {
+        fontSize: "12px",
+        lineHeight: "1.5",
+        color: "#64748b"
+      },
+      children: e
+    }), n.jsx("div", {
+      style: {
+        marginTop: "6px",
+        fontSize: "14px",
+        lineHeight: "1.55",
+        color: "#0f172a",
+        wordBreak: "break-word"
+      },
+      children: t || h.unknown
+    })]
+  });
+  return n.jsx("div", {
+    className: "mb-6",
+    children: n.jsxs("section", {
+      className: "cp-page-card cp-page-panel bg-bg-100 border border-border-300 rounded-xl px-6 pt-6 pb-6 md:px-8 md:pt-8 md:pb-8",
+      children: [n.jsxs("div", {
+        className: "cp-page-stack",
+        style: {
+          display: "flex",
+          flexDirection: "column",
+          gap: "16px"
+        },
+        children: [n.jsxs("div", {
+          children: [n.jsx("h3", {
+            className: "cp-page-heading text-text-100 font-xl-bold",
+            children: h.title
+          }), n.jsx("p", {
+            className: "cp-page-subheading text-text-300 font-base",
+            children: h.subtitle
+          })]
+        }), n.jsx("div", {
+          className: "cp-page-meta",
+          "data-tone": j.hasUpdate ? "ready" : "loading",
+          children: j.hasUpdate ? h.updateAvailable : h.latestReady
+        }), n.jsxs("div", {
+          style: {
+            display: "flex",
+            flexWrap: "wrap",
+            gap: "12px"
+          },
+          children: [A(h.currentVersion, j.currentVersion || h.unknown), A(h.latestVersion, j.latestVersion || h.latestReady), A(h.lastCheckedAt, j.lastCheckedAt ? i(j.lastCheckedAt, p) : h.neverChecked)]
+        }), n.jsxs("div", {
+          className: "cp-page-field",
+          children: [n.jsx("div", {
+            className: "cp-page-label",
+            children: h.notes
+          }), n.jsx("div", {
+            style: {
+              marginTop: "6px",
+              fontSize: "14px",
+              lineHeight: "1.55",
+              color: "#0f172a",
+              wordBreak: "break-word",
+              whiteSpace: "pre-wrap"
+            },
+            children: j.notes ? o(j.notes, 600) : h.notesFallback
+          })]
+        }), n.jsxs("div", {
+          className: "cp-page-row",
+          children: [n.jsxs("div", {
+            className: "cp-page-row-copy",
+            children: [n.jsx("div", {
+              className: "cp-page-row-title",
+              children: h.autoCheckLabel
+            }), n.jsx("p", {
+              className: "cp-page-row-help",
+              children: h.autoCheckHelp
+            })]
+          }), n.jsxs("div", {
+            style: {
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "0.75rem",
+              flex: "0 0 auto"
+            },
+            children: [n.jsx("div", {
+              className: "cp-page-meta",
+              "data-tone": x.autoCheckEnabled ? "ready" : "",
+              children: x.autoCheckEnabled ? h.autoCheckOn : h.autoCheckOff
+            }), n.jsx("button", {
+              type: "button",
+              className: "cp-page-toggle",
+              "data-enabled": x.autoCheckEnabled ? "true" : "false",
+              role: "switch",
+              "aria-checked": x.autoCheckEnabled ? "true" : "false",
+              "aria-label": h.autoCheckLabel,
+              title: h.autoCheckLabel,
+              onClick: () => {
+                w(!x.autoCheckEnabled);
+              }
+            })]
+          })]
+        }), g ? n.jsx("div", {
+          style: {
+            borderRadius: "14px",
+            padding: "10px 12px",
+            fontSize: "12px",
+            lineHeight: "1.55",
+            ...C
+          },
+          children: g
+        }) : null, n.jsxs("div", {
+          className: "cp-page-btn-row",
+          children: [n.jsx("button", {
+            type: "button",
+            className: "px-6 py-3 bg-brand-100 text-oncolor-100 rounded-xl hover:bg-brand-100/90 transition-all font-large disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2",
+            onClick: N,
+            children: h.downloadZip
+          }), n.jsx("button", {
+            type: "button",
+            className: "px-6 py-3 bg-bg-100 text-text-200 border border-border-300 rounded-xl hover:bg-bg-200 hover:text-text-100 transition-all font-large disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2",
+            onClick: M,
+            children: h.viewRelease
+          }), n.jsx("button", {
+            type: "button",
+            className: "px-6 py-3 bg-bg-100 text-text-200 border border-border-300 rounded-xl hover:bg-bg-200 hover:text-text-100 transition-all font-large disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2",
+            onClick: k,
+            children: h.checkNow
+          })]
+        })]
+      })]
+    })
+  });
+};
+const J = ({
+  subview: a
+}) => {
+  const [e, r] = s.useState();
   s.useEffect(() => {
     const e = () => {
       chrome.commands.getAll(e => {
         const t = e.find(e => e.name === "toggle-side-panel");
-        a(t?.shortcut);
+        r(t?.shortcut);
       });
     };
     e();
@@ -341,64 +710,80 @@ const J = () => {
     document.addEventListener("visibilitychange", t);
     return () => document.removeEventListener("visibilitychange", t);
   }, []);
-  return n.jsx("div", {
+  const i = a === "provider";
+  const o = a === "prompt";
+  const l = !i && !o;
+  return n.jsxs("div", {
     className: "space-y-6",
-    children: n.jsxs("div", {
-      className: "bg-bg-100 border border-border-300 rounded-xl px-6 pt-6 pb-6 md:px-8 md:pt-8 md:pb-8",
-      children: [n.jsx("h3", {
-        className: "text-text-100 font-xl-bold",
-        children: n.jsx(t, {
-          defaultMessage: "Keyboard shortcut",
-          id: "rHyMT1rizz"
-        })
-      }), n.jsx("p", {
-        className: "text-text-300 font-base mt-2 mb-6",
-        children: n.jsx(t, {
-          defaultMessage: "Configure the keyboard shortcut used to open Claw in Chrome.",
-          id: "CcjsWsUTac"
-        })
-      }), n.jsxs("div", {
-        className: "flex items-center justify-between py-4",
-        children: [n.jsxs("div", {
-          className: "flex-1",
-          children: [n.jsx("div", {
-            className: "font-large text-text-100",
-            children: n.jsx(t, {
-              defaultMessage: "Open side panel",
-              id: "MihpzFiE1j"
-            })
-          }), n.jsx("div", {
-            className: "text-text-400 font-base-sm mt-1",
-            children: e ? n.jsx(t, {
-              defaultMessage: "Current shortcut: {shortcut}",
-              id: "2x8xsy/VJk",
-              values: {
-                shortcut: n.jsx("kbd", {
-                  className: "px-1.5 py-0.5 bg-bg-300 border border-border-300 rounded text-text-200 font-mono text-xs",
-                  children: e
-                })
-              }
-            }) : n.jsx(t, {
-              defaultMessage: "No shortcut configured",
-              id: "7/3PxH3ltB"
-            })
-          })]
-        }), n.jsxs("button", {
-          onClick: () => {
-            chrome.tabs.create({
-              url: "chrome://extensions/shortcuts"
-            });
-          },
-          className: "flex items-center gap-2 px-4 py-2 text-text-200 hover:bg-bg-200 hover:text-text-100 border border-border-300 rounded-lg transition-all font-base",
-          children: [n.jsx($, {
-            className: "w-4 h-4"
-          }), n.jsx(t, {
-            defaultMessage: "Configure",
-            id: "9t1iivhk67"
+    children: [n.jsx("div", {
+      id: "cp-options-provider-anchor",
+      hidden: !i
+    }), n.jsx("div", {
+      id: "cp-options-prompt-anchor",
+      hidden: !o
+    }), n.jsxs("div", {
+      className: "space-y-6",
+      hidden: !l,
+      children: [n.jsx(cpGithubUpdateSection, {}), n.jsxs("div", {
+        className: "bg-bg-100 border border-border-300 rounded-xl px-6 pt-6 pb-6 md:px-8 md:pt-8 md:pb-8",
+        children: [n.jsx("h3", {
+          className: "text-text-100 font-xl-bold",
+          children: n.jsx(t, {
+            defaultMessage: "Keyboard shortcut",
+            id: "rHyMT1rizz"
+          })
+        }), n.jsx("p", {
+          className: "text-text-300 font-base mt-2 mb-6",
+          children: n.jsx(t, {
+            defaultMessage: "Configure the keyboard shortcut used to open Claw in Chrome.",
+            id: "CcjsWsUTac"
+          })
+        }), n.jsxs("div", {
+          className: "flex items-center justify-between py-4",
+          children: [n.jsxs("div", {
+            className: "flex-1",
+            children: [n.jsx("div", {
+              className: "font-large text-text-100",
+              children: n.jsx(t, {
+                defaultMessage: "Open side panel",
+                id: "MihpzFiE1j"
+              })
+            }), n.jsx("div", {
+              className: "text-text-400 font-base-sm mt-1",
+              children: e ? n.jsx(t, {
+                defaultMessage: "Current shortcut: {shortcut}",
+                id: "2x8xsy/VJk",
+                values: {
+                  shortcut: n.jsx("kbd", {
+                    className: "px-1.5 py-0.5 bg-bg-300 border border-border-300 rounded text-text-200 font-mono text-xs",
+                    children: e
+                  })
+                }
+              }) : n.jsx(t, {
+                defaultMessage: "No shortcut configured",
+                id: "7/3PxH3ltB"
+              })
+            })]
+          }), n.jsxs("button", {
+            onClick: () => {
+              chrome.tabs.create({
+                url: "chrome://extensions/shortcuts"
+              });
+            },
+            className: "flex items-center gap-2 px-4 py-2 text-text-200 hover:bg-bg-200 hover:text-text-100 border border-border-300 rounded-lg transition-all font-base",
+            children: [n.jsx($, {
+              className: "w-4 h-4"
+            }), n.jsx(t, {
+              defaultMessage: "Configure",
+              id: "9t1iivhk67"
+            })]
           })]
         })]
+      }), n.jsx("div", {
+        id: "cp-options-debug-anchor",
+        className: "space-y-6"
       })]
-    })
+    })]
   });
 };
 const Q = ({
@@ -1566,9 +1951,10 @@ function ce() {
   } = E();
   const i = false;
   const [o, l] = s.useState("");
-  const [d, c] = s.useState("permissions");
+  const [d, c] = s.useState(() => cpGetSettingsTabFromHash(window.location.hash));
   const [m, p] = s.useState(false);
   const [u, x] = s.useState();
+  const [providerSubview, setProviderSubview] = s.useState(() => cpGetOptionsSubviewFromHash(window.location.hash));
   s.useEffect(() => {
     __cpOptionsDebugLog("options.page.mount", {
       hash: window.location.hash,
@@ -1601,6 +1987,7 @@ function ce() {
       const s = ["permissions", "prompts", "options", "internal"].includes(t) ? t : "permissions";
       let n;
       let r = false;
+      let i = "";
       if (a) {
         const e = new URLSearchParams(a);
         r = e.get("requestMicrophone") === "true";
@@ -1608,9 +1995,16 @@ function ce() {
         if (t) {
           n = parseInt(t, 10);
         }
+        const s = String(e.get("provider") || "").trim().toLowerCase();
+        if (s === "true" || s === "provider") {
+          i = "provider";
+        } else if (s === "prompt" || s === "prompts") {
+          i = "prompt";
+        }
       }
       return {
         tab: s,
+        optionsSubview: s === "options" ? i : "",
         requestMicrophone: r,
         returnTabId: n
       };
@@ -1618,16 +2012,19 @@ function ce() {
     const t = () => {
       const {
         tab: t,
+        optionsSubview: r,
         requestMicrophone: a,
         returnTabId: s
       } = e();
       __cpOptionsDebugLog("options.page.hash.parsed", {
         hash: window.location.hash,
         tab: t,
+        optionsSubview: r,
         requestMicrophone: a,
         returnTabId: s
       });
       c(t);
+      setProviderSubview(r);
       if (a) {
         p(true);
         x(s);
@@ -1635,16 +2032,19 @@ function ce() {
     };
     const {
       tab: a,
+      optionsSubview: r,
       requestMicrophone: s,
       returnTabId: n
     } = e();
     __cpOptionsDebugLog("options.page.hash.initial", {
       hash: window.location.hash,
       tab: a,
+      optionsSubview: r,
       requestMicrophone: s,
       returnTabId: n
     });
     c(a);
+    setProviderSubview(r);
     if (s) {
       p(true);
       x(n);
@@ -1660,17 +2060,29 @@ function ce() {
       previousTab: d
     });
     c(e);
+    setProviderSubview("");
     window.location.hash = e;
+  };
+  const g = e => {
+    __cpOptionsDebugLog("options.page.subview.click", {
+      nextSubview: e,
+      previousSubview: providerSubview,
+      previousTab: d
+    });
+    c("options");
+    setProviderSubview(e);
+    window.location.hash = e === "provider" ? "options?provider=true" : e === "prompt" ? "options?provider=prompt" : "options";
   };
   s.useEffect(() => {
     __cpOptionsDebugLog("options.page.state.tab", {
       activeTab: d,
+      optionsSubview: providerSubview,
       modalOpen: m,
       returnTabId: u,
       hasApiKey: !!o,
       isAuthenticated: a
     });
-  }, [d, m, u, o, a]);
+  }, [d, providerSubview, m, u, o, a]);
   return n.jsxs("div", {
     "data-theme": "claude",
     children: [n.jsxs(X, {
@@ -1725,17 +2137,35 @@ function ce() {
             }), n.jsx("li", {
               children: n.jsx(ne, {
                 href: "/settings/options",
-                isActive: d === "options",
+                isActive: d === "options" && providerSubview === "",
                 onClick: () => f("options"),
                 children: n.jsx(t, {
                   defaultMessage: "Options",
                   id: "NDV5MqT9ww"
                 })
               })
+            }), n.jsx("li", {
+              id: "cp-options-provider-nav-item",
+              children: n.jsx(ne, {
+                href: "/settings/options?provider=true",
+                isActive: d === "options" && providerSubview === "provider",
+                onClick: () => g("provider"),
+                children: cpOptionsNavStrings.provider
+              })
+            }), n.jsx("li", {
+              id: "cp-options-prompt-nav-item",
+              children: n.jsx(ne, {
+                href: "/settings/options?provider=prompt",
+                isActive: d === "options" && providerSubview === "prompt",
+                onClick: () => g("prompt"),
+                children: cpOptionsNavStrings.prompt
+              })
             }), i]
           })]
         }), n.jsxs("div", {
-          children: [d === "permissions" && n.jsx(te, {}), d === "prompts" && n.jsx(oe, {}), d === "options" && n.jsx(J, {}), d === "internal" && i]
+          children: [d === "permissions" && n.jsx(te, {}), d === "prompts" && n.jsx(oe, {}), d === "options" && n.jsx(J, {
+            subview: providerSubview
+          }), d === "internal" && i]
         })]
       })]
     }), n.jsx(K, {

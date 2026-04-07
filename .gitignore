@@ -2,3 +2,5 @@
 *.tmp
 Thumbs.db
 .DS_Store
+/AstrBot-master
+/tmp

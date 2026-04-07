@@ -281,6 +281,50 @@
       return String(value);
     }
   }
+  function collectAnthropicSystemSegments(system) {
+    const segments = [];
+    if (typeof system === "string") {
+      if (system) {
+        segments.push(system);
+      }
+      return segments;
+    }
+    if (!Array.isArray(system)) {
+      return segments;
+    }
+    for (const item of system) {
+      if (typeof item === "string") {
+        if (item) {
+          segments.push(item);
+        }
+        continue;
+      }
+      if (!item || typeof item !== "object") {
+        continue;
+      }
+      if (typeof item.text === "string" && item.text) {
+        segments.push(item.text);
+        continue;
+      }
+      const text = stringifyContent(item);
+      if (text) {
+        segments.push(text);
+      }
+    }
+    return segments;
+  }
+  function formatAnthropicSystemForSingleMessage(system) {
+    const segments = collectAnthropicSystemSegments(system);
+    if (!segments.length) {
+      return "";
+    }
+    if (segments.length === 1) {
+      return segments[0];
+    }
+    return segments.map(function (text, index) {
+      return "[System segment " + (index + 1) + "]\n" + text;
+    }).join("\n\n");
+  }
   function createOmittedBinarySummary(value) {
     const text = typeof value === "string" ? value : String(value || "");
     return {
@@ -400,6 +444,53 @@
       return THINK_OPEN_TAG + thinking + THINK_CLOSE_TAG;
     }
     return null;
+  }
+  function appendToolResultImageDataUrls(value, output, depth) {
+    if (!output || value == null || depth > 4) {
+      return;
+    }
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        appendToolResultImageDataUrls(item, output, depth + 1);
+      }
+      return;
+    }
+    if (typeof value !== "object") {
+      return;
+    }
+    if (value.type === "image" && value.source?.type === "base64" && typeof value.source.data === "string" && value.source.data) {
+      output.push("data:" + String(value.source.media_type || "image/png") + ";base64," + value.source.data);
+      return;
+    }
+    if (Array.isArray(value.content)) {
+      appendToolResultImageDataUrls(value.content, output, depth + 1);
+    }
+  }
+  function collectToolResultImageDataUrls(block) {
+    const output = [];
+    appendToolResultImageDataUrls(block?.content, output, 0);
+    return output;
+  }
+  function buildToolResultVisualResponsesInput(block) {
+    const imageDataUrls = collectToolResultImageDataUrls(block);
+    if (!imageDataUrls.length) {
+      return null;
+    }
+    const toolUseId = String(block?.tool_use_id || "");
+    const content = [{
+      type: "input_text",
+      text: "Visual output returned by tool" + (toolUseId ? " " + toolUseId : "") + ". Use the following image(s) as tool results."
+    }];
+    for (const url of imageDataUrls) {
+      content.push({
+        type: "input_image",
+        image_url: url
+      });
+    }
+    return {
+      role: "user",
+      content
+    };
   }
   function collapseSystemMessages(messages) {
     if (!Array.isArray(messages)) {
@@ -821,12 +912,33 @@
         return toolChoice;
     }
   }
+  function flushPendingOpenAIChatMessage(result, role, contentParts, toolCalls) {
+    if (!contentParts.length && !toolCalls.length) {
+      return;
+    }
+    const message = {
+      role
+    };
+    if (!contentParts.length) {
+      message.content = "";
+    } else if (contentParts.length === 1 && contentParts[0].type === "text") {
+      message.content = contentParts[0].text;
+    } else {
+      message.content = contentParts.slice();
+    }
+    if (toolCalls.length) {
+      message.tool_calls = toolCalls.slice();
+    }
+    result.push(message);
+    contentParts.length = 0;
+    toolCalls.length = 0;
+  }
   function convertMessageToOpenAI(role, content) {
     const result = [];
     if (content == null) {
       result.push({
         role,
-        content: null
+        content: ""
       });
       return result;
     }
@@ -840,7 +952,7 @@
     if (!Array.isArray(content)) {
       result.push({
         role,
-        content
+        content: stringifyContent(content)
       });
       return result;
     }
@@ -888,29 +1000,16 @@
         continue;
       }
       if (type === "tool_result") {
+        flushPendingOpenAIChatMessage(result, role, contentParts, toolCalls);
         result.push({
           role: "tool",
           tool_call_id: String(block.tool_use_id || ""),
           content: serializeToolResultForOpenAI(block)
         });
+        // 部分 OpenAI 兼容接口要求 tool 结果紧跟 tool_calls，不能在中间插入额外消息。
       }
     }
-    if (contentParts.length || toolCalls.length) {
-      const message = {
-        role
-      };
-      if (!contentParts.length) {
-        message.content = null;
-      } else if (contentParts.length === 1 && contentParts[0].type === "text") {
-        message.content = contentParts[0].text;
-      } else {
-        message.content = contentParts;
-      }
-      if (toolCalls.length) {
-        message.tool_calls = toolCalls;
-      }
-      result.push(message);
-    }
+    flushPendingOpenAIChatMessage(result, role, contentParts, toolCalls);
     return result;
   }
   function anthropicToOpenAIChat(body, promptCacheKey) {
@@ -919,22 +1018,11 @@
       result.model = body.model;
     }
     const messages = [];
-    const system = body?.system;
-    const systemTexts = [];
-    if (typeof system === "string" && system) {
-      systemTexts.push(system);
-    } else if (Array.isArray(system)) {
-      for (const message of system) {
-        if (typeof message?.text !== "string" || !message.text) {
-          continue;
-        }
-        systemTexts.push(message.text);
-      }
-    }
-    if (systemTexts.length) {
+    const systemText = formatAnthropicSystemForSingleMessage(body?.system);
+    if (systemText) {
       messages.push({
         role: "system",
-        content: systemTexts.join("\n\n")
+        content: systemText
       });
     }
     for (const message of Array.isArray(body?.messages) ? body.messages : []) {
@@ -1088,6 +1176,13 @@
     for (const message of messages) {
       const role = message?.role || "user";
       const content = message?.content;
+      if (content == null) {
+        input.push({
+          role,
+          content: ""
+        });
+        continue;
+      }
       if (typeof content === "string") {
         input.push({
           role,
@@ -1100,7 +1195,8 @@
       }
       if (!Array.isArray(content)) {
         input.push({
-          role
+          role,
+          content: stringifyContent(content)
         });
         continue;
       }
@@ -1158,6 +1254,10 @@
             call_id: String(block.tool_use_id || ""),
             output: serializeToolResultForOpenAI(block)
           });
+          const visualInput = buildToolResultVisualResponsesInput(block);
+          if (visualInput) {
+            input.push(visualInput);
+          }
         }
       }
       if (messageContent.length) {
@@ -1174,20 +1274,9 @@
     if (body?.model) {
       result.model = body.model;
     }
-    const system = body?.system;
-    if (typeof system === "string" && system) {
-      result.instructions = system;
-    } else if (Array.isArray(system)) {
-      const parts = system.map(function (item) {
-        if (typeof item?.text === "string") {
-          return item.text;
-        } else {
-          return "";
-        }
-      }).filter(Boolean);
-      if (parts.length) {
-        result.instructions = parts.join("\n\n");
-      }
+    const systemText = formatAnthropicSystemForSingleMessage(body?.system);
+    if (systemText) {
+      result.instructions = systemText;
     }
     if (Array.isArray(body?.messages)) {
       result.input = convertMessagesToResponsesInput(body.messages);

@@ -10,6 +10,9 @@
   const ROOT_ID = "cp-options-enhancements-root";
   const PROMPT_ROOT_ID = "cp-options-prompt-root";
   const DEBUG_ROOT_ID = "cp-options-debug-root";
+  const PROVIDER_ANCHOR_ID = "cp-options-provider-anchor";
+  const PROMPT_ANCHOR_ID = "cp-options-prompt-anchor";
+  const DEBUG_ANCHOR_ID = "cp-options-debug-anchor";
   const PANEL_ID = "cp-options-inline-provider-panel";
   const NAV_ITEM_ID = "cp-options-provider-nav-item";
   const PROMPT_NAV_ITEM_ID = "cp-options-prompt-nav-item";
@@ -1571,21 +1574,6 @@
     .cp-page-panel[data-disabled="true"] .cp-page-fieldset {
       opacity: 0.72;
     }
-    .cp-nav-override-inactive > a,
-    .cp-nav-override-inactive > button,
-    .cp-nav-override-inactive [data-active="true"] {
-      background: transparent !important;
-      color: hsl(var(--text-200)) !important;
-      font-weight: 500 !important;
-    }
-    .cp-nav-override-inactive > a:hover,
-    .cp-nav-override-inactive > button:hover {
-      background: hsl(var(--bg-200)) !important;
-      color: hsl(var(--text-100)) !important;
-    }
-    .cp-options-host-provider-active > :not(#${ROOT_ID}):not(#${PROMPT_ROOT_ID}):not(#${DEBUG_ROOT_ID}) {
-      display: none !important;
-    }
     @media (max-width: 767px) {
       .cp-provider-header-action {
         position: static;
@@ -2102,6 +2090,10 @@
     return Array.from(grid.children).find(function (node) {
       return node !== nav && node && node.nodeType === Node.ELEMENT_NODE;
     }) || null;
+  }
+  function findMountAnchor(id) {
+    const node = document.getElementById(id);
+    return node && node.nodeType === Node.ELEMENT_NODE ? node : null;
   }
   function ensureStyles() {
     if (document.getElementById(STYLE_ID)) {
@@ -3527,12 +3519,6 @@
       }
     };
     chrome.storage.onChanged.addListener(handleStorageChange);
-    function updateOptionsContentVisibility(host, customViewActive) {
-      if (!host) {
-        return;
-      }
-      host.classList.toggle("cp-options-host-provider-active", customViewActive);
-    }
     async function syncMount() {
       const nextLocaleKey = getUiLocaleKey();
       if (nextLocaleKey !== localeKey) {
@@ -3544,19 +3530,17 @@
         scheduleUiRebuild();
         return;
       }
-      ensureProviderNavItem(strings);
       const providerActive = isProviderViewActive();
       const promptActive = isPromptViewActive();
-      const customViewActive = providerActive || promptActive;
+      const providerHost = findMountAnchor(PROVIDER_ANCHOR_ID);
+      const promptHost = findMountAnchor(PROMPT_ANCHOR_ID);
+      const debugHost = findMountAnchor(DEBUG_ANCHOR_ID);
       if (!isOptionsTabActive()) {
         closeManualModelDialog();
         debugLog("customProvider.syncMount.skip", {
           reason: "not-options-tab",
           hash: location.hash
         });
-        if (lastHost) {
-          updateOptionsContentVisibility(lastHost, false);
-        }
         if (providerRoot.parentNode) {
           providerRoot.remove();
         }
@@ -3569,12 +3553,8 @@
         lastHost = null;
         return;
       }
-      const host = findOptionsContentRoot();
-      if (!host) {
+      if (!providerHost || !promptHost || !debugHost) {
         closeManualModelDialog();
-        if (lastHost) {
-          updateOptionsContentVisibility(lastHost, false);
-        }
         if (providerRoot.parentNode) {
           providerRoot.remove();
         }
@@ -3587,73 +3567,48 @@
         lastHost = null;
         return;
       }
-      if (lastHost && lastHost !== host) {
-        updateOptionsContentVisibility(lastHost, false);
-      }
-      const providerNeedsRefresh = providerRoot.parentNode !== host || lastHost !== host;
-      const promptNeedsRefresh = promptRoot.parentNode !== host || lastHost !== host;
-      const debugNeedsRefresh = debugMountRoot.parentNode !== host || lastHost !== host;
+      const providerNeedsRefresh = providerRoot.parentNode !== providerHost;
+      const promptNeedsRefresh = promptRoot.parentNode !== promptHost;
+      const debugNeedsRefresh = debugMountRoot.parentNode !== debugHost;
       debugLog("customProvider.syncMount.host", {
         providerActive,
         promptActive,
         providerNeedsRefresh,
         promptNeedsRefresh,
         debugNeedsRefresh,
-        hostTag: host.tagName,
-        hostClassName: host.className || "",
-        hostChildCount: host.children.length
+        providerHostTag: providerHost.tagName,
+        promptHostTag: promptHost.tagName,
+        debugHostTag: debugHost.tagName
       });
-      updateOptionsContentVisibility(host, customViewActive);
-      if (providerActive) {
-        if (promptRoot.parentNode) {
-          promptRoot.remove();
-        }
-        if (debugMountRoot.parentNode) {
-          debugMountRoot.remove();
-        }
-        if (providerRoot.parentNode !== host) {
-          host.appendChild(providerRoot);
-        }
-      } else if (promptActive) {
-        closeManualModelDialog();
-        if (providerRoot.parentNode) {
-          providerRoot.remove();
-        }
-        if (debugMountRoot.parentNode) {
-          debugMountRoot.remove();
-        }
-        if (promptRoot.parentNode !== host) {
-          host.appendChild(promptRoot);
-        }
-      } else {
-        closeManualModelDialog();
-        if (providerRoot.parentNode) {
-          providerRoot.remove();
-        }
-        if (promptRoot.parentNode) {
-          promptRoot.remove();
-        }
-        if (debugMountRoot.parentNode !== host) {
-          host.appendChild(debugMountRoot);
-        }
+      if (providerRoot.parentNode !== providerHost) {
+        providerHost.appendChild(providerRoot);
       }
-      lastHost = host;
-      if (providerActive && providerNeedsRefresh) {
-        await refresh(true);
-        debugLog("customProvider.syncMount.refreshed", {
-          providerActive
-        });
-      } else if (promptActive && promptNeedsRefresh) {
-        await refreshPromptProfiles(true);
+      if (promptRoot.parentNode !== promptHost) {
+        promptHost.appendChild(promptRoot);
+      }
+      if (debugMountRoot.parentNode !== debugHost) {
+        debugHost.appendChild(debugMountRoot);
+      }
+      if (!providerActive && !promptActive) {
+        closeManualModelDialog();
+      }
+      lastHost = providerActive ? providerHost : promptActive ? promptHost : debugHost;
+      const refreshTasks = [];
+      if (providerNeedsRefresh) {
+        refreshTasks.push(refresh(true));
+      }
+      if (promptNeedsRefresh) {
+        refreshTasks.push(refreshPromptProfiles(true));
+      }
+      if (debugNeedsRefresh) {
+        refreshTasks.push(refreshDebug());
+      }
+      if (refreshTasks.length) {
+        await Promise.allSettled(refreshTasks);
         debugLog("customProvider.syncMount.refreshed", {
           providerActive,
-          promptActive
-        });
-      } else if (!customViewActive && debugNeedsRefresh) {
-        await refreshDebug();
-        debugLog("customProvider.syncMount.refreshed", {
-          providerActive,
-          promptActive
+          promptActive,
+          refreshCount: refreshTasks.length
         });
       }
     }
@@ -3730,9 +3685,6 @@
       cleanupCardDropdowns();
       closeManualModelDialog();
       closeActiveDropdown();
-      if (lastHost) {
-        updateOptionsContentVisibility(lastHost, false);
-      }
       if (providerRoot.parentNode) {
         providerRoot.remove();
       }
@@ -3741,14 +3693,6 @@
       }
       if (debugMountRoot.parentNode) {
         debugMountRoot.remove();
-      }
-      const navItem = document.getElementById(NAV_ITEM_ID);
-      if (navItem) {
-        navItem.remove();
-      }
-      const promptNavItem = document.getElementById(PROMPT_NAV_ITEM_ID);
-      if (promptNavItem) {
-        promptNavItem.remove();
       }
       lastHost = null;
     };

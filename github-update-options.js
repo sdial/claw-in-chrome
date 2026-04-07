@@ -70,6 +70,7 @@
   };
 
   const ROOT_ID = "cp-github-update-options-root";
+  const ANCHOR_ID = "cp-github-update-options-anchor";
   const STYLE_ID = "cp-github-update-options-style";
   const PRIMARY_BUTTON_CLASS = "px-6 py-3 bg-brand-100 text-oncolor-100 rounded-xl hover:bg-brand-100/90 transition-all font-large disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2";
   const SECONDARY_BUTTON_CLASS = "px-6 py-3 bg-bg-100 text-text-200 border border-border-300 rounded-xl hover:bg-bg-200 hover:text-text-100 transition-all font-large disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2";
@@ -82,9 +83,11 @@
   let root = null;
   let host = null;
   let state = null;
+  let renderScheduled = false;
   let refreshScheduled = false;
   let statusText = "";
   let statusTone = "";
+  let lastRenderSignature = "";
 
   function interpolate(template, values) {
     return String(template || "").replace(/\{(\w+)\}/g, function (_, key) {
@@ -182,24 +185,9 @@
     return !subview;
   }
 
-  function findSidebarNavList() {
-    const navLists = Array.from(document.querySelectorAll("nav ul"));
-    return navLists.find(function (node) {
-      const text = String(node.textContent || "");
-      return text.includes("Options") || text.includes("选项");
-    }) || null;
-  }
-
-  function findOptionsContentRoot() {
-    const list = findSidebarNavList();
-    const nav = list ? list.closest("nav") : null;
-    const grid = nav ? nav.parentElement : null;
-    if (!grid) {
-      return null;
-    }
-    return Array.from(grid.children).find(function (node) {
-      return node !== nav && node && node.nodeType === Node.ELEMENT_NODE;
-    }) || null;
+  function findMountAnchor() {
+    const anchor = document.getElementById(ANCHOR_ID);
+    return anchor instanceof Element ? anchor : null;
   }
 
   function ensureRoot(nextHost) {
@@ -216,10 +204,22 @@
       root.style.pointerEvents = "auto";
     }
     if (nextHost && root.parentNode !== nextHost) {
-      nextHost.insertBefore(root, nextHost.firstChild || null);
+      nextHost.appendChild(root);
     }
     host = nextHost;
     return root;
+  }
+
+  function bindAction(element, actionName) {
+    element.addEventListener("click", function (event) {
+      event.preventDefault();
+      event.stopPropagation();
+      Promise.resolve(handleAction(actionName)).catch(function (error) {
+        statusTone = "error";
+        statusText = String(error?.message || error || strings.unknown);
+        scheduleRender();
+      });
+    });
   }
 
   function createButton(label, className, actionName) {
@@ -228,7 +228,7 @@
     button.className = className;
     button.textContent = label;
     button.style.pointerEvents = "auto";
-    button.dataset.cpGuoAction = actionName;
+    bindAction(button, actionName);
     return button;
   }
 
@@ -332,7 +332,7 @@
     }
   }
 
-  async function handleDelegatedAction(actionName) {
+  async function handleAction(actionName) {
     const info = state?.info;
     if (!actionName || !info) {
       return;
@@ -354,26 +354,18 @@
     }
   }
 
-  function handleDelegatedClick(event) {
-    const target = event.target;
-    if (!(target instanceof Element)) {
-      return;
-    }
-    const trigger = target.closest("[data-cp-guo-action]");
-    if (!trigger || !root || !root.contains(trigger)) {
-      return;
-    }
-    const actionName = String(trigger.getAttribute("data-cp-guo-action") || "").trim();
-    if (!actionName) {
-      return;
-    }
-    event.preventDefault();
-    event.stopPropagation();
-    Promise.resolve(handleDelegatedAction(actionName)).catch(function (error) {
-      statusTone = "error";
-      statusText = String(error?.message || error || strings.unknown);
-      render();
-    });
+  function buildRenderSignature() {
+    const info = state?.info || {};
+    return [
+      info.currentVersion || "",
+      info.latestVersion || "",
+      info.hasUpdate ? "1" : "0",
+      info.lastCheckedAt || "",
+      info.notes || "",
+      state?.autoCheckEnabled ? "1" : "0",
+      statusTone || "",
+      statusText || ""
+    ].join("||");
   }
 
   function render() {
@@ -384,13 +376,16 @@
       host = null;
       return;
     }
-    const nextHost = findOptionsContentRoot();
+    const nextHost = findMountAnchor();
     if (!nextHost) {
       return;
     }
     const mount = ensureRoot(nextHost);
-    mount.textContent = "";
     if (!state) {
+      return;
+    }
+    const renderSignature = buildRenderSignature();
+    if (mount.childElementCount > 0 && renderSignature === lastRenderSignature) {
       return;
     }
     const info = state.info;
@@ -466,6 +461,7 @@
     autoCheckToggle.setAttribute("aria-label", strings.autoCheckLabel);
     autoCheckToggle.title = strings.autoCheckLabel;
     autoCheckToggle.style.pointerEvents = "auto";
+    bindAction(autoCheckToggle, ACTIONS.TOGGLE_AUTO_CHECK);
     autoCheckControl.appendChild(autoCheckMeta);
     autoCheckControl.appendChild(autoCheckToggle);
     autoCheckRow.appendChild(autoCheckCopy);
@@ -490,13 +486,27 @@
     stack.appendChild(actionRow);
 
     panel.appendChild(stack);
-    mount.appendChild(panel);
-
+    mount.replaceChildren(panel);
+    lastRenderSignature = renderSignature;
   }
 
   async function refreshState() {
     state = await readStoredState();
-    render();
+    scheduleRender();
+  }
+
+  function scheduleRender() {
+    if (renderScheduled) {
+      return;
+    }
+    renderScheduled = true;
+    const scheduler = typeof requestAnimationFrame === "function" ? requestAnimationFrame : function (callback) {
+      return setTimeout(callback, 16);
+    };
+    scheduler(function () {
+      renderScheduled = false;
+      render();
+    });
   }
 
   function scheduleRefresh() {
@@ -514,8 +524,7 @@
   }
 
   function bootstrap() {
-    scheduleRefresh();
-    document.addEventListener("click", handleDelegatedClick, true);
+    refreshState().catch(function () {});
     chrome.storage.onChanged.addListener(function (changes, areaName) {
       if (areaName !== "local") {
         return;
@@ -524,7 +533,7 @@
         scheduleRefresh();
       }
     });
-    window.addEventListener("hashchange", scheduleRefresh);
+    window.addEventListener("hashchange", scheduleRender);
     const observer = new MutationObserver(function (mutations) {
       const nextRoot = root;
       const isSelfMutation = !!nextRoot && mutations.every(function (mutation) {
@@ -540,7 +549,7 @@
         return;
       }
       if (isOptionsRootView()) {
-        scheduleRefresh();
+        scheduleRender();
       }
     });
     observer.observe(document.body, {
