@@ -1,5 +1,43 @@
 import { G as e, H as t, S as r, I as o, J as a, K as n, L as s, W as i, T as c, R as l, M as d, N as u, O as h, j as p, x as m, z as f, g, s as b, c as w, m as y, w as _, e as v, P as I } from "./PermissionManager-9s959502.js";
 import { R as k } from "./index-BVS4T5_D.js";
+const __cpBackgroundDebugStorageKey = "sidepanelDebugLogs";
+const __cpBackgroundDebugMetaKey = "sidepanelDebugMeta";
+const __cpBackgroundDebugLimit = 500;
+let __cpBackgroundDebugSequence = 0;
+async function __cpBackgroundDebugLog(e, t = {}, r = "info") {
+  try {
+    __cpBackgroundDebugSequence += 1;
+    const o = new Date().toISOString();
+    const a = {
+      id: `bg-${Date.now().toString(36)}-${__cpBackgroundDebugSequence}`,
+      sessionId: "service-worker",
+      ts: o,
+      level: r,
+      type: e,
+      href: "/service-worker",
+      payload: t
+    };
+    const n = await chrome.storage.local.get([__cpBackgroundDebugStorageKey, __cpBackgroundDebugMetaKey]);
+    const s = Array.isArray(n[__cpBackgroundDebugStorageKey]) ? n[__cpBackgroundDebugStorageKey] : [];
+    const i = n[__cpBackgroundDebugMetaKey] && typeof n[__cpBackgroundDebugMetaKey] == "object" ? n[__cpBackgroundDebugMetaKey] : {};
+    await chrome.storage.local.set({
+      [__cpBackgroundDebugStorageKey]: s.concat(a).slice(-__cpBackgroundDebugLimit),
+      [__cpBackgroundDebugMetaKey]: {
+        ...i,
+        sessionId: "service-worker",
+        lastFlushAt: o,
+        href: "/service-worker"
+      }
+    });
+    if (r === "error") {
+      console.error("[service-worker-debug]", e, t);
+    } else {
+      console.debug("[service-worker-debug]", e, t);
+    }
+  } catch (o) {
+    console.debug("[service-worker-debug] log_failed", e, t, o);
+  }
+}
 class T extends Error {
   constructor(e) {
     super(`Page still loading (executeScript waited ${e}ms for document_idle). The previous action may have triggered navigation — try again in a moment.`);
@@ -423,6 +461,19 @@ const N = () => G.getInstance();
 const L = "Claw";
 const q = "Claw (MCP)";
 const LEGACY_DEFAULT_GROUP_TITLE = "Claude";
+const GROUP_TITLE_PREFIX_REGEX = /^(⌛|🔔|✅)\s*/;
+const stripGroupTitlePrefix = e => String(e || "").replace(GROUP_TITLE_PREFIX_REGEX, "").trim();
+const sanitizeGeneratedGroupTitle = e => {
+  const t = String(e || "").replace(/<\/?title>/gi, " ").replace(/<[^>]*>/g, " ").replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim();
+  return t && t.toLowerCase() !== "title" ? t : "";
+};
+const canReplaceGeneratedGroupTitle = e => {
+  const t = stripGroupTitlePrefix(e);
+  if (!t || t === L || t === LEGACY_DEFAULT_GROUP_TITLE) {
+    return true;
+  }
+  return sanitizeGeneratedGroupTitle(t) === "";
+};
 class B {
   static instance;
   groupMetadata = new Map();
@@ -1622,26 +1673,27 @@ class B {
     await this.processIndicatorQueue();
   }
   async updateGroupTitle(e, t, r = false) {
-    if (!t || t.trim() === "") {
-      return;
+    const o = sanitizeGeneratedGroupTitle(t);
+    if (!o) {
+      return false;
     }
-    const o = this.groupMetadata.get(e);
-    if (o) {
+    const a = await this.resolveManagedGroupForTab(e);
+    if (a) {
       try {
-        const e = (await chrome.tabGroups.get(o.chromeGroupId)).title;
-        if (e !== L && e !== LEGACY_DEFAULT_GROUP_TITLE) {
-          return;
+        const e = (await chrome.tabGroups.get(a.chromeGroupId)).title;
+        if (!canReplaceGeneratedGroupTitle(e)) {
+          return false;
         }
-        const a = (await chrome.tabGroups.query({})).filter(e => e.id !== o.chromeGroupId).map(e => e.color);
+        const t = (await chrome.tabGroups.query({})).filter(e => e.id !== a.chromeGroupId).map(e => e.color);
         const n = [chrome.tabGroups.Color.GREY, chrome.tabGroups.Color.BLUE, chrome.tabGroups.Color.RED, chrome.tabGroups.Color.YELLOW, chrome.tabGroups.Color.GREEN, chrome.tabGroups.Color.PINK, chrome.tabGroups.Color.PURPLE, chrome.tabGroups.Color.CYAN, chrome.tabGroups.Color.ORANGE];
-        const s = n.filter(e => !a.includes(e));
+        const s = n.filter(e => !t.includes(e));
         let i;
         if (s.length > 0) {
           i = s[0];
         } else {
           const e = new Map();
           n.forEach(t => e.set(t, 0));
-          a.forEach(t => {
+          t.forEach(t => {
             e.set(t, (e.get(t) || 0) + 1);
           });
           let r = Infinity;
@@ -1653,12 +1705,54 @@ class B {
             }
           }
         }
-        const l = r ? "⌛" + t.trim() : t.trim();
-        await chrome.tabGroups.update(o.chromeGroupId, {
+        const l = r ? "⌛" + o : o;
+        await chrome.tabGroups.update(a.chromeGroupId, {
           title: l,
           color: i
         });
-      } catch (a) {}
+        return true;
+      } catch (t) {}
+    }
+    return false;
+  }
+  async resolveManagedGroupForTab(e) {
+    await this.initialize();
+    const t = this.groupMetadata.get(e);
+    if (t) {
+      return t;
+    }
+    try {
+      const t = await this.findGroupByTab(e);
+      if (t?.isUnmanaged && Number.isFinite(Number(t.mainTabId)) && Number.isFinite(Number(t.chromeGroupId)) && t.chromeGroupId !== chrome.tabGroups.TAB_GROUP_ID_NONE) {
+        await this.adoptOrphanedGroup(t.mainTabId, t.chromeGroupId);
+        const r = this.groupMetadata.get(t.mainTabId);
+        if (r) {
+          return r;
+        }
+      }
+      if (t && !t.isUnmanaged) {
+        return this.groupMetadata.get(t.mainTabId) || t;
+      }
+    } catch (t) {}
+    try {
+      const t = await chrome.tabs.get(e);
+      if (t.groupId === chrome.tabGroups.TAB_GROUP_ID_NONE) {
+        const r = await this.createGroup(e);
+        return this.groupMetadata.get(r.mainTabId) || r;
+      }
+    } catch (t) {}
+    return null;
+  }
+  async shouldGenerateGroupTitle(e) {
+    const t = await this.resolveManagedGroupForTab(e);
+    if (!t) {
+      return false;
+    }
+    try {
+      const e = await chrome.tabGroups.get(t.chromeGroupId);
+      return canReplaceGeneratedGroupTitle(e?.title);
+    } catch (r) {
+      return false;
     }
   }
   async updateTabGroupPrefix(e, t, r) {
@@ -5257,38 +5351,173 @@ const _e = {
       const u = d[0].result;
       const h = t?.createAnthropicMessage;
       if (!h) {
-        throw new Error("Anthropic client not available. Please check your API configuration.");
+        throw new Error("Custom provider client not available. Please check your custom provider settings.");
       }
-      u.pageContent.length;
-      const p = await h({
+      const p = function (pageContent, query, maxChars = 18000) {
+        if (typeof pageContent != "string") {
+          return "";
+        }
+        const trimmed = pageContent.trim();
+        if (!trimmed || trimmed.length <= maxChars) {
+          return trimmed;
+        }
+        const lowerQuery = String(query || "").toLowerCase().trim();
+        const terms = lowerQuery.split(/[\s"'`.,!?;:()[\]{}<>\/\\|+-]+/).map(e => e.trim()).filter((e, t, r) => e.length >= 2 && r.indexOf(e) === t);
+        const lines = trimmed.split("\n").map(e => e.trimEnd());
+        const ranked = lines.map((line, index) => {
+          const lowerLine = line.toLowerCase();
+          let score = 0;
+          if (lowerQuery && lowerLine.includes(lowerQuery)) {
+            score += 20;
+          }
+          for (const term of terms) {
+            if (lowerLine.includes(term)) {
+              score += term.length >= 4 ? 6 : 3;
+            }
+          }
+          if (line.includes("[ref_")) {
+            score += 4;
+          }
+          if (/\b(button|link|textbox|combobox|checkbox|radio|heading|navigation|main|article|region|listitem|menuitem)\b/i.test(line)) {
+            score += 1;
+          }
+          return {
+            index,
+            score
+          };
+        }).filter(e => e.score > 0).sort((e, t) => t.score - e.score || e.index - t.index);
+        const selected = new Set();
+        for (const entry of ranked) {
+          for (const index of [entry.index - 1, entry.index, entry.index + 1]) {
+            if (index >= 0 && index < lines.length) {
+              selected.add(index);
+            }
+          }
+          if (selected.size >= 200) {
+            break;
+          }
+        }
+        const ordered = (selected.size ? Array.from(selected).sort((e, t) => e - t) : lines.map((e, t) => t));
+        const collected = [];
+        let length = 0;
+        for (const index of ordered) {
+          const line = lines[index];
+          if (!line) {
+            continue;
+          }
+          const nextLength = line.length + (collected.length > 0 ? 1 : 0);
+          if (collected.length > 0 && length + nextLength > maxChars) {
+            break;
+          }
+          if (collected.length === 0 && line.length > maxChars) {
+            collected.push(line.slice(0, maxChars));
+            length = collected[0].length;
+            break;
+          }
+          collected.push(line);
+          length += nextLength;
+        }
+        return collected.join("\n").trim();
+      }(u.pageContent, r);
+      const m = await h({
         maxTokens: 800,
         modelClass: "small_fast",
         messages: [{
           role: "user",
-          content: `You are helping find elements on a web page. The user wants to find: "${r}"\n\nHere is the accessibility tree of the page:\n${u.pageContent}\n\nFind ALL elements that match the user's query. Return up to 20 most relevant matches, ordered by relevance.\n\nReturn your findings in this exact format (one line per matching element):\n\nFOUND: <total_number_of_matching_elements>\nSHOWING: <number_shown_up_to_20>\n---\nref_X | role | name | type | reason why this matches\nref_Y | role | name | type | reason why this matches\n...\n\nIf there are more than 20 matches, add this line at the end:\nMORE: Use a more specific query to see additional results\n\nIf no matching elements are found, return only:\nFOUND: 0\nERROR: explanation of why no elements were found`
+          content: `You are helping find elements on a web page. The user wants to find: "${r}"\n\nHere is the accessibility tree of the page:\n${p}\n\nFind ALL elements that match the user's query. Return up to 20 most relevant matches, ordered by relevance.\n\nReturn plain text only in this exact format (one line per matching element):\n\nFOUND: <total_number_of_matching_elements>\nSHOWING: <number_shown_up_to_20>\n---\nref_X | role | name | type | reason why this matches\nref_Y | role | name | type | reason why this matches\n...\n\nIf there are more than 20 matches, add this line at the end:\nMORE: Use a more specific query to see additional results\n\nIf no matching elements are found, return only:\nFOUND: 0\nERROR: explanation of why no elements were found`
         }]
       }, "sampling_find_tool");
-      p.content;
-      const m = p.content[0];
-      if (m.type !== "text") {
-        throw new Error("Unexpected response type from API");
+      const f = function (e) {
+        function t(e, t = false) {
+          if (typeof e == "string") {
+            return e.trim();
+          }
+          if (!e || typeof e != "object") {
+            return "";
+          }
+          const r = String(e.type || "").trim().toLowerCase();
+          if (r === "tool_use" || r === "tool_result") {
+            return "";
+          }
+          if (r === "text" && typeof e.text == "string") {
+            return e.text.trim();
+          }
+          if (t && r === "thinking" && typeof e.thinking == "string") {
+            return e.thinking.trim();
+          }
+          if (t && r === "reasoning") {
+            if (typeof e.text == "string" && e.text.trim()) {
+              return e.text.trim();
+            }
+            if (typeof e.reasoning == "string" && e.reasoning.trim()) {
+              return e.reasoning.trim();
+            }
+          }
+          const o = [e.output_text, e.content_text, e.response_text, e.text];
+          if (t) {
+            o.push(e.reasoning, e.thinking);
+          }
+          for (const t of o) {
+            if (typeof t == "string" && t.trim()) {
+              return t.trim();
+            }
+          }
+          if (typeof e.content == "string" && e.content.trim()) {
+            return e.content.trim();
+          }
+          for (const r of [e.content, e.message?.content, e.output, e.reasoning_details, e.delta]) {
+            const e = n(r, t);
+            if (e) {
+              return e;
+            }
+          }
+          return "";
+        }
+        function n(e, n = false) {
+          if (typeof e == "string") {
+            return e.trim();
+          }
+          if (e && typeof e == "object" && !Array.isArray(e)) {
+            return t(e, n);
+          }
+          if (!Array.isArray(e)) {
+            return "";
+          }
+          return e.map(e => t(e, n)).filter(Boolean).join(" ").trim();
+        }
+        if (!e || typeof e != "object") {
+          return "";
+        }
+        if (typeof e.output_text == "string" && e.output_text.trim()) {
+          return e.output_text.trim();
+        }
+        for (const t of [n(e.content, false), n(e.message, false), n(e.message?.content, false), Array.isArray(e.output) ? e.output.map(e => n(e?.content, false)).filter(Boolean).join(" ").trim() : "", Array.isArray(e.choices) ? e.choices.map(e => typeof e?.message?.content == "string" ? e.message.content.trim() : n(e?.message, false) || n(e?.message?.content, false)).filter(Boolean).join(" ").trim() : "", typeof e.message == "string" ? e.message.trim() : "", typeof e.content == "string" ? e.content.trim() : "", typeof e.response_text == "string" ? e.response_text.trim() : "", typeof e.content_text == "string" ? e.content_text.trim() : ""]) {
+          if (t) {
+            return t;
+          }
+        }
+        return "";
+      }(m);
+      if (!f) {
+        const e = Array.isArray(m?.content) ? m.content.map(e => e?.type || "unknown").filter(Boolean).join(", ") : "none";
+        throw new Error(`API returned no text content (received: ${e})`);
       }
-      const f = m.text.trim().split("\n").map(e => e.trim()).filter(e => e);
-      let g = 0;
-      const b = [];
-      let w;
-      let y = false;
-      for (const e of f) {
+      const g = f.split("\n").map(e => e.trim()).filter(e => e);
+      let b = 0;
+      const w = [];
+      let y;
+      let _;
+      for (const e of g) {
         if (e.startsWith("FOUND:")) {
-          g = parseInt(e.split(":")[1].trim()) || 0;
+          b = parseInt(e.split(":")[1].trim()) || 0;
         } else if (e.startsWith("SHOWING:")) ;else if (e.startsWith("ERROR:")) {
-          w = e.substring(6).trim();
+          y = e.substring(6).trim();
         } else if (e.startsWith("MORE:")) {
-          y = true;
+          _ = true;
         } else if (e.includes("|") && e.startsWith("ref_")) {
           const t = e.split("|").map(e => e.trim());
           if (t.length >= 4) {
-            b.push({
+            w.push({
               ref: t[0],
               role: t[1],
               name: t[2],
@@ -5298,20 +5527,20 @@ const _e = {
           }
         }
       }
-      if (g === 0 || b.length === 0) {
+      if (b === 0 || w.length === 0) {
         return {
-          error: w || "No matching elements found"
+          error: y || "No matching elements found"
         };
       }
-      let _ = `Found ${g} matching element${g === 1 ? "" : "s"}`;
-      if (y) {
-        _ += ` (showing first ${b.length}, use a more specific query to narrow results)`;
+      let v = `Found ${b} matching element${b === 1 ? "" : "s"}`;
+      if (_) {
+        v += ` (showing first ${w.length}, use a more specific query to narrow results)`;
       }
-      const v = b.map(e => `- ${e.ref}: ${e.role}${e.name ? ` "${e.name}"` : ""}${e.type ? ` (${e.type})` : ""}${e.description ? ` - ${e.description}` : ""}`).join("\n");
-      b.length;
+      const T = w.map(e => `- ${e.ref}: ${e.role}${e.name ? ` "${e.name}"` : ""}${e.type ? ` (${e.type})` : ""}${e.description ? ` - ${e.description}` : ""}`).join("\n");
+      w.length;
       const I = await F.getValidTabsWithMetadata(t.tabId);
       return {
-        output: `${_}\n\n${v}`,
+        output: `${v}\n\n${T}`,
         tabContext: {
           currentTabId: t.tabId,
           executedOnTabId: a,
@@ -5685,38 +5914,97 @@ const Ie = {
           tabId: a
         },
         func: e => function () {
-          const t = ["article", "main", "[class*=\"articleBody\"]", "[class*=\"article-body\"]", "[class*=\"post-content\"]", "[class*=\"entry-content\"]", "[class*=\"content-body\"]", "[role=\"main\"]", ".content", "#content"];
-          let r = null;
-          for (const e of t) {
-            const t = document.querySelectorAll(e);
-            if (t.length > 0) {
-              let e = t[0];
-              let o = 0;
-              t.forEach(t => {
-                const r = t.textContent?.length || 0;
-                if (r > o) {
-                  o = r;
-                  e = t;
-                }
-              });
-              r = e;
-              break;
+          const t = ["article", "main", "[role=\"main\"]", "[class*=\"articleBody\"]", "[class*=\"article-body\"]", "[class*=\"article\"]", "[class*=\"post-content\"]", "[class*=\"entry-content\"]", "[class*=\"content-body\"]", "[class*=\"markdown\"]", "[class*=\"readme\"]", "[class*=\"doc\"]", ".content", "#content", "[id*=\"content\"]", "[id*=\"article\"]", "[id*=\"readme\"]"];
+          const r = new Set(["script", "style", "noscript", "template", "svg", "canvas", "iframe"]);
+          const o = function (e) {
+            if (!(e instanceof Element)) {
+              return true;
             }
-          }
-          if (!r) {
-            if ((document.body.textContent || "").length > e) {
+            const t = window.getComputedStyle(e);
+            const r = e.getBoundingClientRect();
+            return t.display !== "none" && t.visibility !== "hidden" && t.opacity !== "0" && r.width > 0 && r.height > 0;
+          };
+          const a = function (e) {
+            return String(e || "").replace(/\u00a0/g, " ").replace(/[ \t]+\n/g, "\n").replace(/\n[ \t]+/g, "\n").replace(/[ \t]{2,}/g, " ").replace(/\n{3,}/g, "\n\n").trim();
+          };
+          const n = function (e) {
+            if (!e || !o(e)) {
+              return "";
+            }
+            const t = document.createTreeWalker(e, NodeFilter.SHOW_TEXT, {
+              acceptNode(t) {
+                const a = t.parentElement;
+                if (!a || !o(a)) {
+                  return NodeFilter.FILTER_REJECT;
+                }
+                if (a.closest("nav,header,footer,aside,form,button,select,textarea")) {
+                  return NodeFilter.FILTER_REJECT;
+                }
+                const n = a.tagName.toLowerCase();
+                if (r.has(n)) {
+                  return NodeFilter.FILTER_REJECT;
+                }
+                const s = (t.textContent || "").replace(/\s+/g, " ").trim();
+                return s ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+              }
+            });
+            const n = [];
+            let s;
+            while (s = t.nextNode()) {
+              n.push(s.textContent || "");
+              if (n.length >= 4000) {
+                break;
+              }
+            }
+            return a(n.join("\n"));
+          };
+          const s = function (e) {
+            const r = n(e);
+            if (r.length < 40) {
               return {
-                text: "",
-                source: "none",
-                title: document.title,
-                url: window.location.href,
-                error: "No semantic content element found and page body is too large (likely contains CSS/scripts). Try using read_page_content (screenshot) instead."
+                score: -Infinity,
+                text: r
               };
             }
-            r = document.body;
+            const o = e.matches("article,main,[role=\"main\"]") ? 80 : e.matches("[class*=\"articleBody\"],[class*=\"article-body\"],[class*=\"article\"],[class*=\"post-content\"],[class*=\"entry-content\"],[class*=\"content-body\"],[class*=\"markdown\"],[class*=\"readme\"],[class*=\"doc\"],.content,#content,[id*=\"content\"],[id*=\"article\"],[id*=\"readme\"]") ? 40 : 0;
+            const a = e.querySelectorAll("p,li,pre,code,blockquote").length;
+            const s = e.querySelectorAll("h1,h2,h3,h4").length;
+            const i = e.querySelectorAll("a").length;
+            const l = e.querySelectorAll("button,input,select,textarea").length;
+            return {
+              score: o + Math.min(r.length, 6000) / 20 + a * 8 + s * 6 - i * 1.5 - l * 12,
+              text: r
+            };
+          };
+          const i = new Set();
+          for (const e of t) {
+            for (const t of document.querySelectorAll(e)) {
+              if (o(t)) {
+                i.add(t);
+              }
+            }
           }
-          const o = (r.textContent || "").replace(/\s+/g, " ").replace(/\n{3,}/g, "\n\n").trim();
-          if (!o || o.length < 10) {
+          Array.from(document.querySelectorAll("main,article,section,div")).filter(e => o(e) && (e.textContent?.trim().length || 0) >= 120).sort((e, t) => (t.textContent?.length || 0) - (e.textContent?.length || 0)).slice(0, 80).forEach(e => i.add(e));
+          let l = null;
+          let d = "";
+          let c = -Infinity;
+          for (const e of i) {
+            const t = s(e);
+            if (t.score > c) {
+              c = t.score;
+              l = e;
+              d = t.text;
+            }
+          }
+          if (!l) {
+            l = document.querySelector("main") || document.body;
+            d = n(l);
+          }
+          if ((!d || d.length < 40) && l !== document.body) {
+            l = document.body;
+            d = n(l);
+          }
+          if (!d || d.length < 10) {
             return {
               text: "",
               source: "none",
@@ -5724,22 +6012,18 @@ const Ie = {
               url: window.location.href,
               error: "No text content found. Page may contain only images, videos, or canvas-based content."
             };
-          } else if (o.length > e) {
-            return {
-              text: "",
-              source: r.tagName.toLowerCase(),
-              title: document.title,
-              url: window.location.href,
-              error: "Output exceeds " + e + " character limit (" + o.length + " characters). Try using read_page with a specific ref_id to focus on a smaller section, or increase max_chars if your client can handle larger outputs."
-            };
-          } else {
-            return {
-              text: o,
-              source: r.tagName.toLowerCase(),
-              title: document.title,
-              url: window.location.href
-            };
           }
+          const u = d.length > e;
+          if (u) {
+            d = d.slice(0, e).trimEnd() + "\n...[truncated]";
+          }
+          return {
+            text: d,
+            source: l === document.body ? "body" : l.tagName.toLowerCase(),
+            title: document.title,
+            url: window.location.href,
+            truncated: u
+          };
         }(),
         args: [o ?? 50000]
       });
@@ -5766,7 +6050,7 @@ const Ie = {
         };
       } else {
         return {
-          output: `Title: ${r.title}\nURL: ${r.url}\nSource element: <${r.source}>\n---\n${r.text}`,
+          output: `Title: ${r.title}\nURL: ${r.url}\nSource element: <${r.source}>${r.truncated ? "\nTruncated: yes" : ""}\n---\n${r.text}`,
           tabContext: {
             currentTabId: t.tabId,
             executedOnTabId: a,
@@ -6785,13 +7069,41 @@ const Pe = {
         throw new Error("Page script returned empty result");
       }
       const o = e[0].result;
-      if (o.error) {
+      if (o.error || !o.pageContent?.trim()) {
+        const e = await x({
+          target: {
+            tabId: l.id,
+            allFrames: true
+          },
+          func: (e, t, r, o) => {
+            if (typeof window.__generateAccessibilityTree != "function") {
+              throw new Error("Accessibility tree function not found. Please refresh the page.");
+            }
+            return window.__generateAccessibilityTree(e, t, r, o);
+          },
+          args: [r || null, a ?? null, s ?? 50000, n ?? null]
+        });
+        const c = (e || []).filter(e => !("error" in e && e.error) && !!e.result && !e.result.error && !!e.result.pageContent?.trim()).map(e => ({
+          frameId: e.frameId ?? 0,
+          result: e.result
+        })).sort((e, t) => e.frameId === 0 ? -1 : t.frameId === 0 ? 1 : e.frameId - t.frameId);
+        if (!c.length) {
+          return {
+            error: o.error || "Page script returned empty result"
+          };
+        }
+        const u = c.map(e => `${e.frameId === 0 ? "Main frame" : `Frame ${e.frameId}`}\n${e.result.pageContent}`).join("\n\n---\n\n");
+        const h = await F.getValidTabsWithMetadata(t.tabId);
+        const p = c[0].result.viewport;
         return {
-          error: o.error
+          output: `${u}\n\nViewport: ${p.width}x${p.height}`,
+          tabContext: {
+            currentTabId: t.tabId,
+            executedOnTabId: i,
+            availableTabs: h,
+            tabCount: h.length
+          }
         };
-      }
-      if (!e[0].result) {
-        throw new Error("Page script returned empty result");
       }
       const c = `Viewport: ${o.viewport.width}x${o.viewport.height}`;
       const d = await F.getValidTabsWithMetadata(t.tabId);
@@ -11788,7 +12100,7 @@ async function Pa() {
                       error: {
                         content: [{
                           type: "text",
-                          text: "Authentication failed. Please check your custom provider or API key settings in Claw in Chrome."
+                          text: "Authentication failed. Please check your custom provider settings in Claw in Chrome."
                         }]
                       }
                     });
@@ -12829,7 +13141,7 @@ class Va {
           }
         }
         if (!this.context.anthropicClient) {
-          throw new Error("Anthropic client not available");
+          throw new Error("Custom provider client not available. Please check your custom provider settings.");
         }
         const {
           modelClass: t,
@@ -12839,18 +13151,99 @@ class Va {
         const {
           customProviderConfig: n
         } = await chrome.storage.local.get("customProviderConfig");
-        const s = n?.enabled && n?.defaultModel ? n.defaultModel : undefined;
-        let a = s || this.context.model;
+        const s = __cpRequireBackgroundProviderConfig(n);
+        const a = s.defaultModel;
+        const i = String(s.fastModel || "").trim();
+        let c = a;
+        const l = t === "small_fast" && !!i;
+        const d = l && i !== a;
+        const p = t === "small_fast";
+        const m = p ? {
+          requestedModelClass: t,
+          attemptedModel: c,
+          defaultModel: a,
+          fastModel: i || null,
+          fastModelConfigured: !!i,
+          usedConfiguredFastModel: l,
+          canRetryWithDefaultModel: d,
+          maxTokens: r
+        } : null;
         if (t === "small_fast") {
-          const e = await v("chrome_ext_models");
-          a = s || e?.small_fast_model || "claude-haiku-4-5-20251001";
+          c = i || a;
         }
-        return await this.context.anthropicClient.beta.messages.create({
-          ...o,
-          max_tokens: r,
-          model: a,
-          betas: ["oauth-2025-04-20"]
-        });
+        if (p) {
+          m.attemptedModel = c;
+          await __cpBackgroundDebugLog("sampling_small_fast_start", m);
+        }
+        const f = Date.now();
+        try {
+          const e = await this.context.anthropicClient.beta.messages.create({
+            ...o,
+            max_tokens: r,
+            model: c,
+            betas: ["oauth-2025-04-20"]
+          });
+          if (p) {
+            await __cpBackgroundDebugLog("sampling_small_fast_success", {
+              ...m,
+              responseModel: typeof e?.model == "string" ? e.model : null,
+              usedFallbackModel: false,
+              durationMs: Date.now() - f
+            });
+          }
+          return e;
+        } catch (u) {
+          if (!d) {
+            if (p) {
+              await __cpBackgroundDebugLog("sampling_small_fast_failure", {
+                ...m,
+                failedStage: "primary",
+                failedModel: c,
+                durationMs: Date.now() - f,
+                message: u instanceof Error ? u.message : String(u || "")
+              }, "error");
+            }
+            throw u;
+          }
+          await __cpBackgroundDebugLog("sampling_small_fast_retry", {
+            ...m,
+            failedModel: c,
+            fallbackModel: a,
+            message: u instanceof Error ? u.message : String(u || "")
+          }, "warn");
+          const h = Date.now();
+          try {
+            const e = await this.context.anthropicClient.beta.messages.create({
+              ...o,
+              max_tokens: r,
+              model: a,
+              betas: ["oauth-2025-04-20"]
+            });
+            if (p) {
+              await __cpBackgroundDebugLog("sampling_small_fast_success", {
+                ...m,
+                responseModel: typeof e?.model == "string" ? e.model : null,
+                usedFallbackModel: true,
+                fallbackModel: a,
+                durationMs: Date.now() - f,
+                fallbackDurationMs: Date.now() - h
+              });
+            }
+            return e;
+          } catch (g) {
+            if (p) {
+              await __cpBackgroundDebugLog("sampling_small_fast_failure", {
+                ...m,
+                failedStage: "fallback",
+                failedModel: a,
+                durationMs: Date.now() - f,
+                fallbackDurationMs: Date.now() - h,
+                message: g instanceof Error ? g.message : String(g || "")
+              }, "error");
+            }
+            throw g;
+          }
+        }
       };
     }
   }
@@ -13040,15 +13433,37 @@ let ln;
 const dn = 60000;
 const un = "__legacy_shared__";
 const hn = new Map();
+function __cpNormalizeBackgroundProviderConfig(e) {
+  const t = e && typeof e == "object" ? e : {};
+  return {
+    enabled: !!t.enabled,
+    baseUrl: String(t.baseUrl || "").trim(),
+    apiKey: String(t.apiKey || "").trim(),
+    defaultModel: String(t.defaultModel || "").trim(),
+    fastModel: String(t.fastModel || t.small_fast_model || "").trim()
+  };
+}
+function __cpRequireBackgroundProviderConfig(e) {
+  const t = __cpNormalizeBackgroundProviderConfig(e);
+  if (!t.enabled || !t.baseUrl) {
+    throw new Error("Custom provider is required. Please enable it in Claw in Chrome.");
+  }
+  if (!t.apiKey) {
+    throw new Error("Custom provider API key is required. Please update your settings in Claw in Chrome.");
+  }
+  if (!t.defaultModel) {
+    throw new Error("Custom provider default model is required. Please update your settings in Claw in Chrome.");
+  }
+  return t;
+}
 function pn(e) {
   return e?.sessionId ?? un;
 }
 async function mn() {
-  const [e, t, {
-    customProviderConfig: o
-  }] = await Promise.all([g(r.SELECTED_MODEL), v("chrome_ext_models"), chrome.storage.local.get("customProviderConfig")]);
-  const a = o?.enabled && o?.defaultModel ? o.defaultModel : undefined;
-  return a || e || t?.default || "claude-3-5-sonnet-20241022";
+  const {
+    customProviderConfig: e
+  } = await chrome.storage.local.get("customProviderConfig");
+  return __cpRequireBackgroundProviderConfig(e).defaultModel;
 }
 async function fn(e, t, r) {
   const o = function (e, t) {
@@ -13093,41 +13508,25 @@ async function fn(e, t, r) {
   return sn;
 }
 async function gn() {
-  const [e, {
-    anthropicApiKey: t
-  }, {
-    customProviderConfig: r
-  }] = await Promise.all([u(), chrome.storage.local.get("anthropicApiKey"), chrome.storage.local.get("customProviderConfig")]);
-  const o = !!r?.enabled && !!r?.baseUrl;
-  const a = o ? r.apiKey || undefined : t || undefined;
-  const i = o ? r.baseUrl : undefined;
-  if (an !== e || nn !== a || providerBaseCache !== i) {
+  const {
+    customProviderConfig: e
+  } = await chrome.storage.local.get("customProviderConfig");
+  const t = __cpRequireBackgroundProviderConfig(e);
+  const r = t.apiKey;
+  const o = t.baseUrl;
+  if (nn !== r || providerBaseCache !== o) {
     on = undefined;
     an = e;
-    nn = a;
-    providerBaseCache = i;
+    nn = r;
+    providerBaseCache = o;
   }
   if (on) {
     return on;
   }
-  if (o && !a) {
-    return;
-  }
-  if (!o && !e && !a) {
-    return;
-  }
-  const s = p();
-  const c = i || s.apiBaseUrl;
   on = new ua({
-    baseURL: c,
+    baseURL: o,
     dangerouslyAllowBrowser: true,
-    ...(o ? {
-      apiKey: a
-    } : e ? {
-      authToken: e
-    } : {
-      apiKey: a
-    })
+    apiKey: r
   });
   return on;
 }
@@ -13336,7 +13735,7 @@ async function wn(e) {
       an = undefined;
       nn = undefined;
       p = "authentication_failed";
-      h = bn("Authentication failed. Please check your custom provider or API key settings.");
+      h = bn("Authentication failed. Please check your custom provider settings.");
     } else {
       p = "execution_error";
       h = bn(v instanceof Error ? v.message : String(v));

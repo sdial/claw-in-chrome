@@ -19,6 +19,21 @@
   globalThis[NATIVE_FETCH_KEY] = nativeFetch;
   let cachedConfig = null;
   let hasLoadedConfig = false;
+  let pageLifecycleEnding = false;
+  if (typeof document !== "undefined") {
+    const syncPageLifecycleState = function () {
+      pageLifecycleEnding = document.visibilityState === "hidden";
+    };
+    syncPageLifecycleState();
+    document.addEventListener("visibilitychange", syncPageLifecycleState);
+    if (typeof window !== "undefined") {
+      const markPageLifecycleEnding = function () {
+        pageLifecycleEnding = true;
+      };
+      window.addEventListener("pagehide", markPageLifecycleEnding);
+      window.addEventListener("beforeunload", markPageLifecycleEnding);
+    }
+  }
   function getProviderStoreHelpers() {
     const helpers = globalThis.CustomProviderModels;
     return helpers && typeof helpers.readProviderStoreState === "function" ? helpers : null;
@@ -58,12 +73,11 @@
   function normalizeConfig(raw) {
     const source = raw && typeof raw === "object" ? raw : {};
     return {
-      enabled: true,
       name: String(source.name || "").trim(),
       baseUrl: String(source.baseUrl || "").trim().replace(/\/+$/, ""),
       apiKey: String(source.apiKey || "").trim(),
       defaultModel: String(source.defaultModel || "").trim(),
-      notes: String(source.notes || "").trim(),
+      fastModel: String(source.fastModel || source.small_fast_model || "").trim(),
       format: inferFormat(source),
       promptCacheKey: String(source.promptCacheKey || source.prompt_cache_key || source.id || source.profileId || "").trim()
     };
@@ -280,6 +294,36 @@
     } catch {
       return String(value);
     }
+  }
+  function extractOpenAIChatTextFromPart(part) {
+    if (typeof part === "string") {
+      return part.trim();
+    }
+    if (!part || typeof part !== "object") {
+      return "";
+    }
+    const type = String(part.type || "").trim().toLowerCase();
+    if (type === "tool_use" || type === "tool_result" || type === "refusal") {
+      return "";
+    }
+    const directCandidates = [part.text, part.output_text, part.content_text, part.response_text];
+    for (const candidate of directCandidates) {
+      if (typeof candidate === "string" && candidate.trim()) {
+        return candidate.trim();
+      }
+    }
+    if (typeof part.content === "string" && part.content.trim()) {
+      return part.content.trim();
+    }
+    if (Array.isArray(part.content)) {
+      const nestedText = part.content.map(function (item) {
+        return extractOpenAIChatTextFromPart(item);
+      }).filter(Boolean).join("\n").trim();
+      if (nestedText) {
+        return nestedText;
+      }
+    }
+    return "";
   }
   function collectAnthropicSystemSegments(system) {
     const segments = [];
@@ -1121,15 +1165,34 @@
       }
     };
     let hasToolUse = false;
+    let hasVisibleText = false;
+    const consumeVisibleText = function (text) {
+      if (typeof text !== "string" || !text.trim()) {
+        return;
+      }
+      hasVisibleText = true;
+      consumeThinkTaggedText(thinkTagState, text, thinkTagHandlers, false);
+    };
     if (typeof message.content === "string") {
-      consumeThinkTaggedText(thinkTagState, message.content, thinkTagHandlers, false);
+      consumeVisibleText(message.content);
     } else if (Array.isArray(message.content)) {
       for (const part of message.content) {
-        const type = part?.type || "";
-        if ((type === "text" || type === "output_text") && typeof part.text === "string" && part.text) {
-          consumeThinkTaggedText(thinkTagState, part.text, thinkTagHandlers, false);
-        } else if (type === "refusal" && typeof part.refusal === "string" && part.refusal) {
+        const type = String(part?.type || "").trim().toLowerCase();
+        if (type === "refusal" && typeof part.refusal === "string" && part.refusal) {
           consumeThinkTaggedText(thinkTagState, part.refusal, thinkTagHandlers, false);
+          continue;
+        }
+        const visibleText = extractOpenAIChatTextFromPart(part);
+        if (visibleText) {
+          consumeVisibleText(visibleText);
+        }
+      }
+    }
+    if (!hasVisibleText) {
+      for (const candidate of [message.output_text, message.content_text, message.response_text]) {
+        if (typeof candidate === "string" && candidate.trim()) {
+          consumeVisibleText(candidate);
+          break;
         }
       }
     }
@@ -1170,6 +1233,237 @@
       stop_sequence: null,
       usage: buildAnthropicUsageFromChat(body?.usage || {})
     };
+  }
+  function parseSseBlocks(text) {
+    const blocks = [];
+    let buffer = typeof text === "string" ? text : "";
+    while (buffer.length) {
+      const separator = findSseSeparator(buffer);
+      if (!separator) {
+        break;
+      }
+      const block = buffer.slice(0, separator.index);
+      buffer = buffer.slice(separator.index + separator.length);
+      if (block.trim()) {
+        blocks.push(block);
+      }
+    }
+    if (buffer.trim()) {
+      blocks.push(buffer);
+    }
+    return blocks;
+  }
+  function extractSseDataText(block) {
+    if (typeof block !== "string" || !block.trim()) {
+      return "";
+    }
+    const dataParts = [];
+    for (const line of block.split(/\r?\n/)) {
+      if (line.startsWith("data:")) {
+        dataParts.push(line.slice(5).trimStart());
+      }
+    }
+    return dataParts.join("\n").trim();
+  }
+  function openAIChatSseToAnthropic(text) {
+    const content = [];
+    const thinkTagState = createThinkTagState();
+    let inlineToolCallCount = 0;
+    let messageId = "";
+    let currentModel = "";
+    let hasToolUse = false;
+    let lastFinishReason = null;
+    let lastUsage = null;
+    const toolCallsByIndex = new Map();
+    const thinkTagHandlers = {
+      onText(text) {
+        pushAnthropicContentBlock(content, {
+          type: "text",
+          text
+        });
+      },
+      onThinking(thinking) {
+        pushAnthropicContentBlock(content, {
+          type: "thinking",
+          thinking
+        });
+      },
+      onToolCall(rawPayload) {
+        const parsedToolCall = parseInlineToolCallPayload(rawPayload, "inline_tool_call_" + inlineToolCallCount++);
+        if (!parsedToolCall) {
+          pushAnthropicContentBlock(content, {
+            type: "text",
+            text: TOOL_CALL_OPEN_TAG + rawPayload + TOOL_CALL_CLOSE_TAG
+          });
+          return;
+        }
+        content.push({
+          type: "tool_use",
+          id: parsedToolCall.id,
+          name: parsedToolCall.name,
+          input: parsedToolCall.input
+        });
+        hasToolUse = true;
+      }
+    };
+    for (const block of parseSseBlocks(text)) {
+      const data = extractSseDataText(block);
+      if (!data || data === "[DONE]") {
+        continue;
+      }
+      const chunk = safeJsonParse(data, null);
+      if (!chunk || !Array.isArray(chunk.choices) || !chunk.choices[0]) {
+        continue;
+      }
+      if (!messageId && chunk.id) {
+        messageId = String(chunk.id);
+      }
+      if (!currentModel && chunk.model) {
+        currentModel = String(chunk.model);
+      }
+      if (chunk.usage && typeof chunk.usage === "object") {
+        lastUsage = chunk.usage;
+      }
+      const choice = chunk.choices[0] || {};
+      const delta = choice.delta || {};
+      if (typeof delta.reasoning === "string" && delta.reasoning) {
+        pushAnthropicContentBlock(content, {
+          type: "thinking",
+          thinking: delta.reasoning
+        });
+      }
+      const contentDelta = normalizeChatContentDelta(delta.content);
+      if (contentDelta) {
+        consumeThinkTaggedText(thinkTagState, contentDelta, thinkTagHandlers, false);
+      }
+      if (Array.isArray(delta.tool_calls)) {
+        for (const toolCall of delta.tool_calls) {
+          const key = Number.isFinite(toolCall?.index) ? toolCall.index : toolCallsByIndex.size;
+          let state = toolCallsByIndex.get(key);
+          if (!state) {
+            state = {
+              id: "",
+              name: "",
+              arguments: ""
+            };
+            toolCallsByIndex.set(key, state);
+          }
+          if (toolCall?.id) {
+            state.id = String(toolCall.id);
+          }
+          if (toolCall?.function?.name) {
+            state.name = String(toolCall.function.name);
+          }
+          if (typeof toolCall?.function?.arguments === "string" && toolCall.function.arguments) {
+            state.arguments += toolCall.function.arguments;
+          }
+        }
+      }
+      if (choice.finish_reason != null) {
+        lastFinishReason = choice.finish_reason;
+      }
+    }
+    consumeThinkTaggedText(thinkTagState, "", thinkTagHandlers, true);
+    const orderedToolCalls = Array.from(toolCallsByIndex.entries()).sort(function (a, b) {
+      return a[0] - b[0];
+    });
+    for (const [index, state] of orderedToolCalls) {
+      if (!state.id && !state.name && !state.arguments) {
+        continue;
+      }
+      hasToolUse = true;
+      content.push({
+        type: "tool_use",
+        id: state.id || "tool_call_" + index,
+        name: state.name || "unknown_tool",
+        input: safeJsonParse(state.arguments || "{}", {})
+      });
+    }
+    return {
+      id: messageId,
+      type: "message",
+      role: "assistant",
+      content,
+      model: currentModel,
+      stop_reason: mapChatStopReason(lastFinishReason, hasToolUse),
+      stop_sequence: null,
+      usage: buildAnthropicUsageFromChat(lastUsage || {})
+    };
+  }
+  function shouldRetryOpenAIChatViaStreamFallback(upstreamJson, anthropicResponse, contentType, isStreamRequest) {
+    if (isStreamRequest || !contentType.includes("text/event-stream")) {
+      return false;
+    }
+    if (anthropicResponse?.stop_reason === "tool_use") {
+      return false;
+    }
+    if (Array.isArray(anthropicResponse?.content) && anthropicResponse.content.length > 0) {
+      return false;
+    }
+    const choice = Array.isArray(upstreamJson?.choices) ? upstreamJson.choices[0] : null;
+    if (!choice || !choice.message || !choice.message.role) {
+      return false;
+    }
+    if (Array.isArray(choice.message?.tool_calls) && choice.message.tool_calls.length > 0) {
+      return false;
+    }
+    const completionTokens = Number(upstreamJson?.usage?.completion_tokens || 0);
+    return Number.isFinite(completionTokens) && completionTokens > 0;
+  }
+  async function retryOpenAIChatAsStreamAndTransform(providerUrl, request, candidateConfig, providerBody, attemptInfo) {
+    const streamBody = {
+      ...providerBody,
+      stream: true
+    };
+    debugLog("provider.request_retry_as_stream_for_empty_content", {
+      ...attemptInfo,
+      providerUrl
+    }, "warn");
+    const upstream = await nativeFetch(providerUrl, {
+      method: "POST",
+      headers: buildProviderHeaders(request.headers, candidateConfig, true),
+      body: JSON.stringify(streamBody),
+      signal: request.signal
+    });
+    const contentType = upstream.headers.get("content-type") || "";
+    if (!upstream.ok) {
+      const providerError = await parseProviderError(upstream, "自定义模型供应商的流式回退请求失败。");
+      debugLog("provider.request_stream_fallback_failed", {
+        ...attemptInfo,
+        providerUrl,
+        status: providerError.status,
+        contentType,
+        message: providerError.message,
+        bodyPreview: truncateText(providerError.text, 500)
+      }, "warn");
+      return null;
+    }
+    const upstreamText = await upstream.text();
+    try {
+      const fallbackJson = contentType.includes("text/event-stream") ? openAIChatSseToAnthropic(upstreamText) : openAIChatToAnthropic(safeJsonParse(upstreamText, null));
+      debugLog("provider.response_transform_stream_fallback", {
+        ...attemptInfo,
+        providerUrl,
+        contentType
+      });
+      return new Response(JSON.stringify(fallbackJson), {
+        status: upstream.status,
+        statusText: upstream.statusText,
+        headers: {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": "no-store"
+        }
+      });
+    } catch (error) {
+      debugLog("provider.response_transform_stream_fallback_failed", {
+        ...attemptInfo,
+        providerUrl,
+        contentType,
+        message: error && typeof error.message === "string" ? error.message : String(error || ""),
+        bodyPreview: truncateText(upstreamText, 500)
+      }, "warn");
+      return null;
+    }
   }
   function convertMessagesToResponsesInput(messages) {
     const input = [];
@@ -2312,6 +2606,26 @@
       }
     });
   }
+  function createAbortLikeError(message) {
+    const text = String(message || "Request was aborted.");
+    try {
+      return new DOMException(text, "AbortError");
+    } catch {
+      const error = new Error(text);
+      error.name = "AbortError";
+      return error;
+    }
+  }
+  function isLikelyHiddenPageFetchAbort(error, request) {
+    const message = String(error?.message || "");
+    if (!/failed to fetch/i.test(message)) {
+      return false;
+    }
+    if (request?.signal?.aborted === true) {
+      return true;
+    }
+    return pageLifecycleEnding === true || typeof document !== "undefined" && document.visibilityState === "hidden";
+  }
   async function parseProviderError(response, fallbackMessage) {
     const text = await response.text().catch(function () {
       return "";
@@ -2456,6 +2770,16 @@
         });
         try {
           const anthropicResponse = candidate.format === OPENAI_CHAT_FORMAT ? openAIChatToAnthropic(upstreamJson) : openAIResponsesToAnthropic(upstreamJson);
+          if (candidate.format === OPENAI_CHAT_FORMAT && shouldRetryOpenAIChatViaStreamFallback(upstreamJson, anthropicResponse, contentType, isStreamRequest)) {
+            const fallbackResponse = await retryOpenAIChatAsStreamAndTransform(providerUrl, request, candidateConfig, providerBody, {
+              attempt: index + 1,
+              totalAttempts: candidates.length,
+              format: candidate.format
+            });
+            if (fallbackResponse) {
+              return fallbackResponse;
+            }
+          }
           return new Response(JSON.stringify(anthropicResponse), {
             status: upstream.status,
             statusText: upstream.statusText,
@@ -2500,6 +2824,7 @@
       return await forwardProviderRequest(request, config);
     } catch (error) {
       const isAbortError = error?.name === "AbortError" || /aborted/i.test(String(error?.message || ""));
+      const shouldTreatAsAbort = isAbortError || isLikelyHiddenPageFetchAbort(error, request);
       if (isAbortError) {
         debugLog("provider.request_aborted", {
           format: config.format,
@@ -2507,6 +2832,18 @@
           message: error && typeof error.message === "string" ? error.message : String(error || "")
         }, "info");
         throw error;
+      }
+      if (shouldTreatAsAbort) {
+        const abortError = createAbortLikeError("Request was aborted.");
+        debugLog("provider.request_aborted", {
+          format: config.format,
+          baseUrl: config.baseUrl,
+          message: error && typeof error.message === "string" ? error.message : String(error || ""),
+          requestAborted: request?.signal?.aborted === true,
+          visibilityState: typeof document !== "undefined" ? document.visibilityState : "",
+          lifecycleEnding: pageLifecycleEnding === true
+        }, "info");
+        throw abortError;
       }
       debugLog("provider.request_exception", {
         format: config.format,

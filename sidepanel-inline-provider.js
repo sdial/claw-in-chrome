@@ -7,7 +7,11 @@
   const ACTIVE_PROFILE_STORAGE_KEY = helpers.ACTIVE_PROFILE_STORAGE_KEY || "customProviderActiveProfileId";
   const DEFAULT_FORMAT = helpers.DEFAULT_FORMAT || "anthropic";
   const DEFAULT_CONTEXT_WINDOW = helpers.DEFAULT_CONTEXT_WINDOW || 200000;
+  const DEFAULT_MAX_OUTPUT_TOKENS = helpers.DEFAULT_MAX_OUTPUT_TOKENS || 10000;
   const MIN_CONTEXT_WINDOW = 20000;
+  const hasUsableConfig = helpers.hasUsableConfig || function (config) {
+    return !!(config?.baseUrl && config?.apiKey && config?.defaultModel);
+  };
   const readProviderStoreState = helpers.readProviderStoreState || async function () {
     const stored = await chrome.storage.local.get([STORAGE_KEY, BACKUP_KEY, "anthropicApiKey"]);
     return {
@@ -15,15 +19,15 @@
       activeProfileId: null,
       activeProfile: null,
       config: stored[STORAGE_KEY] || {
-        enabled: true,
         name: "",
         format: DEFAULT_FORMAT,
         baseUrl: "",
         apiKey: "",
         defaultModel: "",
+        fastModel: "",
         reasoningEffort: "medium",
+        maxOutputTokens: DEFAULT_MAX_OUTPUT_TOKENS,
         contextWindow: DEFAULT_CONTEXT_WINDOW,
-        notes: "",
         fetchedModels: []
       },
       originalApiKey: Object.prototype.hasOwnProperty.call(stored, BACKUP_KEY) ? stored[BACKUP_KEY] : undefined,
@@ -53,6 +57,13 @@
     const effort = String(value || "").trim().toLowerCase();
     return ["none", "low", "medium", "high", "max"].includes(effort) ? effort : "medium";
   };
+  const normalizeMaxOutputTokens = helpers.normalizeMaxOutputTokens || function (value, fallbackValue) {
+    const numeric = Number(String(value ?? "").trim());
+    if (!Number.isFinite(numeric) || numeric <= 0) {
+      return fallbackValue || DEFAULT_MAX_OUTPUT_TOKENS;
+    }
+    return Math.max(1, Math.round(numeric));
+  };
   const normalizeContextWindow = helpers.normalizeContextWindow || function (value) {
     const numeric = Number(String(value ?? "").trim());
     if (!Number.isFinite(numeric) || numeric <= 0) {
@@ -63,15 +74,15 @@
   const normalizeConfig = helpers.normalizeConfig || function (raw, fallbackEnabled) {
     const source = raw && typeof raw === "object" ? raw : {};
     return {
-      enabled: true,
       name: String(source.name || "").trim(),
       format: String(source.format || DEFAULT_FORMAT).trim() || DEFAULT_FORMAT,
       baseUrl: String(source.baseUrl || "").trim().replace(/\/+$/, ""),
       apiKey: String(source.apiKey || "").trim(),
       defaultModel: String(source.defaultModel || "").trim(),
+      fastModel: String(source.fastModel || source.small_fast_model || "").trim(),
       reasoningEffort: normalizeReasoningEffort(source.reasoningEffort),
+      maxOutputTokens: normalizeMaxOutputTokens(source.maxOutputTokens),
       contextWindow: normalizeContextWindow(source.contextWindow),
-      notes: String(source.notes || "").trim(),
       fetchedModels: Array.isArray(source.fetchedModels) ? source.fetchedModels.slice() : []
     };
   };
@@ -126,7 +137,6 @@
   let formRefs = null;
   let isOverlayVisible = false;
   let state = {
-    enabled: true,
     activeProfileId: null,
     originalApiKey: undefined,
     currentApiKey: "",
@@ -138,9 +148,6 @@
   function getProviderFetchIdentity(config) {
     const next = normalizeConfig(config, true);
     return [next.format || DEFAULT_FORMAT, String(next.baseUrl || "").trim(), String(next.apiKey || "").trim()].join("::");
-  }
-  function hasUsableConfig(config) {
-    return !!(config?.baseUrl && config?.apiKey && config?.defaultModel);
   }
   function createNode(tag, className, text) {
     const node = document.createElement(tag);
@@ -156,15 +163,15 @@
     const stored = await readProviderStoreState();
     return {
       config: stored.activeProfile || stored.config || {
-        enabled: true,
         name: "",
         format: DEFAULT_FORMAT,
         baseUrl: "",
         apiKey: "",
         defaultModel: "",
+        fastModel: "",
         reasoningEffort: "medium",
-        contextWindow: DEFAULT_CONTEXT_WINDOW,
-        notes: ""
+        maxOutputTokens: DEFAULT_MAX_OUTPUT_TOKENS,
+        contextWindow: DEFAULT_CONTEXT_WINDOW
       },
       activeProfileId: stored.activeProfileId || null,
       originalApiKey: stored.originalApiKey,
@@ -222,15 +229,15 @@
       return normalizeConfig({}, true);
     }
     const next = normalizeConfig({
-      enabled: true,
       name: formRefs.nameInput.value,
       format: formRefs.formatSelect.value,
       baseUrl: formRefs.baseUrlInput.value,
       apiKey: formRefs.apiKeyInput.value,
       defaultModel: formRefs.modelInput.value,
+      fastModel: state.savedConfig?.fastModel || "",
       reasoningEffort: state.savedConfig?.reasoningEffort || "medium",
-      contextWindow: state.savedConfig?.contextWindow || DEFAULT_CONTEXT_WINDOW,
-      notes: ""
+      maxOutputTokens: normalizeMaxOutputTokens(formRefs.maxOutputTokensInput.value, DEFAULT_MAX_OUTPUT_TOKENS),
+      contextWindow: state.savedConfig?.contextWindow || DEFAULT_CONTEXT_WINDOW
     }, true);
     next.fetchedModels = Array.isArray(state.availableModels) ? state.availableModels.slice() : [];
     return next;
@@ -273,12 +280,12 @@
       return;
     }
     const next = normalizeConfig(config, true);
-    state.enabled = true;
     formRefs.nameInput.value = next.name || "";
     formRefs.formatSelect.value = next.format || DEFAULT_FORMAT;
     formRefs.baseUrlInput.value = next.baseUrl || "";
     formRefs.apiKeyInput.value = next.apiKey || "";
     formRefs.modelInput.value = next.defaultModel || "";
+    formRefs.maxOutputTokensInput.value = String(next.maxOutputTokens || DEFAULT_MAX_OUTPUT_TOKENS);
     renderModelOptions(next.defaultModel || "");
     updateRequestPreview();
   }
@@ -287,9 +294,6 @@
       return;
     }
     const next = await refreshStoredState();
-    if (!next.baseUrl && !next.apiKey && !next.defaultModel && !next.name) {
-      next.enabled = true;
-    }
     writeForm(next);
     formRefs.saveButton.disabled = false;
     formRefs.reloadButton.disabled = false;
@@ -338,7 +342,7 @@
     return false;
   }
   function shouldShowInlineProvider() {
-    return hasText("h1, h2, h3, p, div, span", "配置你的模型供应商") || hasText("h1, h2, h3, p, div, span", "当前资格校验仍然在触发登录提示") || hasText("button", function (text) {
+    return hasText("h1, h2, h3, p, div, span", "配置你的模型供应商") || hasText("h1, h2, h3, p, div, span", "请先配置自定义模型供应商") || hasText("h1, h2, h3, p, div, span", "Open your settings page") || hasText("button", function (text) {
       return text === "Log in";
     }) && hasText("p, div, span", "Claude in Chrome is available to") && hasText("p, div, span", "all paid plan subscribers");
   }
@@ -424,6 +428,13 @@
     modelField.appendChild(modelInput);
     modelField.appendChild(modelControls);
     modelField.appendChild(modelPickerField);
+    const maxOutputTokensField = createNode("label", "cp-inline-field");
+    const maxOutputTokensLabel = createNode("span", "cp-inline-label", "最大输出 tokens");
+    const maxOutputTokensInput = createNode("input", "cp-inline-input cp-inline-input-mono");
+    maxOutputTokensInput.placeholder = "10000";
+    maxOutputTokensInput.inputMode = "numeric";
+    maxOutputTokensField.appendChild(maxOutputTokensLabel);
+    maxOutputTokensField.appendChild(maxOutputTokensInput);
     const status = createNode("div", "cp-inline-status");
     const actions = createNode("div", "cp-inline-actions");
     const reloadButton = createNode("button", "cp-inline-btn cp-inline-btn-secondary", "读取已保存");
@@ -437,6 +448,7 @@
     form.appendChild(baseUrlField);
     form.appendChild(apiKeyField);
     form.appendChild(modelField);
+    form.appendChild(maxOutputTokensField);
     form.appendChild(status);
     form.appendChild(actions);
     body.appendChild(form);
@@ -450,6 +462,7 @@
       requestPreviewValue,
       apiKeyInput,
       modelInput,
+      maxOutputTokensInput,
       modelSelect,
       modelMeta,
       modelCount,
@@ -475,6 +488,10 @@
       modelInput.value = modelSelect.value;
       setStatus("", "");
     });
+    maxOutputTokensInput.addEventListener("change", function () {
+      maxOutputTokensInput.value = String(normalizeMaxOutputTokens(maxOutputTokensInput.value, DEFAULT_MAX_OUTPUT_TOKENS));
+      setStatus("", "");
+    });
     [formatSelect, baseUrlInput, apiKeyInput].forEach(function (node) {
       node.addEventListener("change", clearModels);
       node.addEventListener("input", function () {
@@ -490,17 +507,17 @@
     form.addEventListener("submit", async function (event) {
       event.preventDefault();
       const next = readForm();
-      if (next.enabled && !next.baseUrl) {
+      if (!next.baseUrl) {
         setStatus("error", "必须填写 Base URL。");
         formRefs.baseUrlInput.focus();
         return;
       }
-      if (next.enabled && !next.apiKey) {
+      if (!next.apiKey) {
         setStatus("error", "必须填写 API Key。");
         formRefs.apiKeyInput.focus();
         return;
       }
-      if (next.enabled && !next.defaultModel) {
+      if (!next.defaultModel) {
         setStatus("error", "必须填写默认模型。");
         formRefs.modelInput.focus();
         return;
@@ -510,10 +527,10 @@
         formRefs.reloadButton.disabled = true;
         const previousApiKey = state.currentApiKey;
         await saveConfig(next);
-        if (next.enabled && state.originalApiKey === undefined) {
+        if (state.originalApiKey === undefined) {
           state.originalApiKey = previousApiKey && previousApiKey !== next.apiKey ? previousApiKey : null;
         }
-        state.currentApiKey = next.enabled ? "" : state.originalApiKey || "";
+        state.currentApiKey = "";
         setStatus("success", "配置已保存，正在应用到当前侧栏...");
         window.setTimeout(function () {
           window.location.reload();

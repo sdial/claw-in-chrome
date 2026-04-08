@@ -8,13 +8,16 @@
   const BACKUP_KEY = "customProviderOriginalApiKey";
   const STYLE_ID = "cp-options-inline-provider-style";
   const ROOT_ID = "cp-options-enhancements-root";
+  const SESSION_ROOT_ID = "cp-options-session-root";
   const PROMPT_ROOT_ID = "cp-options-prompt-root";
   const DEBUG_ROOT_ID = "cp-options-debug-root";
   const PROVIDER_ANCHOR_ID = "cp-options-provider-anchor";
+  const SESSION_ANCHOR_ID = "cp-options-session-anchor";
   const PROMPT_ANCHOR_ID = "cp-options-prompt-anchor";
   const DEBUG_ANCHOR_ID = "cp-options-debug-anchor";
   const PANEL_ID = "cp-options-inline-provider-panel";
   const NAV_ITEM_ID = "cp-options-provider-nav-item";
+  const SESSION_NAV_ITEM_ID = "cp-options-session-nav-item";
   const PROMPT_NAV_ITEM_ID = "cp-options-prompt-nav-item";
   const BUILTIN_PROMPT_PROFILE_ID = "__builtin_default_prompt__";
   const DEBUG_LOGS_KEY = "sidepanelDebugLogs";
@@ -22,10 +25,14 @@
   const SYSTEM_PROMPT_STORAGE_KEY = "chrome_ext_system_prompt";
   const PROMPT_PROFILES_STORAGE_KEY = "customSystemPromptProfiles";
   const PROMPT_ACTIVE_PROFILE_STORAGE_KEY = "customSystemPromptActiveProfileId";
+  const CHAT_SCOPE_PREFIX = "claw.chat.scopes.";
+  const CHAT_SESSION_LIMIT = 20;
+  const CHAT_SESSION_TITLE_LIMIT = 80;
+  const CHAT_SESSION_PREVIEW_LIMIT = 160;
   const DEFAULT_AGENT_ROLE_PROMPT = "You are Claude CUSTOM, a browser sidepanel assistant inside a Chrome extension. Help the user complete their request accurately and concisely. Use available browser context and tools when needed, but never pretend an action succeeded if you did not actually perform it. If a request could cause irreversible changes, purchases, submissions, account changes, authentication changes, or destructive actions, pause and ask the user to confirm before proceeding.";
   const DEBUG_EXPORT_SENSITIVE_KEYS = new Set(["apikey", "anthropicapikey", "accesstoken", "refreshtoken", "authtoken", "authorization", "token", "secret", "password", "currentapikey", "originalapikey"]);
   const DEBUG_EXPORT_PRIVATE_URL_KEYS = new Set(["baseurl", "providerurl", "requesturl", "url", "href", "uri", "filename", "source", "origin"]);
-  const DEBUG_EXPORT_PRIVATE_TEXT_KEYS = new Set(["bodypreview", "notes", "prompt", "content", "requestbody", "responsebody", "rawbody", "inputtext", "outputtext"]);
+  const DEBUG_EXPORT_PRIVATE_TEXT_KEYS = new Set(["bodypreview", "prompt", "content", "requestbody", "responsebody", "rawbody", "inputtext", "outputtext"]);
   function normalizeDebugExportKey(key) {
     return String(key || "").replace(/[^a-z0-9]/gi, "").toLowerCase();
   }
@@ -72,16 +79,16 @@
   function summarizeDebugExportProvider(value) {
     const fetchedModels = Array.isArray(value?.fetchedModels) ? value.fetchedModels : [];
     return {
-      enabled: !!value?.enabled,
       format: sanitizeDebugExportString(value?.format || "", "format"),
       defaultModel: sanitizeDebugExportString(value?.defaultModel || "", "defaultModel"),
+      fastModel: sanitizeDebugExportString(value?.fastModel || value?.small_fast_model || "", "fastModel"),
       reasoningEffort: sanitizeDebugExportString(value?.reasoningEffort || "", "reasoningEffort"),
+      maxOutputTokens: typeof value?.maxOutputTokens === "number" ? value.maxOutputTokens : value?.maxOutputTokens || undefined,
       contextWindow: typeof value?.contextWindow === "number" ? value.contextWindow : value?.contextWindow || undefined,
       name: sanitizeDebugExportString(value?.name || "", "name"),
       fetchedModelCount: fetchedModels.length,
       hasApiKey: !!value?.apiKey,
-      hasBaseUrl: !!value?.baseUrl,
-      hasNotes: !!String(value?.notes || "").trim()
+      hasBaseUrl: !!value?.baseUrl
     };
   }
   function sanitizeDebugExportValue(value, depth, seen, parentKey) {
@@ -149,8 +156,6 @@
     en: {
       providerName: "Model provider",
       subtitle: "Configure a compatible provider, endpoint, and default model used by Claw in Chrome.",
-      toggleTitle: "Use custom provider",
-      toggleHelp: "When enabled, side panel requests are routed through this provider.",
       providerNameLabel: "Provider name",
       providerNamePlaceholder: "OpenRouter / Private gateway",
       providerFormatLabel: "Provider format",
@@ -163,6 +168,11 @@
       hideApiKey: "Hide API key",
       defaultModelLabel: "Model",
       defaultModelPlaceholder: "gpt-5.4",
+      fastModelLabel: "Fast model",
+      fastModelPlaceholder: "Optional fast model",
+      fastModelHelp: "Used for internal small_fast requests. If omitted or unavailable, Claw falls back to the main model.",
+      maxOutputTokensLabel: "Max output tokens",
+      maxOutputTokensPlaceholder: "10000",
       reasoningEffortLabel: "Reasoning effort",
       reasoningEffortHelp: "Only applies to providers and models that support reasoning effort, such as GPT-5 and o-series models.",
       contextWindowLabel: "Context window (unit: k)",
@@ -204,6 +214,7 @@
       editProfileTitle: "Edit profile",
       formatSummaryLabel: "Format",
       modelSummaryLabel: "Model",
+      fastModelSummaryLabel: "Fast model",
       endpointSummaryLabel: "Endpoint",
       notConfigured: "Not configured",
       currentBadge: "Current",
@@ -214,8 +225,6 @@
       healthCheckFailure: "Health check failed.",
       healthCheckSuccess: "Health check passed. Model replied: {reply}",
       healthCheckSuccessGeneric: "Health check passed. Model responded.",
-      notesLabel: "Notes",
-      notesPlaceholder: "Optional. Add endpoint notes, routing hints, or account details.",
       saveAndApply: "Save and apply",
       selectFetchedModel: "Select model",
       fetchModelsToPickOne: "Fetch models to pick one",
@@ -224,8 +233,50 @@
       apiKeyRequired: "API key is required.",
       defaultModelRequired: "Choose or enter a default model before saving.",
       saveSuccessEnabled: "Saved. Reopen the side panel to apply the provider.",
-      saveSuccessDisabled: "Saved. The custom provider is turned off.",
       saveFailure: "Failed to save this provider configuration.",
+      sessionTitle: "Session management",
+      sessionSubtitle: "Review local chat groups saved on this device and remove the ones you no longer need.",
+      sessionRefresh: "Refresh",
+      sessionRefreshing: "Refreshing...",
+      sessionEmptyTitle: "No local chat groups yet",
+      sessionEmptyHelp: "Saved chat groups from the side panel will appear here after you start chatting.",
+      sessionListCount: "{count} local chat groups saved.",
+      sessionView: "View",
+      sessionViewRecord: "Open record",
+      sessionCloseViewer: "Close",
+      sessionBackToHistory: "Back to sessions",
+      sessionHistoryTitle: "Saved sessions",
+      sessionHistorySubtitle: "Browse the saved session thumbnails in this group.",
+      sessionRecordTitle: "Session record",
+      sessionRecordSubtitle: "Review the saved messages for this session.",
+      sessionRecordEmpty: "No saved messages in this session.",
+      sessionRecordLoadFailure: "Failed to load this session record.",
+      sessionRoleUser: "User",
+      sessionRoleAssistant: "Assistant",
+      sessionRoleSystem: "System",
+      sessionRoleTool: "Tool",
+      sessionRoleUnknown: "Message",
+      sessionUpdatedAtLabel: "Updated",
+      sessionCreatedAtLabel: "Created",
+      sessionMessagesLabel: "Messages",
+      sessionGroupCountLabel: "Sessions",
+      sessionTotalMessagesLabel: "Total messages",
+      sessionModeLabel: "Mode",
+      sessionModelLabel: "Model",
+      sessionScopeLabel: "Scope",
+      sessionUrlLabel: "URL",
+      sessionAnchorUrlLabel: "First URL",
+      sessionTabLabel: "Tab",
+      sessionLatestTabLabel: "Latest tab",
+      sessionPreviewLabel: "Preview",
+      sessionModeStandard: "Standard",
+      sessionModeQuick: "Quick",
+      sessionDelete: "Delete group",
+      sessionDeleteConfirm: "Delete local chat group \"{name}\"?",
+      sessionDeleted: "Local chat group deleted.",
+      sessionLoadFailure: "Failed to load local chat groups.",
+      sessionDeleteFailure: "Failed to delete this local chat group.",
+      sessionUntitled: "New chat",
       promptTitle: "Prompt overrides",
       promptSubtitle: "Manage reusable agent role prompt profiles for the side panel assistant. The built-in default prompt always stays in the list and cannot be edited or deleted.",
       promptEmptyProfilesTitle: "No prompt profiles yet",
@@ -251,8 +302,10 @@
       promptContentRequired: "Enter the agent role prompt first.",
       promptSaveFailure: "Failed to save this prompt profile.",
       inlineModelSaved: "Model updated.",
+      inlineFastModelSaved: "Fast model updated.",
+      inlineContextWindowSaved: "Context window updated.",
+      inlineMaxOutputTokensSaved: "Max output tokens updated.",
       inlineReasoningSaved: "Reasoning effort updated.",
-      toggleAria: "Toggle custom provider",
       debugTitle: "Captured logs",
       debugSubtitle: "Side panel logs are captured automatically. Export the latest 500 entries when you need to troubleshoot issues.",
       debugToggleTitle: "Enable debug mode",
@@ -276,8 +329,6 @@
     zh: {
       providerName: "模型供应商",
       subtitle: "配置 Claw in Chrome 使用的兼容模型供应商、接口地址和默认模型。",
-      toggleTitle: "启用自定义供应商",
-      toggleHelp: "开启后，侧边栏请求会通过这里配置的模型供应商发出。",
       providerNameLabel: "供应商名称",
       providerNamePlaceholder: "例如 OpenRouter / 自建网关",
       providerFormatLabel: "供应商格式",
@@ -290,6 +341,11 @@
       hideApiKey: "隐藏 API Key",
       defaultModelLabel: "模型",
       defaultModelPlaceholder: "例如 gpt-5.4",
+      fastModelLabel: "快速模型",
+      fastModelPlaceholder: "可选，例如 gpt-5.4-mini",
+      fastModelHelp: "用于插件内部的 small_fast 场景",
+      maxOutputTokensLabel: "最大输出 tokens",
+      maxOutputTokensPlaceholder: "10000",
       reasoningEffortLabel: "思考深度",
       reasoningEffortHelp: "只会用于支持 reasoning effort 的供应商和模型，例如 GPT-5 与 o 系列模型。",
       contextWindowLabel: "上下文窗口 (单位:k)",
@@ -331,6 +387,7 @@
       editProfileTitle: "编辑配置",
       formatSummaryLabel: "格式",
       modelSummaryLabel: "模型",
+      fastModelSummaryLabel: "快速模型",
       endpointSummaryLabel: "地址",
       notConfigured: "未配置",
       currentBadge: "当前使用",
@@ -341,8 +398,6 @@
       healthCheckFailure: "健康检测失败。",
       healthCheckSuccess: "健康检测通过，模型回复：{reply}",
       healthCheckSuccessGeneric: "健康检测通过，模型已响应。",
-      notesLabel: "备注",
-      notesPlaceholder: "可选。填写路由说明、鉴权要求或账号备注。",
       saveAndApply: "保存并应用",
       selectFetchedModel: "选择模型",
       fetchModelsToPickOne: "先获取模型后再选择",
@@ -351,8 +406,50 @@
       apiKeyRequired: "必须填写 API Key。",
       defaultModelRequired: "请先填写或选择默认模型。",
       saveSuccessEnabled: "保存成功。重新打开侧边栏后会应用新配置。",
-      saveSuccessDisabled: "保存成功。当前已关闭自定义供应商。",
       saveFailure: "保存模型供应商配置失败。",
+      sessionTitle: "会话管理",
+      sessionSubtitle: "查看当前设备保存在本地的会话组，并删除不再需要的整组记录。",
+      sessionRefresh: "刷新",
+      sessionRefreshing: "刷新中...",
+      sessionEmptyTitle: "还没有本地会话组",
+      sessionEmptyHelp: "侧边栏开始聊天并保存后，本地会话组会显示在这里。",
+      sessionListCount: "当前已保存 {count} 个本地会话组。",
+      sessionView: "查看",
+      sessionViewRecord: "查看记录",
+      sessionCloseViewer: "关闭弹窗",
+      sessionBackToHistory: "返回会话列表",
+      sessionHistoryTitle: "组内会话",
+      sessionHistorySubtitle: "查看这一组里保存过的会话缩略版。",
+      sessionRecordTitle: "会话记录",
+      sessionRecordSubtitle: "浏览这次保存下来的消息记录。",
+      sessionRecordEmpty: "这次会话里还没有可显示的消息。",
+      sessionRecordLoadFailure: "加载这次会话记录失败。",
+      sessionRoleUser: "用户",
+      sessionRoleAssistant: "助手",
+      sessionRoleSystem: "系统",
+      sessionRoleTool: "工具",
+      sessionRoleUnknown: "消息",
+      sessionUpdatedAtLabel: "更新时间",
+      sessionCreatedAtLabel: "创建时间",
+      sessionMessagesLabel: "消息数",
+      sessionGroupCountLabel: "会话数",
+      sessionTotalMessagesLabel: "总消息数",
+      sessionModeLabel: "模式",
+      sessionModelLabel: "模型",
+      sessionScopeLabel: "Scope",
+      sessionUrlLabel: "URL",
+      sessionAnchorUrlLabel: "首个URL",
+      sessionTabLabel: "标签页",
+      sessionLatestTabLabel: "最近标签页",
+      sessionPreviewLabel: "预览",
+      sessionModeStandard: "标准",
+      sessionModeQuick: "快速",
+      sessionDelete: "删除整组",
+      sessionDeleteConfirm: "确定删除本地会话组“{name}”吗？",
+      sessionDeleted: "本地会话组已删除。",
+      sessionLoadFailure: "加载本地会话组失败。",
+      sessionDeleteFailure: "删除本地会话组失败。",
+      sessionUntitled: "新聊天",
       promptTitle: "提示词修改",
       promptSubtitle: "智能体的角色提示词配置",
       promptEmptyProfilesTitle: "还没有提示词配置",
@@ -378,8 +475,10 @@
       promptContentRequired: "请先填写智能体角色提示词。",
       promptSaveFailure: "保存提示词配置失败。",
       inlineModelSaved: "模型已更新。",
+      inlineFastModelSaved: "快速模型已更新。",
+      inlineContextWindowSaved: "上下文窗口已更新。",
+      inlineMaxOutputTokensSaved: "最大输出 tokens 已更新。",
       inlineReasoningSaved: "思考深度已更新。",
-      toggleAria: "切换自定义供应商",
       debugTitle: "日志捕获",
       debugSubtitle: "侧边栏日志会自动捕获并保留最近 500 条，排查问题时可直接导出。",
       debugToggleTitle: "启用调试模式",
@@ -404,6 +503,7 @@
   const helpers = globalThis.CustomProviderModels || {};
   const DEFAULT_FORMAT = helpers.DEFAULT_FORMAT || "anthropic";
   const DEFAULT_CONTEXT_WINDOW = helpers.DEFAULT_CONTEXT_WINDOW || 200000;
+  const DEFAULT_MAX_OUTPUT_TOKENS = helpers.DEFAULT_MAX_OUTPUT_TOKENS || 10000;
   const MIN_CONTEXT_WINDOW = 20000;
   const CONTEXT_WINDOW_STEP_K = 10;
   const PROFILES_STORAGE_KEY = helpers.PROFILES_STORAGE_KEY || "customProviderProfiles";
@@ -415,15 +515,15 @@
       activeProfileId: null,
       activeProfile: null,
       config: stored[STORAGE_KEY] || (helpers.createEmptyConfig ? helpers.createEmptyConfig() : {
-        enabled: true,
         name: "",
         format: DEFAULT_FORMAT,
         baseUrl: "",
         apiKey: "",
         defaultModel: "",
+        fastModel: "",
         reasoningEffort: "medium",
+        maxOutputTokens: DEFAULT_MAX_OUTPUT_TOKENS,
         contextWindow: DEFAULT_CONTEXT_WINDOW,
-        notes: "",
         fetchedModels: []
       }),
       originalApiKey: Object.prototype.hasOwnProperty.call(stored, BACKUP_KEY) ? stored[BACKUP_KEY] : undefined,
@@ -593,15 +693,15 @@
   }
   const createEmptyConfig = helpers.createEmptyConfig || function () {
     return {
-      enabled: true,
       name: "",
       format: DEFAULT_FORMAT,
       baseUrl: "",
       apiKey: "",
       defaultModel: "",
+      fastModel: "",
       reasoningEffort: "medium",
+      maxOutputTokens: DEFAULT_MAX_OUTPUT_TOKENS,
       contextWindow: DEFAULT_CONTEXT_WINDOW,
-      notes: "",
       fetchedModels: []
     };
   };
@@ -616,6 +716,13 @@
     const effort = String(value || "").trim().toLowerCase();
     return ["none", "low", "medium", "high", "max"].includes(effort) ? effort : "medium";
   };
+  const normalizeMaxOutputTokens = helpers.normalizeMaxOutputTokens || function (value, fallbackValue) {
+    const numeric = Number(String(value ?? "").trim());
+    if (!Number.isFinite(numeric) || numeric <= 0) {
+      return fallbackValue || DEFAULT_MAX_OUTPUT_TOKENS;
+    }
+    return Math.max(1, Math.round(numeric));
+  };
   const normalizeContextWindow = helpers.normalizeContextWindow || function (value, fallbackValue) {
     const numeric = Number(String(value ?? "").trim());
     if (!Number.isFinite(numeric) || numeric <= 0) {
@@ -623,6 +730,9 @@
     }
     return Math.max(MIN_CONTEXT_WINDOW, Math.round(numeric));
   };
+  function formatMaxOutputTokensForInput(value) {
+    return String(normalizeMaxOutputTokens(value, DEFAULT_MAX_OUTPUT_TOKENS));
+  }
   function formatContextWindowForInput(value) {
     return String(Math.max(Math.ceil(MIN_CONTEXT_WINDOW / 1000), Math.ceil(normalizeContextWindow(value, DEFAULT_CONTEXT_WINDOW) / 1000)));
   }
@@ -637,15 +747,15 @@
   const normalizeConfig = helpers.normalizeConfig || function (raw, fallbackEnabled) {
     const source = raw && typeof raw === "object" ? raw : {};
     return {
-      enabled: true,
       name: String(source.name || "").trim(),
       format: String(source.format || DEFAULT_FORMAT).trim() || DEFAULT_FORMAT,
       baseUrl: String(source.baseUrl || "").trim().replace(/\/+$/, ""),
       apiKey: String(source.apiKey || "").trim(),
       defaultModel: String(source.defaultModel || "").trim(),
+      fastModel: String(source.fastModel || source.small_fast_model || "").trim(),
       reasoningEffort: normalizeReasoningEffort(source.reasoningEffort),
+      maxOutputTokens: normalizeMaxOutputTokens(source.maxOutputTokens),
       contextWindow: normalizeContextWindow(source.contextWindow),
-      notes: String(source.notes || "").trim(),
       fetchedModels: Array.isArray(source.fetchedModels) ? source.fetchedModels.slice() : []
     };
   };
@@ -676,7 +786,7 @@
         if (!parent) {
           return NodeFilter.FILTER_REJECT;
         }
-        if (parent.closest(`#${ROOT_ID}, #${DEBUG_ROOT_ID}`)) {
+        if (parent.closest(`#${ROOT_ID}, #${SESSION_ROOT_ID}, #${PROMPT_ROOT_ID}, #${DEBUG_ROOT_ID}`)) {
           return NodeFilter.FILTER_REJECT;
         }
         return NodeFilter.FILTER_ACCEPT;
@@ -880,7 +990,14 @@
       grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
       align-items: start;
     }
+    .cp-page-grid-3 {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      align-items: start;
+    }
     .cp-page-grid-2 > * {
+      min-width: 0;
+    }
+    .cp-page-grid-3 > * {
       min-width: 0;
     }
     .cp-page-label-row {
@@ -977,7 +1094,15 @@
       align-items: stretch;
       flex: 0 0 auto;
       flex-wrap: wrap;
-      justify-content: flex-end;
+      justify-content: flex-start;
+      margin-left: 0;
+      gap: 0.75rem;
+    }
+    .cp-provider-editor-action-row {
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      flex-wrap: wrap;
       gap: 0.75rem;
     }
     .cp-model-action-btn {
@@ -1286,6 +1411,15 @@
       display: grid;
       gap: 0.25rem;
       min-width: 0;
+      flex: 1 1 24rem;
+    }
+    .cp-provider-card-title-row {
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 0.625rem;
+      flex-wrap: wrap;
+      min-width: 0;
     }
     .cp-provider-card-title {
       margin: 0;
@@ -1311,8 +1445,8 @@
       min-height: 1.75rem;
       padding: 0.25rem 0.625rem;
       border-radius: 999px;
-      background: hsl(var(--bg-200));
-      color: hsl(var(--text-100));
+      background: hsl(var(--bg-300));
+      color: hsl(var(--text-000));
       font-family: var(--font-ui, ui-sans-serif, system-ui);
       font-size: 0.8125rem;
       font-weight: 500;
@@ -1326,7 +1460,19 @@
     .cp-provider-summary {
       display: grid;
       gap: 0.75rem;
+    }
+    .cp-provider-summary-row {
+      display: grid;
+      gap: 0.75rem;
+    }
+    .cp-provider-summary-row[data-columns="2"] {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .cp-provider-summary-row[data-columns="3"] {
       grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+    .cp-provider-editor-primary-row {
+      grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
     }
     .cp-provider-summary[data-layout="single"] {
       grid-template-columns: minmax(0, 1fr);
@@ -1337,7 +1483,10 @@
       min-width: 0;
     }
     .cp-provider-summary-item[data-field="model"],
-    .cp-provider-summary-item[data-field="reasoning"] {
+    .cp-provider-summary-item[data-field="reasoning"],
+    .cp-provider-summary-item[data-field="fastModel"],
+    .cp-provider-summary-item[data-field="contextWindow"],
+    .cp-provider-summary-item[data-field="maxOutputTokens"] {
       gap: 0.5rem;
     }
     .cp-provider-summary-label {
@@ -1382,10 +1531,80 @@
     .cp-provider-inline-control .cp-dropdown-trigger {
       width: 100%;
     }
+    .cp-provider-inline-control .cp-page-input {
+      width: 100%;
+    }
+    .cp-provider-editor-field {
+      gap: 0.5rem;
+    }
+    .cp-provider-editor-field .cp-page-meta {
+      margin-top: 0.125rem;
+    }
+    .cp-provider-editor-field .cp-page-label-row .cp-page-meta {
+      margin-top: 0;
+    }
+    .cp-provider-editor-model-field .cp-model-control-row {
+      align-items: center;
+    }
     .cp-provider-card-actions {
       display: flex;
       gap: 0.75rem;
       flex-wrap: wrap;
+    }
+    .cp-session-browser-copy {
+      display: grid;
+      gap: 0.25rem;
+      min-width: 0;
+      flex: 1 1 24rem;
+    }
+    .cp-session-history-empty {
+      padding: 1rem 0 0;
+    }
+    .cp-session-record-list {
+      display: grid;
+      gap: 0.75rem;
+    }
+    .cp-session-record-item {
+      display: grid;
+      gap: 0.625rem;
+      padding: 1rem;
+      border-radius: 0.875rem;
+      border: 1px solid hsl(var(--border-300));
+      background: hsl(var(--bg-000));
+    }
+    .cp-session-record-item[data-role="user"] {
+      border-color: hsl(var(--border-200));
+      background: hsl(var(--bg-100));
+    }
+    .cp-session-record-item[data-role="assistant"] {
+      border-color: hsl(var(--border-300));
+    }
+    .cp-session-record-item[data-role="system"],
+    .cp-session-record-item[data-role="tool"] {
+      background: hsl(var(--bg-100));
+    }
+    .cp-session-record-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+    }
+    .cp-session-record-role {
+      font-family: var(--font-ui, ui-sans-serif, system-ui);
+      font-size: 0.8125rem;
+      font-weight: 600;
+      line-height: 1.35;
+      color: hsl(var(--text-200));
+    }
+    .cp-session-record-content {
+      margin: 0;
+      font-family: var(--font-ui, ui-sans-serif, system-ui);
+      font-size: 0.875rem;
+      line-height: 1.6;
+      color: hsl(var(--text-100));
+      white-space: pre-wrap;
+      word-break: break-word;
     }
     .cp-provider-empty {
       display: grid;
@@ -1512,35 +1731,6 @@
       padding: 0.75rem 1rem;
       font-size: 0.95rem;
     }
-    .cp-page-toggle {
-      position: relative;
-      width: 3rem;
-      height: 1.75rem;
-      border: 0;
-      border-radius: 999px;
-      background: hsl(var(--bg-300));
-      cursor: pointer;
-      transition: background-color 0.2s ease;
-      flex: 0 0 auto;
-    }
-    .cp-page-toggle::after {
-      content: "";
-      position: absolute;
-      top: 0.1875rem;
-      left: 0.1875rem;
-      width: 1.375rem;
-      height: 1.375rem;
-      border-radius: 999px;
-      background: hsl(var(--bg-000));
-      box-shadow: 0 1px 2px rgba(20, 20, 19, 0.14);
-      transition: transform 0.2s ease;
-    }
-    .cp-page-toggle[data-enabled="true"] {
-      background: hsl(var(--brand-100));
-    }
-    .cp-page-toggle[data-enabled="true"]::after {
-      transform: translateX(1.25rem);
-    }
     .cp-page-status[data-kind="success"],
     .cp-page-meta[data-tone="ready"] {
       color: hsl(var(--success-100));
@@ -1564,6 +1754,33 @@
     }
     .cp-modal-card {
       width: min(28rem, calc(100vw - 2rem));
+    }
+    .cp-session-modal-card {
+      display: flex;
+      flex-direction: column;
+      width: min(68rem, calc(100vw - 2rem));
+      max-height: min(84vh, 56rem);
+      overflow: hidden;
+    }
+    .cp-session-modal-card > .cp-session-modal-view {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow: hidden;
+    }
+    .cp-session-modal-view {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      min-height: 0;
+    }
+    .cp-session-modal-scroll {
+      display: grid;
+      flex: 1 1 auto;
+      gap: 1rem;
+      min-height: 0;
+      overflow: auto;
+      overscroll-behavior: contain;
+      padding-right: 0.25rem;
     }
     .cp-modal-actions {
       display: flex;
@@ -1595,16 +1812,24 @@
       .cp-page-grid-2 {
         grid-template-columns: 1fr;
       }
+      .cp-page-grid-3 {
+        grid-template-columns: 1fr;
+      }
       .cp-page-split-label-row {
         grid-template-columns: 1fr;
       }
       .cp-model-control-row {
         flex-direction: column;
       }
-      .cp-provider-summary {
+      .cp-provider-summary-row[data-columns="2"],
+      .cp-provider-summary-row[data-columns="3"] {
+        grid-template-columns: 1fr;
+      }
+      .cp-provider-editor-primary-row {
         grid-template-columns: 1fr;
       }
       .cp-model-action-group {
+        flex-wrap: wrap;
         width: 100%;
       }
       .cp-model-action-btn-main {
@@ -1893,6 +2118,276 @@
       logs: sanitizeDebugExportLogs(logs)
     }, null, 2);
   }
+  function normalizeSessionScopeId(value) {
+    const normalized = String(value || "").trim();
+    return normalized ? normalized.replace(/[^\w:-]/g, "_") : "";
+  }
+  function chatScopeStoragePrefix(scopeId) {
+    const normalized = normalizeSessionScopeId(scopeId);
+    return normalized ? `${CHAT_SCOPE_PREFIX}${normalized}` : "";
+  }
+  function chatScopeIndexKey(scopeId) {
+    const prefix = chatScopeStoragePrefix(scopeId);
+    return prefix ? `${prefix}.index` : "";
+  }
+  function chatScopeDraftKey(scopeId) {
+    const prefix = chatScopeStoragePrefix(scopeId);
+    return prefix ? `${prefix}.activeDraft` : "";
+  }
+  function chatScopeActiveSessionKey(scopeId) {
+    const prefix = chatScopeStoragePrefix(scopeId);
+    return prefix ? `${prefix}.activeSession` : "";
+  }
+  function chatScopeRestoreAnchorKey(scopeId) {
+    const prefix = chatScopeStoragePrefix(scopeId);
+    return prefix ? `${prefix}.restoreAnchor` : "";
+  }
+  function chatSessionStorageKey(scopeId, sessionId) {
+    const prefix = chatScopeStoragePrefix(scopeId);
+    const normalizedSessionId = String(sessionId || "").trim();
+    return prefix && normalizedSessionId ? `${prefix}.byId.${normalizedSessionId}` : "";
+  }
+  function normalizeSessionNumber(value, fallback) {
+    const numeric = Number(value);
+    return Number.isFinite(numeric) && numeric > 0 ? Math.round(numeric) : fallback;
+  }
+  function trimSessionText(value, maxLength) {
+    const normalized = String(value || "").replace(/\s+/g, " ").trim();
+    if (!normalized) {
+      return "";
+    }
+    const limit = Number.isFinite(Number(maxLength)) && Number(maxLength) > 0 ? Number(maxLength) : CHAT_SESSION_PREVIEW_LIMIT;
+    return normalized.length > limit ? `${normalized.slice(0, Math.max(0, limit - 1)).trimEnd()}…` : normalized;
+  }
+  function stripSessionDisplayArtifacts(value) {
+    return String(value || "").replace(/<system-reminder>[\s\S]*?<\/system-reminder>/gi, " ").replace(/<system-reminder>[\s\S]*$/gi, " ").replace(/\s+/g, " ").trim();
+  }
+  function normalizeSessionMode(value) {
+    return value === "quick" ? "quick" : "standard";
+  }
+  function normalizeLocalSessionMeta(value, strings) {
+    if (!value || typeof value !== "object") {
+      return null;
+    }
+    const sessionId = String(value.id || "").trim();
+    const scopeId = normalizeSessionScopeId(value.scopeId);
+    if (!sessionId || !scopeId) {
+      return null;
+    }
+    const fallbackTitle = strings?.sessionUntitled || "New chat";
+    return {
+      id: sessionId,
+      scopeId,
+      title: trimSessionText(stripSessionDisplayArtifacts(value.title || ""), CHAT_SESSION_TITLE_LIMIT) || fallbackTitle,
+      preview: trimSessionText(stripSessionDisplayArtifacts(value.preview || ""), CHAT_SESSION_PREVIEW_LIMIT),
+      createdAt: normalizeSessionNumber(value.createdAt, Date.now()),
+      updatedAt: normalizeSessionNumber(value.updatedAt, Date.now()),
+      messageCount: Math.max(0, Number(value.messageCount) || 0),
+      mode: normalizeSessionMode(value.mode),
+      selectedModel: trimSessionText(value.selectedModel || "", CHAT_SESSION_TITLE_LIMIT),
+      currentUrl: trimSessionText(value.currentUrl || "", 240),
+      domain: trimSessionText(value.domain || "", CHAT_SESSION_TITLE_LIMIT),
+      tabTitle: trimSessionText(value.tabTitle || "", 120)
+    };
+  }
+  function normalizeLocalRestoreAnchor(value) {
+    if (!value || typeof value !== "object") {
+      return null;
+    }
+    const scopeId = normalizeSessionScopeId(value.scopeId);
+    const currentUrl = trimSessionText(value.currentUrl || value.url || "", 240);
+    if (!scopeId || !currentUrl) {
+      return null;
+    }
+    return {
+      scopeId,
+      currentUrl,
+      domain: trimSessionText(value.domain || "", CHAT_SESSION_TITLE_LIMIT),
+      tabTitle: trimSessionText(value.tabTitle || "", 120),
+      createdAt: normalizeSessionNumber(value.createdAt, Date.now()),
+      sessionId: String(value.sessionId || "").trim()
+    };
+  }
+  function extractLocalSessionText(value, depth) {
+    const nextDepth = Number.isFinite(Number(depth)) ? Number(depth) : 0;
+    if (nextDepth > 4 || value == null) {
+      return "";
+    }
+    if (typeof value === "string") {
+      return String(value || "").replace(/<system-reminder>[\s\S]*?<\/system-reminder>/gi, " ").replace(/<system-reminder>[\s\S]*$/gi, " ").trim();
+    }
+    if (Array.isArray(value)) {
+      return value.map(function (entry) {
+        return extractLocalSessionText(entry, nextDepth + 1);
+      }).filter(Boolean).join("\n\n").trim();
+    }
+    if (typeof value === "object") {
+      if (typeof value.text === "string") {
+        return extractLocalSessionText(value.text, nextDepth + 1);
+      }
+      if (value.type === "tool_use") {
+        const name = String(value.name || "").trim();
+        return name ? `[Tool] ${name}` : "[Tool]";
+      }
+      if (value.type === "tool_result") {
+        return extractLocalSessionText(value.content, nextDepth + 1);
+      }
+      if ("content" in value) {
+        return extractLocalSessionText(value.content, nextDepth + 1);
+      }
+      try {
+        return JSON.stringify(value);
+      } catch {
+        return "";
+      }
+    }
+    return "";
+  }
+  function normalizeLocalSessionMessage(value, index, strings) {
+    if (!value || typeof value !== "object") {
+      return null;
+    }
+    const role = String(value.role || "").trim().toLowerCase();
+    const text = trimSessionText(stripSessionDisplayArtifacts(extractLocalSessionText(value.content, 0)), 6000);
+    if (!text) {
+      return null;
+    }
+    return {
+      id: String(value.id || `message-${index + 1}`),
+      role,
+      text
+    };
+  }
+  function normalizeLocalSessionSnapshot(value, strings) {
+    if (!value || typeof value !== "object") {
+      return null;
+    }
+    const meta = normalizeLocalSessionMeta(value.meta || {
+      id: value?.meta?.id || value?.id,
+      scopeId: value.scopeId || value?.meta?.scopeId,
+      title: value?.meta?.title,
+      preview: value?.meta?.preview,
+      createdAt: value?.meta?.createdAt,
+      updatedAt: value?.meta?.updatedAt,
+      messageCount: value?.meta?.messageCount,
+      mode: value?.meta?.mode || value?.mode,
+      selectedModel: value?.selectedModel || value?.meta?.selectedModel,
+      currentUrl: value?.currentUrl || value?.meta?.currentUrl,
+      domain: value?.domain || value?.meta?.domain,
+      tabTitle: value?.tabTitle || value?.meta?.tabTitle
+    }, strings);
+    if (!meta) {
+      return null;
+    }
+    const messages = (Array.isArray(value.messages) ? value.messages : []).map(function (entry, index) {
+      return normalizeLocalSessionMessage(entry, index, strings);
+    }).filter(Boolean);
+    return {
+      meta,
+      messages
+    };
+  }
+  function extractSessionScopeIds(snapshot) {
+    const scopeIds = new Set();
+    for (const key of Object.keys(snapshot || {})) {
+      const text = String(key || "");
+      if (!text.startsWith(CHAT_SCOPE_PREFIX) || !text.endsWith(".index")) {
+        continue;
+      }
+      const scopeId = text.slice(CHAT_SCOPE_PREFIX.length, -".index".length);
+      if (scopeId) {
+        scopeIds.add(scopeId);
+      }
+    }
+    return Array.from(scopeIds.values()).sort();
+  }
+  async function getSessionStoreState(strings) {
+    const stored = await chrome.storage.local.get(null);
+    const sessions = [];
+    extractSessionScopeIds(stored).forEach(function (scopeId) {
+      const indexKey = chatScopeIndexKey(scopeId);
+      const restoreAnchorKey = chatScopeRestoreAnchorKey(scopeId);
+      const rawEntries = Array.isArray(stored[indexKey]) ? stored[indexKey] : [];
+      const normalizedEntries = rawEntries.map(function (entry) {
+        return normalizeLocalSessionMeta(entry, strings);
+      }).filter(function (entry) {
+        return entry && entry.scopeId === scopeId;
+      }).sort(function (left, right) {
+        return right.updatedAt - left.updatedAt;
+      });
+      if (normalizedEntries.length === 0) {
+        return;
+      }
+      const latestEntry = normalizedEntries[0];
+      const earliestEntry = normalizedEntries.slice().sort(function (left, right) {
+        const leftCreated = Number(left.createdAt || left.updatedAt || 0);
+        const rightCreated = Number(right.createdAt || right.updatedAt || 0);
+        if (leftCreated !== rightCreated) {
+          return leftCreated - rightCreated;
+        }
+        return Number(left.updatedAt || 0) - Number(right.updatedAt || 0);
+      })[0];
+      const restoreAnchor = normalizeLocalRestoreAnchor(stored[restoreAnchorKey]) || (earliestEntry ? {
+        scopeId,
+        currentUrl: trimSessionText(earliestEntry.currentUrl || "", 240),
+        domain: trimSessionText(earliestEntry.domain || "", CHAT_SESSION_TITLE_LIMIT),
+        tabTitle: trimSessionText(earliestEntry.tabTitle || "", 120),
+        createdAt: normalizeSessionNumber(earliestEntry.createdAt || earliestEntry.updatedAt, Date.now()),
+        sessionId: String(earliestEntry.id || "").trim()
+      } : null);
+      const title = trimSessionText((restoreAnchor && restoreAnchor.tabTitle) || latestEntry.tabTitle || latestEntry.title || strings.sessionUntitled, CHAT_SESSION_TITLE_LIMIT) || strings.sessionUntitled;
+      sessions.push({
+        id: scopeId,
+        scopeId,
+        title,
+        preview: latestEntry.preview || "",
+        createdAt: normalizeSessionNumber((restoreAnchor && restoreAnchor.createdAt) || earliestEntry.createdAt || earliestEntry.updatedAt, Date.now()),
+        updatedAt: normalizeSessionNumber(latestEntry.updatedAt, Date.now()),
+        sessionCount: normalizedEntries.length,
+        messageCount: normalizedEntries.reduce(function (total, entry) {
+          return total + Math.max(0, Number(entry.messageCount) || 0);
+        }, 0),
+        mode: normalizeSessionMode(latestEntry.mode),
+        selectedModel: trimSessionText(latestEntry.selectedModel || "", CHAT_SESSION_TITLE_LIMIT),
+        currentUrl: trimSessionText(latestEntry.currentUrl || "", 240),
+        domain: trimSessionText((restoreAnchor && restoreAnchor.domain) || earliestEntry.domain || latestEntry.domain || "", CHAT_SESSION_TITLE_LIMIT),
+        tabTitle: trimSessionText(latestEntry.tabTitle || "", 120),
+        anchorUrl: trimSessionText((restoreAnchor && restoreAnchor.currentUrl) || earliestEntry.currentUrl || latestEntry.currentUrl || "", 240),
+        anchorTabTitle: trimSessionText((restoreAnchor && restoreAnchor.tabTitle) || earliestEntry.tabTitle || "", 120),
+        latestSessionId: String(latestEntry.id || "").trim(),
+        entries: normalizedEntries.slice()
+      });
+    });
+    sessions.sort(function (left, right) {
+      return right.updatedAt - left.updatedAt;
+    });
+    return {
+      sessions,
+      totalCount: sessions.length
+    };
+  }
+  async function deleteLocalSessionEntry(session) {
+    const scopeId = normalizeSessionScopeId(session?.scopeId);
+    const prefix = chatScopeStoragePrefix(scopeId);
+    if (!scopeId || !prefix) {
+      return;
+    }
+    const stored = await chrome.storage.local.get(null);
+    const removeKeys = Object.keys(stored || {}).filter(function (key) {
+      return String(key || "").startsWith(prefix);
+    });
+    await chrome.storage.local.remove(removeKeys.filter(Boolean));
+  }
+  async function readLocalSessionSnapshot(scopeId, sessionId, strings) {
+    const normalizedScopeId = normalizeSessionScopeId(scopeId);
+    const normalizedSessionId = String(sessionId || "").trim();
+    const sessionKey = chatSessionStorageKey(normalizedScopeId, normalizedSessionId);
+    if (!normalizedScopeId || !normalizedSessionId || !sessionKey) {
+      return null;
+    }
+    const stored = await chrome.storage.local.get(sessionKey);
+    return normalizeLocalSessionSnapshot(stored[sessionKey], strings);
+  }
   function setStatus(node, kind, message) {
     node.dataset.kind = kind || "";
     if (node.classList.contains("cp-page-meta")) {
@@ -1925,6 +2420,9 @@
     if (value === "prompt" || value === "prompts") {
       return "prompt";
     }
+    if (value === "session" || value === "sessions") {
+      return "session";
+    }
     if (value === "true" || value === "provider") {
       return "provider";
     }
@@ -1933,11 +2431,14 @@
   function isProviderViewActive() {
     return getCustomSubview() === "provider";
   }
+  function isSessionViewActive() {
+    return getCustomSubview() === "session";
+  }
   function isPromptViewActive() {
     return getCustomSubview() === "prompt";
   }
   function setCustomSubview(view) {
-    const nextHash = view === "provider" ? "options?provider=true" : view === "prompt" ? "options?provider=prompt" : "options";
+    const nextHash = view === "provider" ? "options?provider=true" : view === "session" ? "options?provider=session" : view === "prompt" ? "options?provider=prompt" : "options";
     if (window.location.hash.replace(/^#/, "") !== nextHash) {
       window.location.hash = nextHash;
     }
@@ -1968,7 +2469,7 @@
   }
   function getNativeNavButtonClassNames(list, optionsItem) {
     const nativeButtons = Array.from((list || findSidebarNavList())?.children || []).filter(function (node) {
-      return node && node.id !== NAV_ITEM_ID && node.id !== PROMPT_NAV_ITEM_ID;
+      return node && node.id !== NAV_ITEM_ID && node.id !== SESSION_NAV_ITEM_ID && node.id !== PROMPT_NAV_ITEM_ID;
     }).map(findNavButton).filter(Boolean);
     const activeButton = nativeButtons.find(isNativeNavButtonActive) || findNavButton(optionsItem) || nativeButtons[0] || null;
     const inactiveButton = nativeButtons.find(function (button) {
@@ -2032,6 +2533,7 @@
       return null;
     }
     const providerActive = isProviderViewActive();
+    const sessionActive = isSessionViewActive();
     const promptActive = isPromptViewActive();
     const providerNavItem = ensureCustomNavItem({
       list,
@@ -2046,6 +2548,21 @@
           target: "provider"
         });
         setCustomSubview("provider");
+      }
+    });
+    const sessionNavItem = ensureCustomNavItem({
+      list,
+      optionsItem,
+      optionsButton,
+      id: SESSION_NAV_ITEM_ID,
+      label: strings.sessionTitle,
+      active: sessionActive,
+      onClick() {
+        debugLog("customProvider.nav.click", {
+          currentHash: location.hash,
+          target: "session"
+        });
+        setCustomSubview("session");
       }
     });
     const promptNavItem = ensureCustomNavItem({
@@ -2067,15 +2584,19 @@
     if (providerNavItem && optionsItem.nextElementSibling !== providerNavItem) {
       optionsItem.insertAdjacentElement("afterend", providerNavItem);
     }
-    if (promptNavItem && providerNavItem?.nextElementSibling !== promptNavItem) {
-      (providerNavItem || optionsItem).insertAdjacentElement("afterend", promptNavItem);
+    if (sessionNavItem && providerNavItem?.nextElementSibling !== sessionNavItem) {
+      (providerNavItem || optionsItem).insertAdjacentElement("afterend", sessionNavItem);
     }
-    const nextInactive = providerActive || promptActive;
+    if (promptNavItem && (sessionNavItem || providerNavItem)?.nextElementSibling !== promptNavItem) {
+      (sessionNavItem || providerNavItem || optionsItem).insertAdjacentElement("afterend", promptNavItem);
+    }
+    const nextInactive = providerActive || sessionActive || promptActive;
     if (optionsItem.classList.contains("cp-nav-override-inactive") !== nextInactive) {
       optionsItem.classList.toggle("cp-nav-override-inactive", nextInactive);
     }
     return {
       providerNavItem,
+      sessionNavItem,
       promptNavItem,
       nativeClassNames
     };
@@ -2208,7 +2729,8 @@
     apiKeyShell.appendChild(apiKeyInput);
     apiKeyShell.appendChild(apiKeyToggle);
     apiKeyField.appendChild(apiKeyShell);
-    const modelField = createNode("div", "cp-page-field");
+    const modelField = createNode("div", "cp-page-field cp-provider-summary-item cp-provider-editor-field cp-provider-editor-model-field");
+    modelField.dataset.field = "model";
     const pickerLabelRow = createNode("div", "cp-page-label-row");
     pickerLabelRow.appendChild(createNode("span", "cp-page-label", strings.defaultModelLabel));
     const modelMeta = createNode("span", "cp-page-meta", strings.fetchedModelsHint);
@@ -2228,12 +2750,27 @@
     modelActionGroup.appendChild(healthCheckButton);
     modelField.appendChild(pickerLabelRow);
     modelControlRow.appendChild(modelSelect);
-    modelControlRow.appendChild(modelActionGroup);
     modelField.appendChild(modelControlRow);
-    const reasoningField = createNode("div", "cp-page-field");
-    const reasoningLabelRow = createNode("div", "cp-page-split-label-row");
-    const reasoningControlRow = createNode("div", "cp-model-control-row");
+    const fastModelField = createNode("div", "cp-page-field cp-provider-summary-item cp-provider-editor-field");
+    fastModelField.dataset.field = "fastModel";
+    const fastModelLabelRow = createNode("div", "cp-page-label-row");
+    const fastModelSelect = createNode("select", `cp-page-select ${SHARED_FRAME_CLASS}`);
+    fastModelLabelRow.appendChild(createNode("span", "cp-page-label", strings.fastModelLabel));
+    const fastModelMeta = createNode("span", "cp-page-meta", strings.fastModelHelp);
+    fastModelLabelRow.appendChild(fastModelMeta);
+    fastModelSelect.title = strings.fastModelLabel;
+    fastModelField.appendChild(fastModelLabelRow);
+    fastModelField.appendChild(fastModelSelect);
+    const reasoningField = createNode("label", "cp-page-field cp-provider-summary-item cp-provider-editor-field");
+    reasoningField.dataset.field = "reasoning";
     const reasoningSelect = createNode("select", `cp-page-select ${SHARED_FRAME_CLASS}`);
+    reasoningSelect.title = strings.reasoningEffortLabel;
+    reasoningField.appendChild(createNode("span", "cp-page-label", strings.reasoningEffortLabel));
+    reasoningField.appendChild(reasoningSelect);
+    const contextWindowField = createNode("div", "cp-page-field cp-provider-summary-item cp-provider-editor-field");
+    contextWindowField.dataset.field = "contextWindow";
+    const contextWindowLabelRow = createNode("div", "cp-page-label-row");
+    contextWindowLabelRow.appendChild(createNode("span", "cp-page-label", strings.contextWindowLabel));
     const contextWindowShell = createNode("div", `cp-page-input-shell cp-context-window-shell ${SHARED_FRAME_CLASS}`);
     const contextWindowValue = createNode("div", "cp-context-window-value");
     const contextWindowInput = createNode("input", "cp-page-input cp-page-input-mono cp-context-window-input");
@@ -2252,17 +2789,36 @@
     contextWindowStepUp.setAttribute("aria-label", `${strings.contextWindowLabel} +${CONTEXT_WINDOW_STEP_K}k`);
     contextWindowStepDown.setAttribute("aria-label", `${strings.contextWindowLabel} -${CONTEXT_WINDOW_STEP_K}k`);
     appendReasoningEffortOptions(reasoningSelect);
-    reasoningLabelRow.appendChild(createNode("span", "cp-page-label", strings.reasoningEffortLabel));
-    reasoningLabelRow.appendChild(createNode("span", "cp-page-label", strings.contextWindowLabel));
-    reasoningField.appendChild(reasoningLabelRow);
-    reasoningControlRow.appendChild(reasoningSelect);
+    contextWindowField.appendChild(contextWindowLabelRow);
     contextWindowValue.appendChild(contextWindowInput);
     contextWindowShell.appendChild(contextWindowValue);
     contextWindowStepper.appendChild(contextWindowStepUp);
     contextWindowStepper.appendChild(contextWindowStepDown);
     contextWindowShell.appendChild(contextWindowStepper);
-    reasoningControlRow.appendChild(contextWindowShell);
-    reasoningField.appendChild(reasoningControlRow);
+    contextWindowField.appendChild(contextWindowShell);
+    const maxOutputTokensField = createNode("label", "cp-page-field cp-provider-summary-item cp-provider-editor-field");
+    maxOutputTokensField.dataset.field = "maxOutputTokens";
+    const maxOutputTokensInput = createNode("input", `cp-page-input cp-page-input-mono ${SHARED_FRAME_CLASS}`);
+    maxOutputTokensInput.type = "text";
+    maxOutputTokensInput.inputMode = "numeric";
+    maxOutputTokensInput.placeholder = strings.maxOutputTokensPlaceholder;
+    maxOutputTokensInput.setAttribute("aria-label", strings.maxOutputTokensLabel);
+    maxOutputTokensInput.title = strings.maxOutputTokensLabel;
+    maxOutputTokensInput.autocomplete = "off";
+    maxOutputTokensInput.spellcheck = false;
+    maxOutputTokensField.appendChild(createNode("span", "cp-page-label", strings.maxOutputTokensLabel));
+    maxOutputTokensField.appendChild(maxOutputTokensInput);
+    const primaryModelGrid = createNode("div", "cp-provider-summary-row cp-provider-editor-primary-row");
+    primaryModelGrid.dataset.columns = "2";
+    primaryModelGrid.appendChild(modelField);
+    primaryModelGrid.appendChild(fastModelField);
+    const tokenControlsGrid = createNode("div", "cp-provider-summary-row");
+    tokenControlsGrid.dataset.columns = "3";
+    tokenControlsGrid.appendChild(reasoningField);
+    tokenControlsGrid.appendChild(contextWindowField);
+    tokenControlsGrid.appendChild(maxOutputTokensField);
+    const modelActionsRow = createNode("div", "cp-provider-editor-action-row");
+    modelActionsRow.appendChild(modelActionGroup);
     const saveButton = createNode("button", "cp-provider-floating-btn px-6 py-3 bg-brand-100 text-oncolor-100 rounded-xl hover:bg-brand-100/90 transition-all font-large disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2", strings.saveAndApply);
     saveButton.type = "submit";
     saveButton.setAttribute("form", form.id);
@@ -2301,14 +2857,83 @@
     form.appendChild(identityGrid);
     form.appendChild(baseUrlField);
     form.appendChild(apiKeyField);
-    form.appendChild(modelField);
-    form.appendChild(reasoningField);
+    form.appendChild(primaryModelGrid);
+    form.appendChild(tokenControlsGrid);
+    form.appendChild(modelActionsRow);
     stack.appendChild(header);
     editorView.appendChild(editorToolbar);
     editorView.appendChild(form);
     stack.appendChild(listView);
     stack.appendChild(editorView);
     panel.appendChild(stack);
+    const sessionRoot = createNode("div", "space-y-6");
+    sessionRoot.id = SESSION_ROOT_ID;
+    const sessionPanel = createNode("section", "cp-page-card cp-page-panel bg-bg-100 border border-border-300 rounded-xl px-6 pt-6 pb-6 md:px-8 md:pt-8 md:pb-8");
+    const sessionStack = createNode("div", "cp-page-stack");
+    const sessionHeader = createNode("div", "cp-provider-header");
+    sessionHeader.appendChild(createNode("h3", "cp-page-heading text-text-100 font-xl-bold", strings.sessionTitle));
+    sessionHeader.appendChild(createNode("p", "cp-page-subheading text-text-300 font-base", strings.sessionSubtitle));
+    const sessionHeaderAction = createNode("div", "cp-provider-header-action");
+    const sessionHeaderButtons = createNode("div", "cp-page-btn-row");
+    const refreshSessionsButton = createNode("button", `cp-page-btn cp-page-btn-quiet ${SHARED_FRAME_CLASS}`, strings.sessionRefresh);
+    refreshSessionsButton.type = "button";
+    sessionHeaderButtons.appendChild(refreshSessionsButton);
+    sessionHeaderAction.appendChild(sessionHeaderButtons);
+    sessionHeader.appendChild(sessionHeaderAction);
+    const sessionSummaryMeta = createNode("div", "cp-page-meta");
+    const sessionListStatus = createNode("div", "cp-page-status");
+    const sessionEmptyState = createNode("div", "cp-provider-empty");
+    sessionEmptyState.appendChild(createNode("h4", "cp-provider-empty-title", strings.sessionEmptyTitle));
+    sessionEmptyState.appendChild(createNode("p", "cp-provider-empty-help", strings.sessionEmptyHelp));
+    const sessionCardList = createNode("div", "cp-provider-card-list");
+    const sessionBrowserOverlay = createNode("div", "cp-modal-backdrop");
+    sessionBrowserOverlay.hidden = true;
+    const sessionBrowserCard = createNode("div", "cp-page-card cp-modal-card cp-session-modal-card bg-bg-100 border border-border-300 rounded-xl px-6 pt-6 pb-6 md:px-8 md:pt-8 md:pb-8");
+    sessionBrowserCard.setAttribute("role", "dialog");
+    sessionBrowserCard.setAttribute("aria-modal", "true");
+    sessionBrowserCard.setAttribute("aria-label", strings.sessionHistoryTitle);
+    sessionBrowserCard.tabIndex = -1;
+    const sessionBrowserView = createNode("div", "cp-provider-view cp-session-modal-view");
+    sessionBrowserView.hidden = true;
+    const sessionBrowserToolbar = createNode("div", "cp-provider-editor-toolbar");
+    const sessionBrowserToolbarCopy = createNode("div", "cp-session-browser-copy");
+    const sessionBrowserTitle = createNode("h4", "cp-provider-editor-title", strings.sessionHistoryTitle);
+    const sessionBrowserHelp = createNode("p", "cp-provider-editor-help", strings.sessionHistorySubtitle);
+    sessionBrowserToolbarCopy.appendChild(sessionBrowserTitle);
+    sessionBrowserToolbarCopy.appendChild(sessionBrowserHelp);
+    const sessionBrowserBackButton = createNode("button", "cp-provider-floating-btn px-6 py-3 bg-bg-100 text-text-200 border border-border-300 rounded-xl hover:bg-bg-200 hover:text-text-100 transition-all font-large disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2", strings.backToList);
+    sessionBrowserBackButton.type = "button";
+    sessionBrowserToolbar.appendChild(sessionBrowserToolbarCopy);
+    sessionBrowserToolbar.appendChild(sessionBrowserBackButton);
+    const sessionBrowserScroll = createNode("div", "cp-session-modal-scroll");
+    const sessionBrowserStatus = createNode("div", "cp-page-status");
+    const sessionHistoryEmptyState = createNode("div", "cp-provider-empty cp-session-history-empty");
+    sessionHistoryEmptyState.appendChild(createNode("h4", "cp-provider-empty-title", strings.sessionEmptyTitle));
+    sessionHistoryEmptyState.appendChild(createNode("p", "cp-provider-empty-help", strings.sessionHistorySubtitle));
+    const sessionHistoryCardList = createNode("div", "cp-provider-card-list");
+    const sessionRecordView = createNode("div", "cp-provider-view");
+    sessionRecordView.hidden = true;
+    const sessionRecordList = createNode("div", "cp-session-record-list");
+    const sessionRecordEmptyState = createNode("div", "cp-provider-empty cp-session-history-empty");
+    sessionRecordEmptyState.hidden = true;
+    sessionRecordEmptyState.appendChild(createNode("h4", "cp-provider-empty-title", strings.sessionRecordEmpty));
+    sessionRecordView.appendChild(sessionRecordList);
+    sessionRecordView.appendChild(sessionRecordEmptyState);
+    sessionBrowserView.appendChild(sessionBrowserToolbar);
+    sessionBrowserScroll.appendChild(sessionBrowserStatus);
+    sessionBrowserScroll.appendChild(sessionHistoryEmptyState);
+    sessionBrowserScroll.appendChild(sessionHistoryCardList);
+    sessionBrowserScroll.appendChild(sessionRecordView);
+    sessionBrowserView.appendChild(sessionBrowserScroll);
+    sessionBrowserOverlay.appendChild(sessionBrowserCard);
+    sessionStack.appendChild(sessionHeader);
+    sessionStack.appendChild(sessionSummaryMeta);
+    sessionStack.appendChild(sessionListStatus);
+    sessionStack.appendChild(sessionEmptyState);
+    sessionStack.appendChild(sessionCardList);
+    sessionStack.appendChild(sessionBrowserView);
+    sessionPanel.appendChild(sessionStack);
+    sessionRoot.appendChild(sessionPanel);
     const promptRoot = createNode("div", "space-y-6");
     promptRoot.id = PROMPT_ROOT_ID;
     const promptPanel = createNode("section", "cp-page-card cp-page-panel bg-bg-100 border border-border-300 rounded-xl px-6 pt-6 pb-6 md:px-8 md:pt-8 md:pb-8");
@@ -2408,6 +3033,7 @@
     providerRoot.appendChild(panel);
     providerRoot.appendChild(editorFloatingShell);
     providerRoot.appendChild(manualModelOverlay);
+    document.body.appendChild(sessionBrowserOverlay);
     debugMountRoot.appendChild(debugPanel);
     const state = {
       profiles: [],
@@ -2428,10 +3054,25 @@
       editingProfileId: null,
       isSaving: false
     };
+    const sessionState = {
+      sessions: [],
+      totalCount: 0,
+      isRefreshing: false,
+      deletingSessionKeys: new Set(),
+      viewMode: "groups",
+      selectedGroupScopeId: "",
+      selectedSessionId: "",
+      selectedSessionSnapshot: null,
+      isLoadingSnapshot: false
+    };
     const formatDropdown = enhanceSelect(formatSelect);
     const modelDropdown = enhanceSelect(modelSelect);
+    const fastModelDropdown = enhanceSelect(fastModelSelect);
     const reasoningDropdown = enhanceSelect(reasoningSelect);
     modelSelect.__cpDeleteOption = function (value) {
+      removeManualModel(value);
+    };
+    fastModelSelect.__cpDeleteOption = function (value) {
       removeManualModel(value);
     };
     let isManualModelDialogOpen = false;
@@ -2464,7 +3105,7 @@
       return [next.format || DEFAULT_FORMAT, String(next.baseUrl || "").trim(), String(next.apiKey || "").trim()].join("::");
     }
     let cachedModelsHydrationToken = 0;
-    async function hydrateCachedModelsForConfig(config, selectedValue) {
+    async function hydrateCachedModelsForConfig(config, selectedValue, fastSelectedValue) {
       const identity = getProviderFetchIdentity(config);
       if (!identity || identity === `${DEFAULT_FORMAT}:::`) {
         return;
@@ -2481,7 +3122,7 @@
         return;
       }
       state.availableModels = mergeModelOptions(cachedModels, state.availableModels);
-      renderModelOptions(selectedValue || String(config?.defaultModel || "").trim() || modelSelect.value || "");
+      renderModelOptions(selectedValue || String(config?.defaultModel || "").trim() || modelSelect.value || "", (fastSelectedValue ?? String(config?.fastModel || "").trim()) || fastModelSelect.value || "");
     }
     async function persistFetchedModelsForEditor(config, models) {
       const persistedModels = await persistFetchedModelsForConfig(config, models);
@@ -2515,11 +3156,15 @@
         select.appendChild(node);
       });
     }
-    function syncReasoningEditorControls(reasoningEffort, contextWindow) {
+    function syncReasoningEditorControls(reasoningEffort, contextWindow, maxOutputTokens) {
       reasoningSelect.value = normalizeReasoningEffort(reasoningEffort);
+      maxOutputTokensInput.value = formatMaxOutputTokensForInput(maxOutputTokens);
       contextWindowInput.value = formatContextWindowForInput(contextWindow);
       contextWindowInput.style.width = getContextWindowInputWidth(contextWindowInput.value, contextWindowInput.placeholder);
       reasoningDropdown.refresh();
+    }
+    function readMaxOutputTokensValue() {
+      return normalizeMaxOutputTokens(maxOutputTokensInput.value, DEFAULT_MAX_OUTPUT_TOKENS);
     }
     function readContextWindowValue() {
       const numericK = parseContextWindowInputK(contextWindowInput.value);
@@ -2569,6 +3214,16 @@
         return profile.id === state.activeProfileId;
       }) || null;
     }
+    function getProfileSelectableModels(profile) {
+      const next = profile && typeof profile === "object" ? profile : {};
+      return mergeModelOptions(Array.isArray(next.fetchedModels) ? next.fetchedModels : [], [{
+        value: String(next.defaultModel || "").trim(),
+        label: String(next.defaultModel || "").trim()
+      }, {
+        value: String(next.fastModel || "").trim(),
+        label: String(next.fastModel || "").trim()
+      }]);
+    }
     function cleanupCardDropdowns() {
       for (const controller of state.cardDropdownControllers) {
         try {
@@ -2577,9 +3232,12 @@
       }
       state.cardDropdownControllers = [];
     }
-    async function handleInlineModelChange(profile, select, controller) {
+    async function handleInlineModelChange(profile, select, controller, fieldName, successMessage) {
       const nextModel = String(select?.value || "").trim();
-      if (!nextModel || nextModel === String(profile?.defaultModel || "").trim()) {
+      if (fieldName === "defaultModel" && !nextModel) {
+        return;
+      }
+      if (nextModel === String(profile?.[fieldName] || "").trim()) {
         return;
       }
       try {
@@ -2588,21 +3246,21 @@
         controller?.refresh?.();
         const stored = await saveProviderProfile({
           ...profile,
-          defaultModel: nextModel
+          [fieldName]: nextModel
         }, {
           profileId: profile.id,
           activateOnSave: false
         });
         applyStoredState(stored);
         renderProfileCards();
-        setStatus(listStatus, "success", strings.inlineModelSaved);
+        setStatus(listStatus, "success", successMessage);
       } catch (error) {
         select.disabled = false;
         controller?.refresh?.();
         setStatus(listStatus, "error", error && typeof error.message === "string" ? error.message : strings.saveFailure);
       }
     }
-    async function ensureCardModelsLoaded(profile, select, controller) {
+    async function ensureCardModelsLoaded(profile, select, controller, selectedValue) {
       const next = normalizeConfig(profile, false);
       try {
         const fetchedModels = mergeModelOptions(await fetchProviderModels(next), Array.isArray(profile?.fetchedModels) ? profile.fetchedModels : []);
@@ -2622,11 +3280,11 @@
           activateOnSave: false
         });
         applyStoredState(stored);
-        syncModelOptions(select, persistedModels, String(profile?.defaultModel || "").trim());
+        syncModelOptions(select, persistedModels, String(selectedValue || "").trim());
         controller?.refresh?.();
       } catch (error) {
         controller?.refresh?.();
-        setStatus(listStatus, "error", error && typeof error.message === "string" ? error.message : strings.fetchFailure);
+        setStatus(listStatus, "error", getReadableErrorMessage(error, strings.fetchFailure));
       }
     }
     async function handleInlineReasoningChange(profile, select, controller) {
@@ -2651,6 +3309,59 @@
       } catch (error) {
         select.disabled = false;
         controller?.refresh?.();
+        setStatus(listStatus, "error", error && typeof error.message === "string" ? error.message : strings.saveFailure);
+      }
+    }
+    async function handleInlineMaxOutputTokensChange(profile, input) {
+      const nextMaxOutputTokens = normalizeMaxOutputTokens(input?.value, DEFAULT_MAX_OUTPUT_TOKENS);
+      if (nextMaxOutputTokens === normalizeMaxOutputTokens(profile?.maxOutputTokens, DEFAULT_MAX_OUTPUT_TOKENS)) {
+        input.value = String(nextMaxOutputTokens);
+        return;
+      }
+      try {
+        setStatus(listStatus, "", "");
+        input.disabled = true;
+        input.value = String(nextMaxOutputTokens);
+        const stored = await saveProviderProfile({
+          ...profile,
+          maxOutputTokens: nextMaxOutputTokens
+        }, {
+          profileId: profile.id,
+          activateOnSave: false
+        });
+        applyStoredState(stored);
+        renderProfileCards();
+        setStatus(listStatus, "success", strings.inlineMaxOutputTokensSaved);
+      } catch (error) {
+        input.disabled = false;
+        input.value = String(normalizeMaxOutputTokens(profile?.maxOutputTokens, DEFAULT_MAX_OUTPUT_TOKENS));
+        setStatus(listStatus, "error", error && typeof error.message === "string" ? error.message : strings.saveFailure);
+      }
+    }
+    async function handleInlineContextWindowChange(profile, input) {
+      const rawValue = Number(String(input?.value ?? "").trim().replace(/[kK]/g, ""));
+      const nextContextWindow = Number.isFinite(rawValue) && rawValue > 0 ? normalizeContextWindow(rawValue * 1000, DEFAULT_CONTEXT_WINDOW) : normalizeContextWindow(DEFAULT_CONTEXT_WINDOW, DEFAULT_CONTEXT_WINDOW);
+      if (nextContextWindow === normalizeContextWindow(profile?.contextWindow, DEFAULT_CONTEXT_WINDOW)) {
+        input.value = formatContextWindowForInput(nextContextWindow);
+        return;
+      }
+      try {
+        setStatus(listStatus, "", "");
+        input.disabled = true;
+        input.value = formatContextWindowForInput(nextContextWindow);
+        const stored = await saveProviderProfile({
+          ...profile,
+          contextWindow: nextContextWindow
+        }, {
+          profileId: profile.id,
+          activateOnSave: false
+        });
+        applyStoredState(stored);
+        renderProfileCards();
+        setStatus(listStatus, "success", strings.inlineContextWindowSaved);
+      } catch (error) {
+        input.disabled = false;
+        input.value = formatContextWindowForInput(normalizeContextWindow(profile?.contextWindow, DEFAULT_CONTEXT_WINDOW));
         setStatus(listStatus, "error", error && typeof error.message === "string" ? error.message : strings.saveFailure);
       }
     }
@@ -2948,6 +3659,338 @@
         updatePromptControls();
       }
     }
+    function getSessionDisplayUrl(session) {
+      return trimSessionText(session?.anchorUrl || session?.currentUrl || session?.domain || session?.scopeId || "", 240);
+    }
+    function getSessionIdentityKey(session) {
+      return normalizeSessionScopeId(session?.scopeId) || String(session?.id || "").trim();
+    }
+    function getSessionDisplayTitle(session) {
+      return trimSessionText(getSessionDisplayUrl(session) || session?.title || session?.anchorTabTitle || session?.tabTitle || strings.notConfigured, 240) || strings.notConfigured;
+    }
+    function getSelectedSessionGroup() {
+      return sessionState.sessions.find(function (entry) {
+        return normalizeSessionScopeId(entry?.scopeId) === normalizeSessionScopeId(sessionState.selectedGroupScopeId);
+      }) || null;
+    }
+    function getSelectedGroupEntries() {
+      const group = getSelectedSessionGroup();
+      return Array.isArray(group?.entries) ? group.entries.slice() : [];
+    }
+    function getSelectedSessionMeta() {
+      const selectedSessionId = String(sessionState.selectedSessionId || "").trim();
+      if (!selectedSessionId) {
+        return null;
+      }
+      return getSelectedGroupEntries().find(function (entry) {
+        return String(entry?.id || "").trim() === selectedSessionId;
+      }) || null;
+    }
+    function getSessionRoleLabel(role) {
+      const normalizedRole = String(role || "").trim().toLowerCase();
+      if (normalizedRole === "user") {
+        return strings.sessionRoleUser;
+      }
+      if (normalizedRole === "assistant") {
+        return strings.sessionRoleAssistant;
+      }
+      if (normalizedRole === "system") {
+        return strings.sessionRoleSystem;
+      }
+      if (normalizedRole.indexOf("tool") !== -1) {
+        return strings.sessionRoleTool;
+      }
+      return strings.sessionRoleUnknown;
+    }
+    function mountSessionBrowserInline() {
+      if (sessionBrowserView.parentNode !== sessionStack) {
+        sessionStack.appendChild(sessionBrowserView);
+      }
+    }
+    function mountSessionBrowserModal() {
+      if (sessionBrowserView.parentNode !== sessionBrowserCard) {
+        sessionBrowserCard.appendChild(sessionBrowserView);
+      }
+    }
+    function updateSessionViewModeUi() {
+      const isGroupList = sessionState.viewMode === "groups";
+      const isRecord = sessionState.viewMode === "record";
+      const selectedGroup = getSelectedSessionGroup();
+      const hasSessions = sessionState.sessions.length > 0;
+      if (isRecord) {
+        mountSessionBrowserModal();
+      } else {
+        mountSessionBrowserInline();
+      }
+      sessionCardList.hidden = !isGroupList || !hasSessions;
+      sessionEmptyState.hidden = !isGroupList || hasSessions;
+      sessionBrowserOverlay.hidden = !isRecord;
+      sessionBrowserView.hidden = isGroupList;
+      sessionBrowserBackButton.hidden = isGroupList;
+      sessionHistoryCardList.hidden = isRecord;
+      sessionHistoryEmptyState.hidden = isRecord || getSelectedGroupEntries().length > 0;
+      sessionRecordView.hidden = !isRecord;
+      sessionSummaryMeta.hidden = false;
+      sessionHeaderButtons.hidden = false;
+      sessionBrowserCard.setAttribute("aria-hidden", isGroupList ? "true" : "false");
+      if (isGroupList) {
+        return;
+      }
+      if (isRecord) {
+        const selectedSession = getSelectedSessionMeta();
+        sessionBrowserTitle.textContent = selectedSession?.title || strings.sessionRecordTitle;
+        sessionBrowserHelp.textContent = selectedGroup ? getSessionDisplayTitle(selectedGroup) : strings.sessionRecordSubtitle;
+        sessionBrowserBackButton.textContent = strings.sessionBackToHistory;
+      } else {
+        sessionBrowserTitle.textContent = selectedGroup ? getSessionDisplayTitle(selectedGroup) : strings.sessionHistoryTitle;
+        sessionBrowserHelp.textContent = selectedGroup?.title || strings.sessionHistorySubtitle;
+        sessionBrowserBackButton.textContent = strings.backToList;
+      }
+    }
+    function renderSessionRecord() {
+      sessionRecordList.innerHTML = "";
+      const snapshot = sessionState.selectedSessionSnapshot;
+      const selectedSession = getSelectedSessionMeta();
+      if (!snapshot || !Array.isArray(snapshot.messages) || snapshot.messages.length === 0) {
+        sessionRecordEmptyState.hidden = false;
+        if (selectedSession) {
+          sessionRecordEmptyState.querySelector(".cp-provider-empty-title").textContent = strings.sessionRecordEmpty;
+        }
+        return;
+      }
+      sessionRecordEmptyState.hidden = true;
+      snapshot.messages.forEach(function (message) {
+        const item = createNode("div", "cp-session-record-item");
+        item.dataset.role = String(message?.role || "").trim().toLowerCase();
+        const meta = createNode("div", "cp-session-record-meta");
+        meta.appendChild(createNode("span", "cp-session-record-role", getSessionRoleLabel(message?.role)));
+        if (selectedSession?.updatedAt) {
+          meta.appendChild(createNode("span", "cp-provider-summary-label", formatTimestamp(selectedSession.updatedAt)));
+        }
+        item.appendChild(meta);
+        item.appendChild(createNode("p", "cp-session-record-content", String(message?.text || "")));
+        sessionRecordList.appendChild(item);
+      });
+    }
+    function renderSessionHistoryCards() {
+      sessionHistoryCardList.innerHTML = "";
+      const entries = getSelectedGroupEntries();
+      entries.forEach(function (entry) {
+        const isSelected = String(entry?.id || "").trim() === String(sessionState.selectedSessionId || "").trim();
+        const card = createNode("div", "cp-provider-card cp-page-card cp-page-panel bg-bg-100 border border-border-300 rounded-xl px-6 pt-6 pb-6 md:px-8 md:pt-8 md:pb-8");
+        const cardHeader = createNode("div", "cp-provider-card-header");
+        const titleWrap = createNode("div", "cp-provider-card-title-wrap");
+        const titleRow = createNode("div", "cp-provider-card-title-row");
+        titleRow.appendChild(createNode("h4", "cp-provider-card-title", trimSessionText(entry?.title || strings.sessionUntitled, CHAT_SESSION_TITLE_LIMIT) || strings.sessionUntitled));
+        titleWrap.appendChild(titleRow);
+        titleWrap.appendChild(createNode("p", "cp-provider-card-subtitle", trimSessionText(entry?.preview || entry?.tabTitle || strings.notConfigured, CHAT_SESSION_PREVIEW_LIMIT) || strings.notConfigured));
+        cardHeader.appendChild(titleWrap);
+        const summary = createNode("div", "cp-provider-summary");
+        const summaryRow = createNode("div", "cp-provider-summary-row");
+        summaryRow.dataset.columns = "3";
+        summaryRow.appendChild(createSessionSummaryItem(strings.sessionUpdatedAtLabel, formatTimestamp(entry.updatedAt)));
+        summaryRow.appendChild(createSessionSummaryItem(strings.sessionMessagesLabel, String(entry.messageCount || 0)));
+        summaryRow.appendChild(createSessionSummaryItem(strings.sessionModelLabel, entry.selectedModel || strings.notConfigured, {
+          mono: true,
+          truncate: true
+        }));
+        summary.appendChild(summaryRow);
+        const actionRow = createNode("div", "cp-provider-card-actions");
+        const openButton = createNode("button", "px-6 py-3 bg-bg-100 text-text-200 border border-border-300 rounded-xl hover:bg-bg-200 hover:text-text-100 transition-all font-large disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2", strings.sessionViewRecord);
+        openButton.type = "button";
+        openButton.disabled = sessionState.isLoadingSnapshot && isSelected;
+        openButton.addEventListener("click", function () {
+          openSessionRecord(entry).catch(function () {});
+        });
+        actionRow.appendChild(openButton);
+        card.appendChild(cardHeader);
+        card.appendChild(summary);
+        card.appendChild(actionRow);
+        sessionHistoryCardList.appendChild(card);
+      });
+    }
+    async function openSessionRecord(entry) {
+      const group = getSelectedSessionGroup();
+      if (!group || !entry?.id) {
+        return;
+      }
+      sessionState.selectedSessionId = String(entry.id || "").trim();
+      sessionState.isLoadingSnapshot = true;
+      sessionState.selectedSessionSnapshot = null;
+      sessionState.viewMode = "record";
+      updateSessionViewModeUi();
+      renderSessionRecord();
+      requestAnimationFrame(function () {
+        sessionBrowserCard.focus();
+      });
+      setStatus(sessionBrowserStatus, "loading", strings.sessionRefreshing);
+      try {
+        const snapshot = await readLocalSessionSnapshot(group.scopeId, entry.id, strings);
+        sessionState.selectedSessionSnapshot = snapshot;
+        renderSessionRecord();
+        setStatus(sessionBrowserStatus, "", "");
+      } catch (error) {
+        sessionState.selectedSessionSnapshot = null;
+        renderSessionRecord();
+        setStatus(sessionBrowserStatus, "error", error && typeof error.message === "string" ? error.message : strings.sessionRecordLoadFailure);
+      } finally {
+        sessionState.isLoadingSnapshot = false;
+      }
+    }
+    function openSessionGroup(group) {
+      sessionState.selectedGroupScopeId = normalizeSessionScopeId(group?.scopeId);
+      sessionState.selectedSessionId = "";
+      sessionState.selectedSessionSnapshot = null;
+      sessionState.viewMode = "history";
+      setStatus(sessionBrowserStatus, "", "");
+      renderSessionHistoryCards();
+      updateSessionViewModeUi();
+    }
+    function closeSessionRecordDialog() {
+      if (sessionState.viewMode !== "record") {
+        return;
+      }
+      sessionState.viewMode = "history";
+      sessionState.selectedSessionId = "";
+      sessionState.selectedSessionSnapshot = null;
+      sessionState.isLoadingSnapshot = false;
+      setStatus(sessionBrowserStatus, "", "");
+      renderSessionHistoryCards();
+      updateSessionViewModeUi();
+    }
+    function handleSessionBrowserBack() {
+      if (sessionState.viewMode === "record") {
+        closeSessionRecordDialog();
+        return;
+      }
+      sessionState.viewMode = "groups";
+      sessionState.selectedGroupScopeId = "";
+      sessionState.selectedSessionId = "";
+      sessionState.selectedSessionSnapshot = null;
+      sessionState.isLoadingSnapshot = false;
+      setStatus(sessionBrowserStatus, "", "");
+      updateSessionViewModeUi();
+    }
+    function updateSessionControls() {
+      refreshSessionsButton.disabled = sessionState.isRefreshing;
+      refreshSessionsButton.textContent = sessionState.isRefreshing ? strings.sessionRefreshing : strings.sessionRefresh;
+    }
+    function createSessionSummaryItem(label, value, options) {
+      const config = options && typeof options === "object" ? options : {};
+      const item = createNode("div", "cp-provider-summary-item");
+      item.appendChild(createNode("span", "cp-provider-summary-label", label));
+      const text = createNode("span", "cp-provider-summary-value", value || strings.notConfigured);
+      if (config.mono) {
+        text.dataset.mono = "true";
+      }
+      if (config.multiline) {
+        text.dataset.truncate = "multiline";
+      } else if (config.truncate) {
+        text.dataset.truncate = "true";
+      }
+      item.appendChild(text);
+      return item;
+    }
+    function renderSessionCards() {
+      sessionCardList.innerHTML = "";
+      sessionEmptyState.hidden = sessionState.sessions.length > 0;
+      sessionSummaryMeta.textContent = sessionState.totalCount ? strings.sessionListCount.replace("{count}", String(sessionState.totalCount)) : "";
+      sessionSummaryMeta.dataset.tone = sessionState.totalCount ? "ready" : "";
+      sessionState.sessions.forEach(function (session) {
+        const sessionKey = getSessionIdentityKey(session);
+        const isDeleting = sessionState.deletingSessionKeys.has(sessionKey);
+        const latestTabTitle = trimSessionText(session?.tabTitle || "", 120);
+        const subtitle = trimSessionText(session?.title || latestTabTitle || session?.anchorTabTitle || strings.notConfigured, CHAT_SESSION_PREVIEW_LIMIT) || strings.notConfigured;
+        const card = createNode("div", "cp-provider-card cp-page-card cp-page-panel bg-bg-100 border border-border-300 rounded-xl px-6 pt-6 pb-6 md:px-8 md:pt-8 md:pb-8");
+        const cardHeader = createNode("div", "cp-provider-card-header");
+        const titleWrap = createNode("div", "cp-provider-card-title-wrap");
+        const titleRow = createNode("div", "cp-provider-card-title-row");
+        titleRow.appendChild(createNode("h4", "cp-provider-card-title", getSessionDisplayTitle(session)));
+        titleWrap.appendChild(titleRow);
+        titleWrap.appendChild(createNode("p", "cp-provider-card-subtitle", subtitle || strings.notConfigured));
+        cardHeader.appendChild(titleWrap);
+        const summary = createNode("div", "cp-provider-summary");
+        const summaryTopRow = createNode("div", "cp-provider-summary-row");
+        summaryTopRow.dataset.columns = "3";
+        summaryTopRow.appendChild(createSessionSummaryItem(strings.sessionUpdatedAtLabel, formatTimestamp(session.updatedAt)));
+        summaryTopRow.appendChild(createSessionSummaryItem(strings.sessionGroupCountLabel, String(session.sessionCount || 0)));
+        summaryTopRow.appendChild(createSessionSummaryItem(strings.sessionTotalMessagesLabel, String(session.messageCount || 0)));
+        summary.appendChild(summaryTopRow);
+        const actionRow = createNode("div", "cp-provider-card-actions");
+        const viewButton = createNode("button", "px-6 py-3 bg-bg-100 text-text-200 border border-border-300 rounded-xl hover:bg-bg-200 hover:text-text-100 transition-all font-large disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2", strings.sessionView);
+        viewButton.type = "button";
+        viewButton.disabled = isDeleting;
+        viewButton.addEventListener("click", function () {
+          openSessionGroup(session);
+        });
+        const deleteButton = createNode("button", "px-6 py-3 bg-bg-100 text-danger-100 border border-border-300 rounded-xl hover:bg-bg-200 transition-all font-large disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2", strings.sessionDelete);
+        deleteButton.type = "button";
+        deleteButton.disabled = isDeleting;
+        deleteButton.addEventListener("click", function () {
+          handleDeleteSession(session).catch(function () {});
+        });
+        actionRow.appendChild(viewButton);
+        actionRow.appendChild(deleteButton);
+        card.appendChild(cardHeader);
+        card.appendChild(summary);
+        card.appendChild(actionRow);
+        sessionCardList.appendChild(card);
+      });
+    }
+    async function refreshSessions() {
+      sessionState.isRefreshing = true;
+      updateSessionControls();
+      try {
+        const stored = await getSessionStoreState(strings);
+        sessionState.sessions = stored.sessions;
+        sessionState.totalCount = stored.totalCount;
+        if (sessionState.selectedGroupScopeId && !getSelectedSessionGroup()) {
+          sessionState.viewMode = "groups";
+          sessionState.selectedGroupScopeId = "";
+          sessionState.selectedSessionId = "";
+          sessionState.selectedSessionSnapshot = null;
+        }
+        renderSessionCards();
+        renderSessionHistoryCards();
+        renderSessionRecord();
+        updateSessionViewModeUi();
+      } finally {
+        sessionState.isRefreshing = false;
+        updateSessionControls();
+      }
+    }
+    async function handleSessionRefresh(showLoadingStatus) {
+      if (showLoadingStatus) {
+        setStatus(sessionListStatus, "loading", strings.sessionRefreshing);
+      }
+      try {
+        await refreshSessions();
+        if (showLoadingStatus) {
+          setStatus(sessionListStatus, "", "");
+        }
+      } catch (error) {
+        setStatus(sessionListStatus, "error", error && typeof error.message === "string" ? error.message : strings.sessionLoadFailure);
+      }
+    }
+    async function handleDeleteSession(session) {
+      const label = session?.title || strings.sessionUntitled;
+      if (!window.confirm(strings.sessionDeleteConfirm.replace("{name}", label))) {
+        return;
+      }
+      const sessionKey = getSessionIdentityKey(session);
+      sessionState.deletingSessionKeys.add(sessionKey);
+      renderSessionCards();
+      try {
+        await deleteLocalSessionEntry(session);
+        await refreshSessions();
+        setStatus(sessionListStatus, "success", strings.sessionDeleted);
+      } catch (error) {
+        setStatus(sessionListStatus, "error", error && typeof error.message === "string" ? error.message : strings.sessionDeleteFailure);
+      } finally {
+        sessionState.deletingSessionKeys.delete(sessionKey);
+        renderSessionCards();
+      }
+    }
     function renderProfileCards() {
       cleanupCardDropdowns();
       profileCardList.innerHTML = "";
@@ -2955,10 +3998,14 @@
       emptyState.hidden = profiles.length > 0;
       profiles.forEach(function (profile, index) {
         const isActive = profile.id === state.activeProfileId;
+        const cardModelOptions = getProfileSelectableModels(profile);
         const card = createNode("div", "cp-provider-card cp-page-card cp-page-panel bg-bg-100 border border-border-300 rounded-xl px-6 pt-6 pb-6 md:px-8 md:pt-8 md:pb-8");
         const cardHeader = createNode("div", "cp-provider-card-header");
         const titleWrap = createNode("div", "cp-provider-card-title-wrap");
-        titleWrap.appendChild(createNode("h4", "cp-provider-card-title", getProfileDisplayName(profile, index)));
+        const titleRow = createNode("div", "cp-provider-card-title-row");
+        titleRow.appendChild(createNode("h4", "cp-provider-card-title", getProfileDisplayName(profile, index)));
+        titleRow.appendChild(createNode("span", "cp-provider-badge", getFormatLabel(profile.format)));
+        titleWrap.appendChild(titleRow);
         titleWrap.appendChild(createNode("p", "cp-provider-card-subtitle", String(profile.baseUrl || "").trim() || strings.notConfigured));
         cardHeader.appendChild(titleWrap);
         if (isActive) {
@@ -2967,45 +4014,88 @@
           cardHeader.appendChild(badge);
         }
         const summary = createNode("div", "cp-provider-summary");
-        [[strings.formatSummaryLabel, getFormatLabel(profile.format), false, "format"], [strings.modelSummaryLabel, String(profile.defaultModel || "").trim() || strings.notConfigured, true, "model"], [strings.reasoningEffortLabel, normalizeReasoningEffort(profile.reasoningEffort), false, "reasoning"]].forEach(function (entry) {
+        const summaryTopRow = createNode("div", "cp-provider-summary-row");
+        summaryTopRow.dataset.columns = "2";
+        const summaryBottomRow = createNode("div", "cp-provider-summary-row");
+        summaryBottomRow.dataset.columns = "3";
+        [["model", strings.modelSummaryLabel, String(profile.defaultModel || "").trim()], ["fastModel", strings.fastModelSummaryLabel, String(profile.fastModel || "").trim()]].forEach(function (entry) {
           const item = createNode("div", "cp-provider-summary-item");
-          item.dataset.field = entry[3];
-          item.appendChild(createNode("span", "cp-provider-summary-label", entry[0]));
-          if (entry[3] === "model") {
-            const modelShell = createNode("div", "cp-provider-inline-control");
-            const modelSelectInline = createNode("select", `cp-page-select ${SHARED_FRAME_CLASS}`);
-            syncModelOptions(modelSelectInline, Array.isArray(profile.fetchedModels) ? profile.fetchedModels : [], String(profile.defaultModel || "").trim());
-            modelShell.appendChild(modelSelectInline);
-            item.appendChild(modelShell);
-            const inlineDropdownController = enhanceSelect(modelSelectInline);
-            modelSelectInline.__cpBeforeOpen = function () {
-              return ensureCardModelsLoaded(profile, modelSelectInline, inlineDropdownController);
-            };
-            state.cardDropdownControllers.push(inlineDropdownController);
-            modelSelectInline.addEventListener("change", function () {
-              handleInlineModelChange(profile, modelSelectInline, inlineDropdownController).catch(function () {});
-            });
-          } else if (entry[3] === "reasoning") {
-            const reasoningShell = createNode("div", "cp-provider-inline-control");
-            const reasoningSelectInline = createNode("select", `cp-page-select ${SHARED_FRAME_CLASS}`);
-            appendReasoningEffortOptions(reasoningSelectInline);
-            reasoningSelectInline.value = normalizeReasoningEffort(profile.reasoningEffort);
-            reasoningShell.appendChild(reasoningSelectInline);
-            item.appendChild(reasoningShell);
-            const inlineDropdownController = enhanceSelect(reasoningSelectInline);
-            state.cardDropdownControllers.push(inlineDropdownController);
-            reasoningSelectInline.addEventListener("change", function () {
-              handleInlineReasoningChange(profile, reasoningSelectInline, inlineDropdownController).catch(function () {});
-            });
-          } else {
-            const value = createNode("span", "cp-provider-summary-value", entry[1]);
-            if (entry[2]) {
-              value.dataset.mono = "true";
-            }
-            item.appendChild(value);
-          }
-          summary.appendChild(item);
+          item.dataset.field = entry[0];
+          item.appendChild(createNode("span", "cp-provider-summary-label", entry[1]));
+          const modelShell = createNode("div", "cp-provider-inline-control");
+          const modelSelectInline = createNode("select", `cp-page-select ${SHARED_FRAME_CLASS}`);
+          syncModelOptions(modelSelectInline, cardModelOptions, entry[2]);
+          modelShell.appendChild(modelSelectInline);
+          item.appendChild(modelShell);
+          const inlineDropdownController = enhanceSelect(modelSelectInline);
+          modelSelectInline.__cpBeforeOpen = function () {
+            return ensureCardModelsLoaded(profile, modelSelectInline, inlineDropdownController, entry[2]);
+          };
+          state.cardDropdownControllers.push(inlineDropdownController);
+          modelSelectInline.addEventListener("change", function () {
+            const fieldName = entry[0] === "fastModel" ? "fastModel" : "defaultModel";
+            const successMessage = entry[0] === "fastModel" ? strings.inlineFastModelSaved : strings.inlineModelSaved;
+            handleInlineModelChange(profile, modelSelectInline, inlineDropdownController, fieldName, successMessage).catch(function () {});
+          });
+          summaryTopRow.appendChild(item);
         });
+        const reasoningItem = createNode("div", "cp-provider-summary-item");
+        reasoningItem.dataset.field = "reasoning";
+        reasoningItem.appendChild(createNode("span", "cp-provider-summary-label", strings.reasoningEffortLabel));
+        const reasoningShell = createNode("div", "cp-provider-inline-control");
+        const reasoningSelectInline = createNode("select", `cp-page-select ${SHARED_FRAME_CLASS}`);
+        appendReasoningEffortOptions(reasoningSelectInline);
+        reasoningSelectInline.value = normalizeReasoningEffort(profile.reasoningEffort);
+        reasoningShell.appendChild(reasoningSelectInline);
+        reasoningItem.appendChild(reasoningShell);
+        const inlineDropdownController = enhanceSelect(reasoningSelectInline);
+        state.cardDropdownControllers.push(inlineDropdownController);
+        reasoningSelectInline.addEventListener("change", function () {
+          handleInlineReasoningChange(profile, reasoningSelectInline, inlineDropdownController).catch(function () {});
+        });
+        summaryBottomRow.appendChild(reasoningItem);
+        const contextWindowItem = createNode("div", "cp-provider-summary-item");
+        contextWindowItem.dataset.field = "contextWindow";
+        contextWindowItem.appendChild(createNode("span", "cp-provider-summary-label", strings.contextWindowLabel));
+        const contextWindowShell = createNode("div", "cp-provider-inline-control");
+        const contextWindowInline = createNode("input", `cp-page-input cp-page-input-mono ${SHARED_FRAME_CLASS}`);
+        contextWindowInline.type = "text";
+        contextWindowInline.inputMode = "numeric";
+        contextWindowInline.value = formatContextWindowForInput(profile.contextWindow);
+        contextWindowShell.appendChild(contextWindowInline);
+        contextWindowItem.appendChild(contextWindowShell);
+        contextWindowInline.addEventListener("change", function () {
+          handleInlineContextWindowChange(profile, contextWindowInline).catch(function () {});
+        });
+        contextWindowInline.addEventListener("keydown", function (event) {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            contextWindowInline.blur();
+          }
+        });
+        summaryBottomRow.appendChild(contextWindowItem);
+        const maxOutputTokensItem = createNode("div", "cp-provider-summary-item");
+        maxOutputTokensItem.dataset.field = "maxOutputTokens";
+        maxOutputTokensItem.appendChild(createNode("span", "cp-provider-summary-label", strings.maxOutputTokensLabel));
+        const maxOutputTokensShell = createNode("div", "cp-provider-inline-control");
+        const maxOutputTokensInline = createNode("input", `cp-page-input cp-page-input-mono ${SHARED_FRAME_CLASS}`);
+        maxOutputTokensInline.type = "text";
+        maxOutputTokensInline.inputMode = "numeric";
+        maxOutputTokensInline.value = String(normalizeMaxOutputTokens(profile.maxOutputTokens, DEFAULT_MAX_OUTPUT_TOKENS));
+        maxOutputTokensShell.appendChild(maxOutputTokensInline);
+        maxOutputTokensItem.appendChild(maxOutputTokensShell);
+        maxOutputTokensInline.addEventListener("change", function () {
+          handleInlineMaxOutputTokensChange(profile, maxOutputTokensInline).catch(function () {});
+        });
+        maxOutputTokensInline.addEventListener("keydown", function (event) {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            maxOutputTokensInline.blur();
+          }
+        });
+        summaryBottomRow.appendChild(maxOutputTokensItem);
+        summary.appendChild(summaryTopRow);
+        summary.appendChild(summaryBottomRow);
         const actionRow = createNode("div", "cp-provider-card-actions");
         const activateButton = createNode("button", "px-6 py-3 bg-bg-100 text-text-200 border border-border-300 rounded-xl hover:bg-bg-200 hover:text-text-100 transition-all font-large disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2", isActive ? strings.activeProfile : strings.activateProfile);
         activateButton.type = "button";
@@ -3064,7 +4154,7 @@
       setStatus(listStatus, "", "");
       setEditorStatus("", "");
       updateEditorModeUi();
-      hydrateCachedModelsForConfig(profile || createEmptyConfig(), String((profile || createEmptyConfig()).defaultModel || "").trim()).catch(function () {});
+      hydrateCachedModelsForConfig(profile || createEmptyConfig(), String((profile || createEmptyConfig()).defaultModel || "").trim(), String((profile || createEmptyConfig()).fastModel || "").trim()).catch(function () {});
     }
     function openManualModelDialog() {
       closeActiveDropdown();
@@ -3133,15 +4223,20 @@
       }
       updateModelMeta(compactStatusMessage(message, fallback || ""), kind === "success" ? "ready" : kind === "error" ? "error" : kind === "loading" ? "loading" : "");
     }
-    function renderModelOptions(selectedValue) {
-      syncModelOptions(modelSelect, state.availableModels, selectedValue);
+    function renderModelOptions(selectedValue, fastSelectedValue) {
+      const resolvedSelectedValue = selectedValue === undefined ? modelSelect.value : selectedValue;
+      const resolvedFastSelectedValue = fastSelectedValue === undefined ? fastModelSelect.value : fastSelectedValue;
+      syncModelOptions(modelSelect, state.availableModels, resolvedSelectedValue);
+      syncModelOptions(fastModelSelect, state.availableModels, resolvedFastSelectedValue);
       modelDropdown.refresh();
+      fastModelDropdown.refresh();
       restoreModelMeta();
     }
     function clearModels() {
       const currentModel = modelSelect.value;
+      const currentFastModel = fastModelSelect.value;
       state.availableModels = [];
-      renderModelOptions(currentModel);
+      renderModelOptions(currentModel, currentFastModel);
     }
     function updateRequestPreview() {
       const previewUrl = buildRequestUrl(baseUrlInput.value, formatSelect.value) || "/messages";
@@ -3150,15 +4245,15 @@
     }
     function readForm() {
       const next = normalizeConfig({
-        enabled: true,
         name: nameInput.value,
         format: formatSelect.value,
         baseUrl: baseUrlInput.value,
         apiKey: apiKeyInput.value,
         defaultModel: modelSelect.value,
+        fastModel: fastModelSelect.value,
         reasoningEffort: reasoningSelect.value,
+        maxOutputTokens: readMaxOutputTokensValue(),
         contextWindow: readContextWindowValue(),
-        notes: "",
         fetchedModels: state.availableModels
       }, false);
       next.fetchedModels = Array.isArray(state.availableModels) ? state.availableModels.slice() : [];
@@ -3171,9 +4266,9 @@
       baseUrlInput.value = next.baseUrl || "";
       apiKeyInput.value = next.apiKey || "";
       formatDropdown.refresh();
-      syncReasoningEditorControls(next.reasoningEffort || "medium", next.contextWindow);
+      syncReasoningEditorControls(next.reasoningEffort || "medium", next.contextWindow, next.maxOutputTokens);
       state.availableModels = Array.isArray(next.fetchedModels) ? next.fetchedModels.slice() : [];
-      renderModelOptions(next.defaultModel || "");
+      renderModelOptions(next.defaultModel || "", next.fastModel || "");
       updateRequestPreview();
     }
     async function refresh(resetToList) {
@@ -3194,14 +4289,14 @@
         });
         if (profile) {
           writeForm(profile);
-          await hydrateCachedModelsForConfig(profile, String(profile.defaultModel || "").trim());
+          await hydrateCachedModelsForConfig(profile, String(profile.defaultModel || "").trim(), String(profile.fastModel || "").trim());
           updateEditorModeUi();
         } else {
           openList("", "");
         }
       } else {
         writeForm(createEmptyConfig());
-        await hydrateCachedModelsForConfig(createEmptyConfig(), "");
+        await hydrateCachedModelsForConfig(createEmptyConfig(), "", "");
         updateEditorModeUi();
       }
       setEditorStatus("", "");
@@ -3265,10 +4360,10 @@
         updateModelMeta(strings.fetchedModelsLoading, "loading");
         const fetchedModels = mergeModelOptions(await fetchProviderModels(next), state.availableModels);
         state.availableModels = await persistFetchedModelsForEditor(next, fetchedModels);
-        renderModelOptions(next.defaultModel || "");
+        renderModelOptions(next.defaultModel || "", next.fastModel || "");
         setEditorStatus("", "");
       } catch (error) {
-        renderModelOptions(next.defaultModel || modelSelect.value || "");
+        renderModelOptions(next.defaultModel || modelSelect.value || "", next.fastModel || fastModelSelect.value || "");
         restoreModelMeta();
         setEditorStatus("error", error && typeof error.message === "string" ? error.message : "", strings.fetchFailure);
       } finally {
@@ -3325,6 +4420,9 @@
     promptBackButton.addEventListener("click", function () {
       openPromptList("", "");
     });
+    sessionBrowserBackButton.addEventListener("click", function () {
+      handleSessionBrowserBack();
+    });
     promptNameInput.addEventListener("input", function () {
       setStatus(promptStatus, "", "");
     });
@@ -3341,6 +4439,14 @@
     });
     updatePromptEditorModeUi();
     updatePromptControls();
+    renderSessionCards();
+    renderSessionHistoryCards();
+    renderSessionRecord();
+    updateSessionViewModeUi();
+    updateSessionControls();
+    refreshSessionsButton.addEventListener("click", function () {
+      handleSessionRefresh(true).catch(function () {});
+    });
     healthCheckButton.addEventListener("click", function () {
       handleHealthCheck().catch(function () {});
     });
@@ -3408,9 +4514,18 @@
         closeManualModelDialog();
       }
     });
+    sessionBrowserOverlay.addEventListener("click", function (event) {
+      if (event.target === sessionBrowserOverlay) {
+        closeSessionRecordDialog();
+      }
+    });
     const handleWindowKeydown = function (event) {
       if (event.key === "Escape" && isManualModelDialogOpen) {
         closeManualModelDialog();
+        return;
+      }
+      if (event.key === "Escape" && sessionState.viewMode === "record") {
+        closeSessionRecordDialog();
       }
     };
     window.addEventListener("keydown", handleWindowKeydown);
@@ -3418,6 +4533,13 @@
       setEditorStatus("", "");
     });
     reasoningSelect.addEventListener("change", function () {
+      setEditorStatus("", "");
+    });
+    maxOutputTokensInput.addEventListener("input", function () {
+      setEditorStatus("", "");
+    });
+    maxOutputTokensInput.addEventListener("change", function () {
+      maxOutputTokensInput.value = formatMaxOutputTokensForInput(readMaxOutputTokensValue());
       setEditorStatus("", "");
     });
     contextWindowInput.addEventListener("input", function () {
@@ -3504,6 +4626,9 @@
       if (areaName !== "local") {
         return;
       }
+      const hasSessionChange = Object.keys(changes).some(function (key) {
+        return String(key || "").startsWith(CHAT_SCOPE_PREFIX);
+      });
       if (DEBUG_LOGS_KEY in changes || DEBUG_META_KEY in changes) {
         refreshDebug().catch(function () {});
       }
@@ -3516,6 +4641,9 @@
         if (isProviderViewActive()) {
           refresh(false).catch(function () {});
         }
+      }
+      if (hasSessionChange && isSessionViewActive()) {
+        refreshSessions().catch(function () {});
       }
     };
     chrome.storage.onChanged.addListener(handleStorageChange);
@@ -3531,18 +4659,24 @@
         return;
       }
       const providerActive = isProviderViewActive();
+      const sessionActive = isSessionViewActive();
       const promptActive = isPromptViewActive();
       const providerHost = findMountAnchor(PROVIDER_ANCHOR_ID);
+      const sessionHost = findMountAnchor(SESSION_ANCHOR_ID);
       const promptHost = findMountAnchor(PROMPT_ANCHOR_ID);
       const debugHost = findMountAnchor(DEBUG_ANCHOR_ID);
       if (!isOptionsTabActive()) {
         closeManualModelDialog();
+        closeSessionRecordDialog();
         debugLog("customProvider.syncMount.skip", {
           reason: "not-options-tab",
           hash: location.hash
         });
         if (providerRoot.parentNode) {
           providerRoot.remove();
+        }
+        if (sessionRoot.parentNode) {
+          sessionRoot.remove();
         }
         if (promptRoot.parentNode) {
           promptRoot.remove();
@@ -3553,10 +4687,14 @@
         lastHost = null;
         return;
       }
-      if (!providerHost || !promptHost || !debugHost) {
+      if (!providerHost || !sessionHost || !promptHost || !debugHost) {
         closeManualModelDialog();
+        closeSessionRecordDialog();
         if (providerRoot.parentNode) {
           providerRoot.remove();
+        }
+        if (sessionRoot.parentNode) {
+          sessionRoot.remove();
         }
         if (promptRoot.parentNode) {
           promptRoot.remove();
@@ -3568,20 +4706,27 @@
         return;
       }
       const providerNeedsRefresh = providerRoot.parentNode !== providerHost;
+      const sessionNeedsRefresh = sessionRoot.parentNode !== sessionHost;
       const promptNeedsRefresh = promptRoot.parentNode !== promptHost;
       const debugNeedsRefresh = debugMountRoot.parentNode !== debugHost;
       debugLog("customProvider.syncMount.host", {
         providerActive,
+        sessionActive,
         promptActive,
         providerNeedsRefresh,
+        sessionNeedsRefresh,
         promptNeedsRefresh,
         debugNeedsRefresh,
         providerHostTag: providerHost.tagName,
+        sessionHostTag: sessionHost.tagName,
         promptHostTag: promptHost.tagName,
         debugHostTag: debugHost.tagName
       });
       if (providerRoot.parentNode !== providerHost) {
         providerHost.appendChild(providerRoot);
+      }
+      if (sessionRoot.parentNode !== sessionHost) {
+        sessionHost.appendChild(sessionRoot);
       }
       if (promptRoot.parentNode !== promptHost) {
         promptHost.appendChild(promptRoot);
@@ -3592,10 +4737,16 @@
       if (!providerActive && !promptActive) {
         closeManualModelDialog();
       }
-      lastHost = providerActive ? providerHost : promptActive ? promptHost : debugHost;
+      if (!sessionActive && sessionState.viewMode === "record") {
+        closeSessionRecordDialog();
+      }
+      lastHost = providerActive ? providerHost : sessionActive ? sessionHost : promptActive ? promptHost : debugHost;
       const refreshTasks = [];
       if (providerNeedsRefresh) {
         refreshTasks.push(refresh(true));
+      }
+      if (sessionNeedsRefresh) {
+        refreshTasks.push(refreshSessions());
       }
       if (promptNeedsRefresh) {
         refreshTasks.push(refreshPromptProfiles(true));
@@ -3607,6 +4758,7 @@
         await Promise.allSettled(refreshTasks);
         debugLog("customProvider.syncMount.refreshed", {
           providerActive,
+          sessionActive,
           promptActive,
           refreshCount: refreshTasks.length
         });
@@ -3688,11 +4840,17 @@
       if (providerRoot.parentNode) {
         providerRoot.remove();
       }
+      if (sessionRoot.parentNode) {
+        sessionRoot.remove();
+      }
       if (promptRoot.parentNode) {
         promptRoot.remove();
       }
       if (debugMountRoot.parentNode) {
         debugMountRoot.remove();
+      }
+      if (sessionBrowserOverlay.parentNode) {
+        sessionBrowserOverlay.remove();
       }
       lastHost = null;
     };

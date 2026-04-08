@@ -4,6 +4,7 @@
   const OPENAI_RESPONSES_FORMAT = "openai_responses";
   const DEFAULT_FORMAT = ANTHROPIC_FORMAT;
   const DEFAULT_CONTEXT_WINDOW = 200000;
+  const DEFAULT_MAX_OUTPUT_TOKENS = 10000;
   const MIN_CONTEXT_WINDOW = 20000;
   const FETCH_TIMEOUT_MS = 15000;
   const REASONING_EFFORT_VALUES = ["none", "low", "medium", "high", "max"];
@@ -13,6 +14,10 @@
   const BACKUP_KEY = "customProviderOriginalApiKey";
   const ANTHROPIC_API_KEY_STORAGE_KEY = "anthropicApiKey";
   const FETCHED_MODELS_CACHE_KEY = "customProviderFetchedModelsCache";
+  const SELECTED_MODEL_STORAGE_KEY = "selectedModel";
+  const SELECTED_MODEL_QUICK_MODE_STORAGE_KEY = "selectedModelQuickMode";
+  const MODEL_SELECTION_SYNC_SIGNATURE_KEY = "customProviderSelectedModelSyncSignature";
+  const QUICK_MODEL_SELECTION_SYNC_SIGNATURE_KEY = "customProviderSelectedModelQuickModeSyncSignature";
   const FETCHED_MODELS_CACHE_LIMIT = 24;
   const HEALTH_CHECK_PROMPT = "Reply with OK only.";
   const HEALTH_CHECK_MAX_TOKENS = 64;
@@ -59,32 +64,39 @@
     }
     return Math.max(MIN_CONTEXT_WINDOW, Math.round(numeric));
   }
+  function normalizeMaxOutputTokens(value, fallbackValue) {
+    const numeric = Number(String(value ?? "").trim());
+    if (!Number.isFinite(numeric) || numeric <= 0) {
+      return fallbackValue || DEFAULT_MAX_OUTPUT_TOKENS;
+    }
+    return Math.max(1, Math.round(numeric));
+  }
   function normalizeConfig(raw, fallbackEnabled) {
     const source = raw && typeof raw === "object" ? raw : {};
     return {
-      enabled: true,
       name: String(source.name || "").trim(),
       format: inferFormat(source),
       baseUrl: String(source.baseUrl || "").trim().replace(/\/+$/, ""),
       apiKey: String(source.apiKey || "").trim(),
       defaultModel: String(source.defaultModel || "").trim(),
+      fastModel: String(source.fastModel || source.small_fast_model || "").trim(),
       reasoningEffort: normalizeReasoningEffort(source.reasoningEffort),
+      maxOutputTokens: normalizeMaxOutputTokens(source.maxOutputTokens),
       contextWindow: normalizeContextWindow(source.contextWindow),
-      notes: String(source.notes || "").trim(),
       fetchedModels: normalizeFetchedModels(source.fetchedModels)
     };
   }
   function createEmptyConfig() {
     return {
-      enabled: true,
       name: "",
       format: DEFAULT_FORMAT,
       baseUrl: "",
       apiKey: "",
       defaultModel: "",
+      fastModel: "",
       reasoningEffort: "medium",
+      maxOutputTokens: DEFAULT_MAX_OUTPUT_TOKENS,
       contextWindow: DEFAULT_CONTEXT_WINDOW,
-      notes: "",
       fetchedModels: []
     };
   }
@@ -285,30 +297,39 @@
       baseUrl: config.baseUrl,
       apiKey: config.apiKey,
       defaultModel: config.defaultModel,
+      fastModel: config.fastModel,
       reasoningEffort: config.reasoningEffort,
+      maxOutputTokens: config.maxOutputTokens,
       contextWindow: config.contextWindow,
-      notes: config.notes,
       fetchedModels: normalizeFetchedModels(raw?.fetchedModels)
     };
   }
+  function hasUsableConfig(raw) {
+    const config = normalizeConfig(raw);
+    return !!(config.baseUrl && config.apiKey && config.defaultModel);
+  }
+  function hasDeprecatedProviderFields(raw) {
+    const source = raw && typeof raw === "object" ? raw : null;
+    return !!source && ("enabled" in source || "notes" in source);
+  }
   function hasConfigContent(raw) {
     const config = normalizeConfig(raw);
-    return !!(config.name || config.baseUrl || config.apiKey || config.defaultModel || config.notes || normalizeFetchedModels(raw?.fetchedModels).length);
+    return !!(config.name || config.baseUrl || config.apiKey || config.defaultModel || config.fastModel || normalizeFetchedModels(raw?.fetchedModels).length);
   }
   function projectProfileToConfig(profile) {
     if (!profile) {
       return createEmptyConfig();
     }
     return {
-      enabled: true,
       name: String(profile.name || "").trim(),
       format: normalizeFormat(profile.format),
       baseUrl: String(profile.baseUrl || "").trim().replace(/\/+$/, ""),
       apiKey: String(profile.apiKey || "").trim(),
       defaultModel: String(profile.defaultModel || "").trim(),
+      fastModel: String(profile.fastModel || "").trim(),
       reasoningEffort: normalizeReasoningEffort(profile.reasoningEffort),
+      maxOutputTokens: normalizeMaxOutputTokens(profile.maxOutputTokens),
       contextWindow: normalizeContextWindow(profile.contextWindow),
-      notes: String(profile.notes || "").trim(),
       fetchedModels: normalizeFetchedModels(profile.fetchedModels)
     };
   }
@@ -328,6 +349,61 @@
       return "";
     }
   }
+  function buildProviderSelectionIdentity(profile) {
+    if (!profile || typeof profile !== "object") {
+      return "";
+    }
+    return stableSerialize({
+      id: String(profile.id || "").trim(),
+      format: normalizeFormat(profile.format),
+      baseUrl: String(profile.baseUrl || "").trim().replace(/\/+$/, "")
+    });
+  }
+  function buildModelSelectionSyncSignature(profile) {
+    if (!profile || typeof profile !== "object") {
+      return "";
+    }
+    const defaultModel = String(profile.defaultModel || "").trim();
+    if (!defaultModel) {
+      return "";
+    }
+    return stableSerialize({
+      provider: buildProviderSelectionIdentity(profile),
+      model: defaultModel
+    });
+  }
+  function buildQuickModelSelectionSyncSignature(profile) {
+    if (!profile || typeof profile !== "object") {
+      return "";
+    }
+    const quickModel = String(profile.fastModel || profile.small_fast_model || profile.defaultModel || "").trim();
+    if (!quickModel) {
+      return "";
+    }
+    return stableSerialize({
+      provider: buildProviderSelectionIdentity(profile),
+      model: quickModel
+    });
+  }
+  function buildModelSelectionSyncPayload(previousActiveProfile, nextActiveProfile) {
+    if (!nextActiveProfile || typeof nextActiveProfile !== "object") {
+      return null;
+    }
+    const payload = {};
+    const previousStandardSignature = buildModelSelectionSyncSignature(previousActiveProfile);
+    const nextStandardSignature = buildModelSelectionSyncSignature(nextActiveProfile);
+    if (nextStandardSignature && previousStandardSignature !== nextStandardSignature) {
+      payload[SELECTED_MODEL_STORAGE_KEY] = String(nextActiveProfile.defaultModel || "").trim();
+      payload[MODEL_SELECTION_SYNC_SIGNATURE_KEY] = nextStandardSignature;
+    }
+    const previousQuickSignature = buildQuickModelSelectionSyncSignature(previousActiveProfile);
+    const nextQuickSignature = buildQuickModelSelectionSyncSignature(nextActiveProfile);
+    if (nextQuickSignature && previousQuickSignature !== nextQuickSignature) {
+      payload[SELECTED_MODEL_QUICK_MODE_STORAGE_KEY] = String(nextActiveProfile.fastModel || nextActiveProfile.small_fast_model || nextActiveProfile.defaultModel || "").trim();
+      payload[QUICK_MODEL_SELECTION_SYNC_SIGNATURE_KEY] = nextQuickSignature;
+    }
+    return Object.keys(payload).length ? payload : null;
+  }
   async function persistProviderStoreState(nextState) {
     const state = nextState && typeof nextState === "object" ? nextState : {};
     const storage = state.storageArea || globalThis.chrome?.storage?.local;
@@ -340,10 +416,12 @@
       return profile.id === activeProfileId;
     }) || null;
     const legacyConfig = projectProfileToConfig(activeProfile);
+    const modelSelectionSyncPayload = state.modelSelectionSyncPayload && typeof state.modelSelectionSyncPayload === "object" ? state.modelSelectionSyncPayload : null;
     const writes = [storage.set({
       [PROFILES_STORAGE_KEY]: profiles,
       [ACTIVE_PROFILE_STORAGE_KEY]: activeProfileId,
-      [LEGACY_STORAGE_KEY]: legacyConfig
+      [LEGACY_STORAGE_KEY]: legacyConfig,
+      ...(modelSelectionSyncPayload || {})
     }), storage.remove(ANTHROPIC_API_KEY_STORAGE_KEY)];
     if (state.originalApiKey === undefined) {
       const nextBackupApiKey = state.currentApiKey && state.currentApiKey !== activeProfile?.apiKey ? state.currentApiKey : null;
@@ -381,6 +459,10 @@
     let profiles = Array.isArray(stored[PROFILES_STORAGE_KEY]) ? stored[PROFILES_STORAGE_KEY].map(normalizeProfile) : [];
     let activeProfileId = resolveActiveProfileId(profiles, stored[ACTIVE_PROFILE_STORAGE_KEY]);
     let migrated = false;
+    const hasLegacyDeprecatedFields = hasDeprecatedProviderFields(stored[LEGACY_STORAGE_KEY]);
+    const hasProfileDeprecatedFields = Array.isArray(stored[PROFILES_STORAGE_KEY]) && stored[PROFILES_STORAGE_KEY].some(function (profile) {
+      return hasDeprecatedProviderFields(profile);
+    });
     if (!profiles.length && hasConfigContent(stored[LEGACY_STORAGE_KEY])) {
       profiles = [normalizeProfile(stored[LEGACY_STORAGE_KEY])];
       activeProfileId = profiles[0].id;
@@ -390,7 +472,7 @@
       return profile.id === activeProfileId;
     }) || null;
     const legacyConfig = projectProfileToConfig(activeProfile);
-    const needsSync = migrated || stableSerialize(legacyConfig) !== stableSerialize(normalizeConfig(stored[LEGACY_STORAGE_KEY])) || stored[ACTIVE_PROFILE_STORAGE_KEY] !== activeProfileId;
+    const needsSync = migrated || hasLegacyDeprecatedFields || hasProfileDeprecatedFields || stableSerialize(legacyConfig) !== stableSerialize(normalizeConfig(stored[LEGACY_STORAGE_KEY])) || stored[ACTIVE_PROFILE_STORAGE_KEY] !== activeProfileId;
     if (needsSync && settings.persist !== false) {
       return persistProviderStoreState({
         storageArea: storage,
@@ -431,10 +513,14 @@
       profiles.push(nextProfile);
     }
     const shouldActivate = settings.activateOnSave !== false;
+    const nextActiveProfile = profiles.find(function (profile) {
+      return profile.id === (shouldActivate ? nextProfile.id : currentState.activeProfileId);
+    }) || null;
     return persistProviderStoreState({
       storageArea: settings.storageArea,
       profiles,
       activeProfileId: shouldActivate ? nextProfile.id : currentState.activeProfileId,
+      modelSelectionSyncPayload: buildModelSelectionSyncPayload(currentState.activeProfile, nextActiveProfile),
       originalApiKey: currentState.originalApiKey,
       currentApiKey: currentState.currentApiKey
     });
@@ -449,10 +535,14 @@
     })) {
       throw new Error("Provider profile not found.");
     }
+    const nextActiveProfile = currentState.profiles.find(function (profile) {
+      return profile.id === profileId;
+    }) || null;
     return persistProviderStoreState({
       storageArea: settings.storageArea,
       profiles: currentState.profiles,
       activeProfileId: profileId,
+      modelSelectionSyncPayload: buildModelSelectionSyncPayload(currentState.activeProfile, nextActiveProfile),
       originalApiKey: currentState.originalApiKey,
       currentApiKey: currentState.currentApiKey
     });
@@ -466,13 +556,51 @@
       return profile.id !== profileId;
     });
     const activeProfileId = currentState.activeProfileId === profileId ? profiles[0]?.id || null : resolveActiveProfileId(profiles, currentState.activeProfileId);
+    const nextActiveProfile = profiles.find(function (profile) {
+      return profile.id === activeProfileId;
+    }) || null;
     return persistProviderStoreState({
       storageArea: settings.storageArea,
       profiles,
       activeProfileId,
+      modelSelectionSyncPayload: buildModelSelectionSyncPayload(currentState.activeProfile, nextActiveProfile),
       originalApiKey: currentState.originalApiKey,
       currentApiKey: currentState.currentApiKey
     });
+  }
+  async function reconcileActiveProviderModelSelection(options) {
+    const settings = options && typeof options === "object" ? options : {};
+    const storage = settings.storageArea || globalThis.chrome?.storage?.local;
+    if (!storage) {
+      return false;
+    }
+    const currentState = settings.state || await readProviderStoreState({
+      storageArea: storage
+    });
+    const activeProfile = currentState.activeProfile;
+    if (!activeProfile) {
+      return false;
+    }
+    const expectedStandardSignature = buildModelSelectionSyncSignature(activeProfile);
+    const expectedQuickSignature = buildQuickModelSelectionSyncSignature(activeProfile);
+    if (!expectedStandardSignature && !expectedQuickSignature) {
+      return false;
+    }
+    const stored = await storage.get([MODEL_SELECTION_SYNC_SIGNATURE_KEY, QUICK_MODEL_SELECTION_SYNC_SIGNATURE_KEY]);
+    const payload = {};
+    if (expectedStandardSignature && stored[MODEL_SELECTION_SYNC_SIGNATURE_KEY] !== expectedStandardSignature) {
+      payload[SELECTED_MODEL_STORAGE_KEY] = String(activeProfile.defaultModel || "").trim();
+      payload[MODEL_SELECTION_SYNC_SIGNATURE_KEY] = expectedStandardSignature;
+    }
+    if (expectedQuickSignature && stored[QUICK_MODEL_SELECTION_SYNC_SIGNATURE_KEY] !== expectedQuickSignature) {
+      payload[SELECTED_MODEL_QUICK_MODE_STORAGE_KEY] = String(activeProfile.fastModel || activeProfile.small_fast_model || activeProfile.defaultModel || "").trim();
+      payload[QUICK_MODEL_SELECTION_SYNC_SIGNATURE_KEY] = expectedQuickSignature;
+    }
+    if (!Object.keys(payload).length) {
+      return false;
+    }
+    await storage.set(payload);
+    return true;
   }
   async function parseJsonSafe(response) {
     const text = await response.text();
@@ -837,6 +965,7 @@
     OPENAI_RESPONSES_FORMAT,
     DEFAULT_FORMAT,
     DEFAULT_CONTEXT_WINDOW,
+    DEFAULT_MAX_OUTPUT_TOKENS,
     LEGACY_STORAGE_KEY,
     PROFILES_STORAGE_KEY,
     ACTIVE_PROFILE_STORAGE_KEY,
@@ -846,15 +975,18 @@
     extractErrorMessage,
     normalizeFormat,
     normalizeReasoningEffort,
+    normalizeMaxOutputTokens,
     normalizeContextWindow,
     normalizeConfig,
     normalizeProfile,
     createEmptyConfig,
+    hasUsableConfig,
     projectProfileToConfig,
     readProviderStoreState,
     saveProviderProfile,
     setActiveProviderProfile,
     deleteProviderProfile,
+    reconcileActiveProviderModelSelection,
     readCachedFetchedModels,
     persistFetchedModelsForConfig,
     buildRequestUrl,
@@ -862,4 +994,5 @@
     probeProviderModel,
     syncModelOptions
   };
+  reconcileActiveProviderModelSelection().catch(function () {});
 })();

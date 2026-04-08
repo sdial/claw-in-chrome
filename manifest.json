@@ -71,7 +71,7 @@
   "storage": {
     "managed_schema": "managed_schema.json"
   },
-  "version": "1.0.66.0",
+  "version": "1.0.66.1",
   "web_accessible_resources": [
     {
       "matches": ["https://*.claude.ai/*", "https://claude.ai/*"],

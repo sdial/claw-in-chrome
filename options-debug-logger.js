@@ -66,6 +66,7 @@
       format: sanitizeString(value?.format || "", "format"),
       defaultModel: sanitizeString(value?.defaultModel || "", "defaultModel"),
       reasoningEffort: sanitizeString(value?.reasoningEffort || "", "reasoningEffort"),
+      maxOutputTokens: typeof value?.maxOutputTokens === "number" ? value.maxOutputTokens : value?.maxOutputTokens || undefined,
       contextWindow: typeof value?.contextWindow === "number" ? value.contextWindow : value?.contextWindow || undefined,
       name: sanitizeString(value?.name || "", "name"),
       fetchedModelCount: fetchedModels.length,

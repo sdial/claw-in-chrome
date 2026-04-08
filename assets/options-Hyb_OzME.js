@@ -381,9 +381,11 @@ function cpGithubUpdateInterpolate(e, t) {
 }
 const cpOptionsNavStrings = String(navigator.language || "").toLowerCase().startsWith("zh") ? {
   provider: "模型供应商",
+  session: "会话管理",
   prompt: "提示词修改"
 } : {
   provider: "Model provider",
+  session: "Session management",
   prompt: "Prompt overrides"
 };
 function cpGetSettingsTabFromHash(e) {
@@ -399,6 +401,9 @@ function cpGetOptionsSubviewFromHash(e) {
   const s = String(new URLSearchParams(a[1] || "").get("provider") || "").trim().toLowerCase();
   if (s === "true" || s === "provider") {
     return "provider";
+  }
+  if (s === "session" || s === "sessions") {
+    return "session";
   }
   if (s === "prompt" || s === "prompts") {
     return "prompt";
@@ -711,19 +716,23 @@ const J = ({
     return () => document.removeEventListener("visibilitychange", t);
   }, []);
   const i = a === "provider";
-  const o = a === "prompt";
-  const l = !i && !o;
+  const o = a === "session";
+  const l = a === "prompt";
+  const d = !i && !o && !l;
   return n.jsxs("div", {
     className: "space-y-6",
     children: [n.jsx("div", {
       id: "cp-options-provider-anchor",
       hidden: !i
     }), n.jsx("div", {
-      id: "cp-options-prompt-anchor",
+      id: "cp-options-session-anchor",
       hidden: !o
+    }), n.jsx("div", {
+      id: "cp-options-prompt-anchor",
+      hidden: !l
     }), n.jsxs("div", {
       className: "space-y-6",
-      hidden: !l,
+      hidden: !d,
       children: [n.jsx(cpGithubUpdateSection, {}), n.jsxs("div", {
         className: "bg-bg-100 border border-border-300 rounded-xl px-6 pt-6 pb-6 md:px-8 md:pt-8 md:pb-8",
         children: [n.jsx("h3", {
@@ -827,7 +836,7 @@ const ee = ({
   analytics: a
 }) => {
   const r = e();
-  const [i, o] = s.useState("unknown");
+  const [i, o] = s.useState();
   const [l, d] = s.useState(false);
   const [c, m] = s.useState(null);
   const h = s.useCallback(async () => {
@@ -867,7 +876,13 @@ const ee = ({
       })
     }), n.jsxs("div", {
       className: "py-4",
-      children: [(i === "prompt" || i === "unknown") && n.jsxs("div", {
+      children: [i === undefined && n.jsx("div", {
+        className: "text-text-400 font-base-sm",
+        children: n.jsx(t, {
+          defaultMessage: "Loading permissions...",
+          id: "481hO7jC9z"
+        })
+      }), (i === "prompt" || i === "unknown") && n.jsxs("div", {
         children: [n.jsx("button", {
           onClick: async () => {
             d(true);
@@ -1022,7 +1037,10 @@ const ee = ({
 };
 const te = () => {
   const a = e();
-  const [r, i] = s.useState();
+  const [r, i] = s.useState(() => ({
+    netloc: [],
+    domain_transition: []
+  }));
   const [o, l] = s.useState(true);
   const [d, c] = m(T.NOTIFICATIONS_ENABLED, undefined);
   const {
@@ -1053,20 +1071,11 @@ const te = () => {
     defaultMessage: "Unknown domain",
     id: "FMvJL9TokP"
   });
-  if (o) {
-    return n.jsx("div", {
-      className: "p-6 text-text-200",
-      children: n.jsx(t, {
-        defaultMessage: "Loading permissions...",
-        id: "481hO7jC9z"
-      })
-    });
-  } else {
-    return n.jsx("div", {
-      className: "permissions-tab",
-      children: n.jsxs("div", {
-        className: "space-y-6",
-        children: [n.jsxs("div", {
+  return n.jsx("div", {
+    className: "permissions-tab",
+    children: n.jsxs("div", {
+      className: "space-y-6",
+      children: [n.jsxs("div", {
           className: "bg-bg-100 border border-border-300 rounded-xl px-6 pt-6 pb-6 md:px-8 md:pt-8 md:pb-8",
           children: [n.jsx("h3", {
             className: "text-text-100 font-xl-bold",
@@ -1134,7 +1143,13 @@ const te = () => {
               defaultMessage: "You have allowed Claw to take all actions (browse, click, type) on these sites.",
               id: "7W74V502ms"
             })
-          }), r?.netloc && r.netloc.length > 0 ? n.jsx(ae, {
+          }), o ? n.jsx("div", {
+            className: "text-text-400 font-base-sm pb-5",
+            children: n.jsx(t, {
+              defaultMessage: "Loading permissions...",
+              id: "481hO7jC9z"
+            })
+          }) : r.netloc.length > 0 ? n.jsx(ae, {
             permissions: r.netloc,
             onRevoke: f,
             formatScope: g
@@ -1145,7 +1160,7 @@ const te = () => {
               id: "B2ROp8L071"
             })
           })]
-        }), r?.domain_transition && r.domain_transition.length > 0 && n.jsxs("div", {
+        }), !o && r.domain_transition.length > 0 && n.jsxs("div", {
           className: "bg-bg-100 border border-border-300 rounded-xl px-6 pt-6 pb-2 md:px-8 md:pt-8 md:pb-3",
           children: [n.jsx("h3", {
             className: "text-text-100 font-xl-bold",
@@ -1165,9 +1180,8 @@ const te = () => {
             formatScope: g
           })]
         }), false]
-      })
-    });
-  }
+    })
+  });
 };
 const ae = ({
   permissions: e,
@@ -1998,6 +2012,8 @@ function ce() {
         const s = String(e.get("provider") || "").trim().toLowerCase();
         if (s === "true" || s === "provider") {
           i = "provider";
+        } else if (s === "session" || s === "sessions") {
+          i = "session";
         } else if (s === "prompt" || s === "prompts") {
           i = "prompt";
         }
@@ -2071,7 +2087,7 @@ function ce() {
     });
     c("options");
     setProviderSubview(e);
-    window.location.hash = e === "provider" ? "options?provider=true" : e === "prompt" ? "options?provider=prompt" : "options";
+    window.location.hash = e === "provider" ? "options?provider=true" : e === "session" ? "options?provider=session" : e === "prompt" ? "options?provider=prompt" : "options";
   };
   s.useEffect(() => {
     __cpOptionsDebugLog("options.page.state.tab", {
@@ -2151,6 +2167,14 @@ function ce() {
                 isActive: d === "options" && providerSubview === "provider",
                 onClick: () => g("provider"),
                 children: cpOptionsNavStrings.provider
+              })
+            }), n.jsx("li", {
+              id: "cp-options-session-nav-item",
+              children: n.jsx(ne, {
+                href: "/settings/options?provider=session",
+                isActive: d === "options" && providerSubview === "session",
+                onClick: () => g("session"),
+                children: cpOptionsNavStrings.session
               })
             }), n.jsx("li", {
               id: "cp-options-prompt-nav-item",
