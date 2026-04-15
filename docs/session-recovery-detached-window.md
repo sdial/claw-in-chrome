@@ -75,11 +75,11 @@
 - `collectStoredScopeEntries`
   - 把 storage snapshot 聚合成 `scopeId -> { keys, groupIds, mainTabIds }`
 - `cleanupClosedGroupScopes`
-  - group 被关闭时，清掉对应 `chrome-group:*`
-  - 再沿着 `mainTabId` 扩散清掉关联 `group:*`
+  - group 被关闭时不再删除 scope（保留对话，供后续按 URL 恢复）
+  - 仅记录审计：哪些 scope “本来会被清理”
 - `cleanupOrphanGroupScopes`
-  - 启动/安装时扫描孤儿组
-  - 只删已经失效的 `chrome-group:*`
+  - 启动/安装时扫描孤儿组，但不再删除 scope（保留对话，供后续按 URL 恢复）
+  - 仅记录审计：哪些 scope 已经变成孤儿
 
 ### 4.2 detached popup 生命周期
 

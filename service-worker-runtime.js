@@ -267,7 +267,23 @@
         }
       }
 
-      return removeScopeEntries([...scopeIdsToRemove], storageSnapshot);
+      // NOTE: 为支持按 URL 恢复会话，group 关闭不再删除 scope 数据；
+      // 这里只记录审计信息，便于诊断“本来会命中哪些 scope”。
+      const retainedScopeIds = [...scopeIdsToRemove];
+      const auditScopeIdSampleLimit = 12;
+      consoleApi.debug?.("[session-cleanup] retain scopes for closed group", {
+        groupId,
+        retainedScopeCount: retainedScopeIds.length
+      });
+      await appendCleanupAudit("closed_group_retained", {
+        groupId,
+        retainedScopeCount: retainedScopeIds.length,
+        scopeIds: retainedScopeIds.slice(0, auditScopeIdSampleLimit)
+      });
+      return {
+        removedScopeIds: [],
+        removedKeyCount: 0
+      };
     }
 
     async function canResolveTabGroup(groupId) {
@@ -327,7 +343,21 @@
         };
       }
 
-      return removeScopeEntries([...orphanScopeIds], storageSnapshot);
+      // NOTE: 为支持按 URL 恢复会话，孤儿组扫描不再删除 scope 数据；
+      // 这里只记录审计信息，便于诊断“哪些 scope 已经变成孤儿”。
+      const retainedScopeIds = [...orphanScopeIds];
+      const auditScopeIdSampleLimit = 12;
+      consoleApi.debug?.("[session-cleanup] retain orphan scopes for url recovery", {
+        retainedScopeCount: retainedScopeIds.length
+      });
+      await appendCleanupAudit("orphan_scan_retained", {
+        retainedScopeCount: retainedScopeIds.length,
+        scopeIds: retainedScopeIds.slice(0, auditScopeIdSampleLimit)
+      });
+      return {
+        removedScopeIds: [],
+        removedKeyCount: 0
+      };
     }
 
     return {

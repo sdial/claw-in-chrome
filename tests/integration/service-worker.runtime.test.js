@@ -54,7 +54,7 @@ function invokeMessageHandler(listener, message, sender = {}) {
   });
 }
 
-async function testCleanupClosedGroupRemovesRelatedScopes() {
+async function testCleanupClosedGroupRetainsRelatedScopesForUrlRecovery() {
   const { api, chromeMock } = createServiceWorkerHarness({
     register: false,
     storageState: {
@@ -77,13 +77,13 @@ async function testCleanupClosedGroupRemovesRelatedScopes() {
 
   const result = await cleanupRuntime.cleanupClosedGroupScopes(12);
 
-  assert.equal(result.removedKeyCount, 2);
-  assert.equal(chromeMock.storageMock.state["claw.chat.scopes.chrome-group:12.meta"], undefined);
-  assert.equal(chromeMock.storageMock.state["claw.chat.scopes.group:99.messages"], undefined);
+  assert.equal(result.removedKeyCount, 0);
+  assert.notEqual(chromeMock.storageMock.state["claw.chat.scopes.chrome-group:12.meta"], undefined);
+  assert.notEqual(chromeMock.storageMock.state["claw.chat.scopes.group:99.messages"], undefined);
   assert.notEqual(chromeMock.storageMock.state["claw.chat.scopes.group:101.messages"], undefined);
 }
 
-async function testCleanupOrphanGroupScopesOnlyRemovesChromeGroupScopes() {
+async function testCleanupOrphanGroupScopesRetainsChromeGroupScopesForUrlRecovery() {
   const { api, chromeMock } = createServiceWorkerHarness({
     register: false,
     storageState: {
@@ -107,8 +107,8 @@ async function testCleanupOrphanGroupScopesOnlyRemovesChromeGroupScopes() {
 
   const result = await cleanupRuntime.cleanupOrphanGroupScopes();
 
-  assert.equal(result.removedKeyCount, 1);
-  assert.equal(chromeMock.storageMock.state["claw.chat.scopes.chrome-group:12.meta"], undefined);
+  assert.equal(result.removedKeyCount, 0);
+  assert.notEqual(chromeMock.storageMock.state["claw.chat.scopes.chrome-group:12.meta"], undefined);
   assert.notEqual(chromeMock.storageMock.state["claw.chat.scopes.group:55.messages"], undefined);
   assert.notEqual(chromeMock.storageMock.state["claw.chat.scopes.chrome-group:22.meta"], undefined);
 }
@@ -292,7 +292,7 @@ async function testStartupMaintenanceRunsInjectedCleanupSteps() {
 
   assert.equal(clearCalls, 1);
   assert.equal(sweepCalls, 1);
-  assert.equal(chromeMock.storageMock.state["claw.chat.scopes.chrome-group:99.meta"], undefined);
+  assert.notEqual(chromeMock.storageMock.state["claw.chat.scopes.chrome-group:99.meta"], undefined);
 }
 
 async function testInstalledMaintenanceRunsInjectedCleanupSteps() {
@@ -319,7 +319,7 @@ async function testInstalledMaintenanceRunsInjectedCleanupSteps() {
 
   assert.equal(clearCalls, 1);
   assert.equal(sweepCalls, 1);
-  assert.equal(chromeMock.storageMock.state["claw.chat.scopes.chrome-group:41.meta"], undefined);
+  assert.notEqual(chromeMock.storageMock.state["claw.chat.scopes.chrome-group:41.meta"], undefined);
 }
 
 async function testTabGroupCleanupFailureAppendsAuditEntry() {
@@ -430,8 +430,8 @@ async function testCleanupOrphanGroupScopesNoGroupsWritesAudit() {
 }
 
 async function main() {
-  await testCleanupClosedGroupRemovesRelatedScopes();
-  await testCleanupOrphanGroupScopesOnlyRemovesChromeGroupScopes();
+  await testCleanupClosedGroupRetainsRelatedScopesForUrlRecovery();
+  await testCleanupOrphanGroupScopesRetainsChromeGroupScopesForUrlRecovery();
   await testRuntimeMessageHandlerDelegatesToDetachedWindowOpener();
   await testUnknownMessageReturnsFalseWithoutCallingOpener();
   await testMessageHandlerReturnsFailurePayloadWhenOpenerRejects();

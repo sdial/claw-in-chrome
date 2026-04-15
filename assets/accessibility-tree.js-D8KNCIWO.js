@@ -5,10 +5,15 @@
   const __cpAccessibilityTreeGlobalElementMapKey = "__claudeElementMap";
   const __cpAccessibilityTreeGlobalRefCounterKey = "__claudeRefCounter";
   const __cpAccessibilityTreeGlobalGeneratorKey = "__generateAccessibilityTree";
+  const __cpAccessibilityTreeElementWeakRefLedger = window.__claudeElementMap;
   const __cpAccessibilityTreeRefIdPrefix = "ref_";
   const __cpAccessibilityTreeDefaultDepth = 15;
   const __cpAccessibilityTreeFilterAll = "all";
   const __cpAccessibilityTreeFilterInteractive = "interactive";
+  // 语义锚点：read_page 共享这组 filter/depth/ref_id 常量，避免 bundle 内部魔法字符串继续扩散。
+  // 语义锚点：read_page / find 共享的 ref writer 主入口。
+  // ref_X 统一在这里复用/分配，并写进 __claudeElementMap；mcpPermissions 里的 find/read_page 只是 consumer。
+  // 语义锚点：read_page 主入口：支持 filter/depth/charLimit/ref_id 四段参数，返回文本化可访问性树与 viewport。
   window.__generateAccessibilityTree = function (e, t, r, i) {
     try {
       let h = function (e) {
@@ -153,19 +158,20 @@
         if (["script", "style", "meta", "link", "title", "noscript"].includes(r)) {
           return false;
         }
-        if (t.filter !== "all" && e.getAttribute("aria-hidden") === "true") {
+        if (t.filter !== __cpAccessibilityTreeFilterAll && e.getAttribute("aria-hidden") === "true") {
           return false;
         }
-        if (t.filter !== "all" && !m(e)) {
+        if (t.filter !== __cpAccessibilityTreeFilterAll && !m(e)) {
           return false;
         }
-        if (t.filter !== "all" && !t.refId) {
+        if (t.filter !== __cpAccessibilityTreeFilterAll && !t.refId) {
           var i = e.getBoundingClientRect();
           if (!(i.top < window.innerHeight) || !(i.bottom > 0) || !(i.left < window.innerWidth) || !(i.right > 0)) {
             return false;
           }
         }
-        if (t.filter === "interactive") {
+        // 语义锚点：interactive filter 只保留可操作控件；all 模式则继续接受结构节点、具名节点和非 generic role 节点。
+        if (t.filter === __cpAccessibilityTreeFilterInteractive) {
           return s(e);
         }
         if (s(e)) {
@@ -189,6 +195,7 @@
             var o = h(e);
             var l = g(e);
             var u = null;
+            // 语义锚点：ref writer 会先复用旧 ref，再为首次命中的元素分配新的 ref_X。
             for (var d in window.__claudeElementMap) {
               if (window.__claudeElementMap[d].deref() === e) {
                 u = d;
@@ -196,7 +203,7 @@
               }
             }
             if (!u) {
-              u = "ref_" + ++window.__claudeRefCounter;
+              u = __cpAccessibilityTreeRefIdPrefix + ++window.__claudeRefCounter;
               window.__claudeElementMap[u] = new WeakRef(e);
             }
             var c = " ".repeat(t) + o;
@@ -242,11 +249,13 @@
       // 语义锚点：DFS 遍历 + 序列化为文本行（含 ref_id 分配与 select option 展开）
       const __cpAccessibilityTreeTraverseAndSerialize = b;
       var n = [];
-      var a = t ?? 15;
+      // 语义锚点：read_page 参数规约：filter 默认 all，depth 默认 15，ref_id 命中时只展开目标子树。
+      var a = t ?? __cpAccessibilityTreeDefaultDepth;
       var o = {
-        filter: e || "all",
+        filter: e || __cpAccessibilityTreeFilterAll,
         refId: i
       };
+      // 语义锚点：ref_id 增量读取链：通过 WeakRef 账本定位旧节点；映射失效时返回指导性错误，让调用方重新 read_page 全量拉树。
       if (i) {
         var l = window.__claudeElementMap[i];
         if (!l) {
@@ -274,6 +283,7 @@
       } else if (document.body) {
         b(document.body, 0, o);
       }
+      // 语义锚点：一次生成结束后，会对 WeakRef 账本做全表 sweep，删掉已经失效的陈旧 ref。
       for (var d in window.__claudeElementMap) {
         if (!window.__claudeElementMap[d].deref()) {
           delete window.__claudeElementMap[d];
@@ -281,6 +291,7 @@
       }
       var c = n.join("\n");
       if (r != null && c.length > r) {
+        // 语义锚点：序列化结果超限时不截断正文，而是返回收窄 depth / ref_id 的操作建议。
         var f = "Output exceeds " + r + " character limit (" + c.length + " characters). ";
         return {
           error: f += i ? "The specified element has too much content. Try specifying a smaller depth parameter or focus on a more specific child element." : t !== undefined ? "Try specifying an even smaller depth parameter or use ref_id to focus on a specific element." : "Try specifying a depth parameter (e.g., depth: 5) or use ref_id to focus on a specific element from the page.",
@@ -302,4 +313,5 @@
       throw new Error("Error generating accessibility tree: " + (h.message || "Unknown error"));
     }
   };
+  const __cpAccessibilityTreeGenerate = window.__generateAccessibilityTree;
 })();

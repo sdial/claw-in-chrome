@@ -1,6 +1,6 @@
 {
   "action": {
-    "default_title": "Open Claw"
+    "default_title": "Claw in Chrome"
   },
   "background": {
     "service_worker": "service-worker-loader.js",

@@ -1047,6 +1047,7 @@ function _s(e) {
   const n = a.useRef(new Map());
   const s = a.useRef(0);
   if (e.length < s.current) {
+    // 语义锚点：当消息长度回退时，renderContext 会整体重建，避免沿用旧的 tool_result / screenshot 增量账本。
     t.current = {
       screenshotsByTab: new Map(),
       toolResultsByToolId: new Map()
@@ -1073,6 +1074,8 @@ function _s(e) {
           if (e.type !== "tool_result") {
             return;
           }
+          // 语义锚点：sidepanel 的 tool_result 账本入口。
+          // user 消息里的 tool_result 会先按 tool_use_id 建索引，供时间线里的 tool_use 块做结果对账。
           if (e.tool_use_id) {
             t.current.toolResultsByToolId.set(e.tool_use_id, e);
           }
@@ -1088,6 +1091,8 @@ function _s(e) {
             if (e.type === "image" && e.source?.type === "base64") {
               const n = `data:${e.source.media_type};base64,${e.source.data}`;
               if (s !== null) {
+                // 语义锚点：tool_result 图片会顺手写入 screenshotsByTab。
+                // 后面的 click 坐标覆盖层、拖拽路径和 timeline thumbnail 都复用这本“最近截图”账本。
                 t.current.screenshotsByTab.set(s, n);
               }
             }
@@ -1099,6 +1104,8 @@ function _s(e) {
   s.current = e.length;
   return t.current;
 }
+const __cpSidepanelTimelineRenderContext = _s;
+const __cpSidepanelBuildToolRenderContext = _s;
 const Ms = () => l.jsxs("div", {
   className: "flex items-center gap-2 py-2 my-2",
   children: [l.jsx("div", {
@@ -1489,6 +1496,7 @@ function Rs({
     return null;
   }
 }
+// 语义锚点：Ds(...) 维护滚动底部 extraSpace；会同时观测 lastAssistantMessage / lastHumanMessage / extras / chatInput。
 const Ds = ({
   scrollRefs: e,
   autoScrollRef: t,
@@ -1506,6 +1514,8 @@ const Ds = ({
     const o = e.extras.current?.clientHeight || 0;
     const a = r?.current?.clientHeight || window.innerHeight;
     const l = s || 62;
+    // 语义锚点：extraSpace 的目标是把最后消息顶到 sticky 输入区上方。
+    // 它显式依赖 chatInput/extras 高度，所以输入框变高或 extras 出现时，spacer 会同步变小。
     const c = Math.max(a - n - t - o - i - l, 0);
     if (e.extraSpace.current) {
       e.extraSpace.current.style.height = `${c}px`;
@@ -1545,6 +1555,7 @@ const Ds = ({
     "aria-hidden": "true"
   });
 };
+const __cpSidepanelMaintainBottomViewportSpacer = Ds;
 const Ps = a.forwardRef((e, t) => l.jsx("div", {
   ref: t,
   "aria-hidden": "true",
@@ -9822,6 +9833,7 @@ const Ul = a.memo(({
   });
 });
 Ul.displayName = "TimelineGroup";
+const __cpSidepanelTimelineGroupShell = Ul;
 const Zl = l.jsx(dn, {
   size: 16,
   className: "text-text-500"
@@ -17305,6 +17317,8 @@ const op = e => ((e, t) => {
       return e.get(r);
     }
     const [i, o] = t[r];
+    // 语义锚点：sidepanel 工具标题压缩器。
+    // 这里把 tool name + input 归一化成卡片头部的短标题/图标，不展开完整结果内容。
     switch (i) {
       case 0:
       case -1:
@@ -31769,6 +31783,7 @@ const Zx = a.memo(({
     })
   });
 });
+// 语义锚点：Wx(...) 是可折叠的状态 pill 头部；负责 working 文案、caret 展开和 summary suffix，不决定时间线窗口裁剪策略。
 const Wx = a.memo(function ({
   statusText: e,
   isWorking: t,
@@ -31915,12 +31930,15 @@ const Wx = a.memo(function ({
   });
 });
 Wx.displayName = "StatusPill";
+const __cpSidepanelRenderTimelineStatusPillHeader = Wx;
 const qx = {
   animation: "timeline-fade-in 200ms cubic-bezier(0.19, 1, 0.22, 1)"
 };
 const Gx = {
   animation: `timeline-fade-in ${Js * 1000}ms ease-out`
 };
+// 语义锚点：Kx(...) 是 sidepanel 最后一组工具时间线的状态 pill 容器。
+// 这层负责“显示哪一段 timeline blocks、何时显示 working status、以及旧块的退场动画缓冲”。
 const Kx = a.memo(function ({
   blocks: e,
   isStreaming: t,
@@ -31961,26 +31979,35 @@ const Kx = a.memo(function ({
   const F = a.useRef("");
   const z = a.useRef(0);
   const V = a.useRef(false);
+  // 语义锚点：turnIsOver 命中过一次后，会在当前非空时间线里锁存；只有 blocks 清空才重置回“可继续流式追加”。
   if (s && e.length > 0) {
     V.current = true;
   }
   if (e.length === 0) {
     V.current = false;
   }
+  // 语义锚点：working status 可见条件。
+  // 只有“仍在流式执行 + 已有 timeline blocks + 还没进入 turn over 锁存”时，才显示 live status。
   const $ = !s && t && e.length > 0 && !V.current;
   const H = o.length > 0 || u !== null;
   const B = a.useCallback(e => {
     const t = e;
+    // 语义锚点：等待输入工具判定。
+    // approval_options+approval_key、mcp_auth_required、外部 isToolAwaitingInput 谓词，以及 AskUserQuestion 都会把当前 tool_use 视为“等待用户动作”。
     return t.type === "tool_use" && (!!t.approval_options && !!t.approval_key || !!t.mcp_auth_required || !!b?.(e) || t.name === "AskUserQuestion");
   }, [b]);
   const U = a.useCallback(e => {
     const t = e;
+    // 语义锚点：等待输入工具保活链。
+    // 只要 tool_use 还没被 actionedToolIds 标记消费，就算窗口裁剪也必须继续保留可见。
     return (!t.id || !x?.has(t.id)) && B(e);
   }, [x, B]);
   a.useEffect(() => {
     if (!P) {
       return;
     }
+    // 语义锚点：fadeOnStatus 会把状态文案变化当成时间线阶段切点。
+    // 语义锚点：切点记录的是状态变化当下的 blocks.length；变化前旧块归前一阶段，变化后新块归当前阶段。
     const t = n || "";
     if (t && t !== F.current && F.current !== "") {
       z.current = e.length;
@@ -31992,6 +32019,8 @@ const Kx = a.memo(function ({
       return e;
     }
     if (!P) {
+      // 语义锚点：collapse 模式只保留“等待输入工具 + 最近 N 个非 thinking 工具”；手动展开后才看全量。
+      // 语义锚点：collapse 与 fadeOnStatus 是两套互斥窗口策略；当前 ik 链固定不走 collapse。
       if (R) {
         return e;
       }
@@ -32005,6 +32034,7 @@ const Kx = a.memo(function ({
     if (R || e.length === 0) {
       return e;
     }
+    // 语义锚点：fadeOnStatus 模式下，状态文案一旦变化，就只展示最近一次状态切点之后的新阶段 blocks。
     const t = z.current;
     return e.slice(t);
   }, [e, R, P, m, U, s]);
@@ -32030,6 +32060,8 @@ const Kx = a.memo(function ({
     }
     q.current = new Map(Z.map(e => [W.get(e) ?? 0, e]));
     if (t.size > 0) {
+      // 语义锚点：可见时间线窗口收缩时，会把被移出的块暂存到退出缓冲区，给 fade/collapse 动画一个短暂收尾。
+      // 语义锚点：退出缓冲区只服务窗口收缩动画，不参与新的可见窗口计算。
       clearTimeout(J.current);
       K(t);
       J.current = setTimeout(() => K(new Map()), P ? 150 : 100);
@@ -32037,6 +32069,7 @@ const Kx = a.memo(function ({
   }, [Z, W, P, s]);
   const Y = $ && !!n;
   a.useLayoutEffect(() => {
+    // 语义锚点：onStatusDisplayVisibilityChange 只在 live working status 真正显示时通知父层。
     i?.(Y);
     return () => i?.(false);
   }, [Y, i]);
@@ -32056,6 +32089,8 @@ const Kx = a.memo(function ({
     minHeight: T
   } : Q, [Q, T]);
   const re = a.useMemo(() => Z.some(U), [Z, U]);
+  // 语义锚点：streamingMinHeight 只在“未展开、当前窗口里没有等待输入工具、且还有可见 blocks”时生效。
+  // 语义锚点：它只修饰最后一个可见 block；当前 ik 链没有传这个参数。
   const ie = !!T && !R && !re && Z.length > 0;
   if (e.length === 0 && !H) {
     return null;
@@ -32072,6 +32107,8 @@ const Kx = a.memo(function ({
   }, {
     count: e.length
   });
+  // 语义锚点：状态 pill 文案切换。
+  // live status 可见且位置在 pill 内时显示 statusText；否则回退成 step count summary。
   const ue = ae ? le : ce;
   const de = d && !oe;
   const he = e.length > 0;
@@ -32207,6 +32244,7 @@ const Kx = a.memo(function ({
     })
   });
 });
+const __cpSidepanelRenderTimelineStatusWindow = Kx;
 const Jx = e => !!["tool_use", "tool_result"].includes(e.type);
 const Yx = e => e.type !== "tool_result";
 function Xx(e) {
@@ -32447,6 +32485,7 @@ const nb = (e, t, n, s) => {
         };
       case "read_page":
         {
+          // 语义锚点：read_page 标题只消费 filter，不在头部透出 depth/ref_id/max_chars。
           const e = o.filter;
           const t = n.formatMessage({
             defaultMessage: "Read page",
@@ -32459,6 +32498,7 @@ const nb = (e, t, n, s) => {
         }
       case "find":
         {
+          // 语义锚点：find 标题只展示截断后的 query，避免把长提示词直接灌进时间线头部。
           const e = o.query;
           if (e) {
             const t = e.length > 30 ? `${e.slice(0, 30)}...` : e;
@@ -32536,6 +32576,7 @@ const nb = (e, t, n, s) => {
         }
       case "navigate":
         {
+          // 语义锚点：navigate 标题只展示截断后的 url，真正结果文本留在展开态内容里。
           const e = o.url;
           const t = e ? e.length > 30 ? `${e.slice(0, 30)}...` : e : "";
           return {
@@ -33416,6 +33457,7 @@ const mb = ({
     })]
   });
 };
+const __cpSidepanelRenderTimelineThumbnailWithPreview = mb;
 const fb = e => l.jsx(ee, {
   ...e,
   children: l.jsx("path", {
@@ -33786,6 +33828,7 @@ function Fb({
     })
   });
 }
+const __cpSidepanelRenderClickCoordinateOverlay = Fb;
 function zb({
   screenshot: e,
   startCoordinate: n,
@@ -33895,12 +33938,15 @@ function zb({
     })]
   });
 }
+const __cpSidepanelRenderDragPathOverlay = zb;
 function Vb({
   result: n,
   toolInfo: s,
   lastScreenshot: r,
   debugMode: i = false
 }) {
+  // 语义锚点：sidepanel 的工具结果卡片 consumer。
+  // 头部摘要、展开态文本、调试截图叠层都在这里按 toolInfo/result 联合消费。
   const o = t();
   const [c, u] = a.useState(false);
   const [d, h] = a.useState(false);
@@ -33926,6 +33972,7 @@ function Vb({
       return null;
     }
     if (s.name === "computer") {
+      // 语义锚点：computer 结果卡片优先读 input.action；如果 result.content 里还能解析出 action，就用它兜底恢复展示分支。
       const e = s.input?.action;
       const t = typeof n.content == "string" ? (() => {
         try {
@@ -34559,7 +34606,9 @@ function Vb({
               children: JSON.stringify(s.input, null, 2)
             })]
           })]
-        }), (s?.name === "click" && s?.input?.coordinate || s?.name === "computer" && ["left_click", "right_click", "double_click", "triple_click"].includes(s?.input?.action) && s?.input?.coordinate) && r && l.jsxs("div", {
+        }),
+        // 语义锚点：debug 展开态会把 click 坐标和 drag 路径叠加到最近一张 screenshot 上，帮助人工回放动作。
+        (s?.name === "click" && s?.input?.coordinate || s?.name === "computer" && ["left_click", "right_click", "double_click", "triple_click"].includes(s?.input?.action) && s?.input?.coordinate) && r && l.jsxs("div", {
           children: [l.jsx("span", {
             className: "font-caption font-medium text-text-400",
             children: l.jsx(e, {
@@ -34619,6 +34668,7 @@ function Vb({
     })]
   });
 }
+const __cpSidepanelRenderBrowserToolResultCard = Vb;
 const $b = a.memo(function ({
   toolName: n,
   toolDisplayName: s,
@@ -34690,6 +34740,7 @@ const $b = a.memo(function ({
   const L = c?.tabId;
   const O = L && x ? x.get(L) : undefined;
   const I = n === "click" || n === "computer" && ["left_click", "right_click", "double_click", "triple_click"].includes(c?.action) ? c?.coordinate : undefined;
+  // 语义锚点：timeline group 的缩略图优先显示工具结果自带图片；没有图片时才退回 lastScreenshot + 坐标覆盖层。
   const R = d === nr.TimelineGroup ? A ? l.jsx(mb, {
     dataUrl: A
   }) : O && I ? l.jsx(mb, {
@@ -36221,6 +36272,7 @@ const Jw = a.memo(({
         if (n.role === "user" && Array.isArray(n.content)) {
           const t = n.content.find(t => t.type === "tool_result" && t.tool_use_id === e.id);
           if (t) {
+            // 语义锚点：tool_use 渲染时会向后扫描同消息后的 user tool_result，按 tool_use_id 把结果补回当前卡片。
             s = t;
             break;
           }
@@ -36388,6 +36440,7 @@ const Jw = a.memo(({
   e.type;
   return null;
 });
+const __cpSidepanelRenderMessageBlockDispatcher = Jw;
 const Yw = ({
   blocks: e,
   isStreaming: t,
@@ -36429,6 +36482,7 @@ const Yw = ({
     e.forEach((s, r) => {
       if (!n.has(r)) {
         if (Jx(s)) {
+          // 语义锚点：TimelineGroup 构造器会把连续的 tool_use/tool_result 相邻块折成一个 group。
           const i = {
             items: [{
               block: s,
@@ -37017,6 +37071,8 @@ const rk = ({
     })]
   });
 };
+const __cpSidepanelBuildAssistantTimelineGroups = Yw;
+// 语义锚点：Yw(...) 只处理单条 assistant 消息内部的 block 组装；tool_group 路径不会经过这里，而是走 ok -> ik。
 const ik = a.memo(function ({
   messages: e,
   allMessages: n,
@@ -37107,6 +37163,7 @@ const ik = a.memo(function ({
             });
           }
         } else {
+          // 语义锚点：turn_answer_start 只是阶段分割标记，本身不渲染。
           o = true;
         }
       });
@@ -37122,6 +37179,7 @@ const ik = a.memo(function ({
     toolResultsByToolId: x
   } = s;
   const b = a.useCallback((e, t, s) => {
+    // 语义锚点：timeline block renderer 读的是 tool_use 块，但展示时会去 toolResultsByToolId 账本里取对应结果。
     const r = e.type === "tool_use" && x.has(e.block.id);
     const i = e.type === "tool_use" ? !r && u : c && s.isLastItem;
     if (e.type === "text") {
@@ -37174,13 +37232,19 @@ const ik = a.memo(function ({
   const k = a.useMemo(() => n.slice(i + 1).some(e => e.type === "result" || e.role === "user" && !!Array.isArray(e.content) && e.content.some(e => e.type === "text" && e.text?.trim())), [i, o]);
   const C = g.some(e => e.type === "text" && e.block.text?.trim());
   const _ = f.length > 0;
+  // 语义锚点：ik(...) 里的 turnIsOver 判定。
+  // 有 timelineBlocks 时，需要 finalBlocks/后续 result-user/completion signal 任一命中才算收口；纯 answer_start 场景则靠 foundTurnAnswerStart 等边界兜底。
+  // 语义锚点：有 timelineBlocks 时，foundTurnAnswerStart 还不够收口；必须等 final text / later result-user / completion signal。
   const M = _ ? C || k || y : v || k || y;
+  // 语义锚点：turn_answer_start 会把 assistant 输出切成“时间线阶段”和“最终回答阶段”两段。
+  // timelineBlocks 负责展示执行过程，finalBlocks 负责展示 answer_start 之后的正文。
   const S = a.useCallback(e => {
     m(e && _);
   }, [m, _]);
   if (f.length === 0 && g.length === 0) {
     return null;
   }
+  // 语义锚点：timeline statusText 优先吃 currentStatusProp，没有外部状态时才回退默认 Working。
   const j = d || p.formatMessage({
     defaultMessage: "Working",
     id: "gAR0atqpRn"
@@ -37191,6 +37255,10 @@ const ik = a.memo(function ({
     statusText: j,
     turnIsOver: M,
     renderBlock: b,
+    // 语义锚点：ik(...) 当前不会额外传 actionedToolIds / isToolAwaitingInput。
+    // 所以最后一组时间线里的“等待输入”主要靠 tool_use 自带 approval/mcp_auth_required/AskUserQuestion 字段兜底识别。
+    // 语义锚点：ik(...) 固定把 Kx 切到 fadeOnStatus；状态文案变化会把最后一组时间线切成新的可见阶段。
+    // 语义锚点：当前活跃执行时间线固定走 fadeOnStatus，不使用 collapse，也不传 actionedToolIds/isToolAwaitingInput/streamingMinHeight。
     toolTransition: "fadeOnStatus",
     blocksAfterTimeline: g,
     renderBlockAfterTimeline: w,
@@ -37198,6 +37266,10 @@ const ik = a.memo(function ({
     statusPillClassName: "pb-1"
   });
 });
+const __cpSidepanelRenderBrowserToolTimelineCard = $b;
+const __cpSidepanelBuildActiveTimelinePhaseWindow = ik;
+const __cpSidepanelRenderActiveToolTimeline = ik;
+const __cpSidepanelTimelineStatusPill = Kx;
 const ok = a.memo(function ({
   messageGroups: e,
   messages: t,
@@ -37229,6 +37301,7 @@ const ok = a.memo(function ({
       return false;
     });
   }, []);
+  // 语义锚点：_s(...) 返回的是 sidepanel timeline renderContext 账本，负责 tool_result/screenshot 对账，不负责 messageGroups 构造。
   const f = _s(t);
   const g = a.useMemo(() => {
     for (let e = t.length - 1; e >= 0; e--) {
@@ -37251,6 +37324,8 @@ const ok = a.memo(function ({
   }
   const v = (a, m) => {
     if (a.type === "tool_group") {
+      // 语义锚点：ok(...) 只消费已构造好的 messageGroups；tool_group 走 ik(...)，single 消息走 rk/sk，自己不做 assistant block 级分组。
+      // 语义锚点：messageGroups 里的 tool_group 会被渲染成可折叠 TimelineGroup，里面再逐条消费 tool_use/tool_result。
       const i = m === e.length - 1;
       const o = a.messages[a.messages.length - 1];
       const c = i && o?.role === "assistant" && n;
@@ -37280,10 +37355,12 @@ const ok = a.memo(function ({
       return null;
     }
     if (y.isCompactSummary) {
+      // 语义锚点：compact summary 不走普通消息 renderer，而是单独走 Conversation summary 折叠卡片。
       return l.jsx(rk, {
         message: y
       }, v);
     }
+    // 语义锚点：isLastMessage 只在当前块之后只剩 result/user 尾巴时为 true。
     const x = (() => {
       for (let e = t.length - 1; e > v; e--) {
         const n = t[e];
@@ -37296,6 +37373,7 @@ const ok = a.memo(function ({
     const b = y.role === "assistant";
     let w = false;
     if (b && !y.isCompactionMessage) {
+      // 语义锚点：showThumbs 只给 assistant 正文块；要么它已经到对话尾部，要么后面已经出现新的真实 user 提问。
       w = x || g > v;
     }
     const k = y.isCompactionMessage;
@@ -37324,6 +37402,7 @@ const ok = a.memo(function ({
       })
     }, v);
   };
+  // 语义锚点：lastHumanMessage 绑定最后一个真实 user 组；lastAssistantMessage 绑定其后的 assistant 尾段容器。
   const x = e.slice(0, y + 1);
   const b = e.slice(y + 1);
   return l.jsxs(l.Fragment, {
@@ -37379,7 +37458,10 @@ const ak = a.memo(function ({
     }
     return t;
   });
+  // 语义锚点：_s(...) 也会给 messageHistory 提供同一套 renderContext，保证历史块和当前时间线共用 tool_result/screenshot 对账。
   const T = _s(s);
+  // 语义锚点：ak(...) 负责把 messageHistory -> compact divider -> 当前 messageGroups -> extras/footer/chatInput 拼成同一滚动层。
+  // 语义锚点：extras 属于滚动层内的底部附加区；children/chatInput/footer 作为 sticky 底栏拼在 messageGroups 之后。
   return l.jsx(fs, {
     ref: f,
     parentClassName: "flex-1 " + (e.length === 0 ? "!overflow-hidden" : ""),
@@ -37429,6 +37511,7 @@ const ak = a.memo(function ({
           ref: g.extras,
           className: "min-h-8",
           children: [l.jsxs("div", {
+            // 语义锚点：底部 thinking/compacting 状态只在“仍在跑、没有 permission prompt、且最后一组没有展开 timeline”时显示。
             className: "flex items-center gap-3 " + (!r && !i && !o || u || j ? "invisible" : ""),
             children: [l.jsx(ps, {
               state: i || o ? "shimmer" : "thinking",
@@ -37470,6 +37553,8 @@ const ak = a.memo(function ({
     })
   });
 });
+const __cpSidepanelRenderMessageGroups = ok;
+const __cpSidepanelRenderConversationScrollLayer = ak;
 const lk = a.createContext({});
 function ck(e) {
   const t = a.useRef(null);
@@ -52517,6 +52602,7 @@ const HR = a.memo(({
     return null;
   }
 });
+// 语义锚点：BR(...) 是底部输入区的“滚动到底部”守卫；依赖 sentinelElement 与 autoscrollRef 判断按钮显隐。
 function BR({
   autoscrollRef: e,
   sentinelElement: t,
@@ -52574,6 +52660,7 @@ function BR({
     })
   });
 }
+const __cpSidepanelRenderScrollToBottomGuard = BR;
 function UR(e) {
   this.content = e;
 }
@@ -80236,6 +80323,7 @@ async function RY(e, t = true) {
 }
 const DY = ["system", "navigation", "shortcuts-list", "shortcuts-actions"];
 const PY = a.createContext(undefined);
+// 语义锚点：FY(...) 是输入区 slash/shortcut 菜单的状态控制器；负责 active item、submenu、键盘/鼠标模式与 outside close。
 function FY({
   children: e,
   items: t,
@@ -80428,6 +80516,7 @@ function FY({
     children: e
   });
 }
+const __cpSidepanelProvideComposerShortcutMenuState = FY;
 function zY() {
   const e = a.useContext(PY);
   if (!e) {
@@ -80540,6 +80629,7 @@ function HY({
     }
     const n = document.querySelector("[data-chat-input-container]");
     if (!n) {
+      // 语义锚点：如果当前没有 chat input 容器，就退回外部传入的 clientRect 做主菜单定位。
       const t = e?.();
       if (t) {
         r({
@@ -80551,6 +80641,7 @@ function HY({
       return;
     }
     const s = n.getBoundingClientRect();
+    // 语义锚点：主菜单优先锚到 chat input 容器上沿，而不是 editor 当前 selection 的 clientRect。
     r({
       position: "fixed",
       bottom: window.innerHeight - s.top + 8,
@@ -80649,6 +80740,7 @@ function HY({
     })]
   });
 }
+const __cpSidepanelRenderInputAnchoredShortcutMenu = HY;
 function BY({
   items: e,
   command: n,
@@ -80666,6 +80758,7 @@ function BY({
   const [f, g] = a.useState({});
   a.useEffect(() => {
     (async () => {
+      // 语义锚点：BY(...) 会异步加载 shortcut submenu 数据，再交给 FY/HY 做定位和交互。
       const e = await async function (e, t, n = true) {
         return RY(t, n);
       }(0, m, p);
@@ -80724,6 +80817,7 @@ function BY({
     })
   });
 }
+const __cpSidepanelRenderComposerCommandMenu = BY;
 const UY = {
   keys: [{
     name: "name",
@@ -80918,6 +81012,9 @@ function GY(e) {
     }
   };
 }
+// 语义锚点：GY(...) 为 tiptap suggestion 插件提供 slash "/" 命令菜单的 items/command/render 三入口。
+// render 分支内部会用 ReactRenderer(Pq) 挂载 BY(...) 菜单组件，并把 DOM element append 到 document.body。
+const __cpSidepanelBuildSlashShortcutSuggestionConfig = GY;
 const KY = GU.create({
   name: "shortcut-suggestion",
   addOptions: () => ({
@@ -80946,6 +81043,8 @@ const KY = GU.create({
     })];
   }
 });
+// 语义锚点：KY(...) 是 slash "/" shortcut-suggestion 的 tiptap 扩展入口。
+const __cpSidepanelSlashShortcutSuggestionExtension = KY;
 const JY = a.forwardRef(({
   value: e,
   onChange: n,
@@ -81159,6 +81258,7 @@ const JY = a.forwardRef(({
     })
   });
 });
+// 语义锚点：YY(...) 是 sidepanel 底部 sticky chatInput/footer 根组件；负责 banner、输入框、附件与发送控制，不参与 messageGroups 渲染。
 function YY({
   inputText: n,
   setInputText: s,
@@ -81280,6 +81380,7 @@ function YY({
         children: l.jsx(_S, {
           mode: "wait",
           children: (() => {
+            // 语义锚点：activeBanner 复用输入区顶部 banner 槽；eligibility/error/refusal/messageLimit/highRisk/notification/announcement 都从这里分流。
             if (F === "eligibility") {
               return l.jsx("div", {
                 className: "flex h-full items-center justify-center px-3 py-6",
@@ -81412,6 +81513,7 @@ function YY({
         }
       })(), (q?.reason !== "refusal" || !K.modelFallbacks?.[G]) && l.jsxs(l.Fragment, {
         children: [l.jsx("div", {
+          // 语义锚点：chatInputContainerRef 真正挂在输入卡片容器上，供 viewport extraSpace 计算与 sticky 底栏定位复用。
           ref: he,
           "data-chat-input-container": "true",
           className: "bg-bg-000 rounded-2xl relative z-30 transition-all focus-within:outline-none shadow-[0_0.25rem_1.25rem_hsl(var(--always-black)/3.5%),0_0_0_0.5px_hsla(var(--border-300)/0.15)] hover:shadow-[0_0.25rem_1.25rem_hsl(var(--always-black)/3.5%),0_0_0_0.5px_hsla(var(--border-200)/0.3)] focus-within:shadow-[0_0.25rem_1.25rem_hsl(var(--always-black)/7.5%),0_0_0_0.5px_hsla(var(--border-200)/0.3)] " + (__cpSurfaceBlocked ? "cursor-not-allowed opacity-80" : "cursor-text"),
@@ -83047,6 +83149,7 @@ const uX = ({
   onDeny: h,
   disableAlwaysAllow: p
 });
+const __cpSidepanelRenderChatInputFooter = YY;
 function dX({
   permissionPrompt: t,
   onAllow: n,
@@ -94621,6 +94724,7 @@ async function n1(e, t, n) {
     URL.revokeObjectURL(i);
   } catch (s) {}
 }
+// 语义锚点：messageGroups 构造前，会先找“真实 user 文本”边界，避免把纯 tool_result / syntheticResult 误算成普通对话。
 const s1 = e => {
   if (e.role !== "user") {
     return false;
@@ -94633,6 +94737,8 @@ const s1 = e => {
   }
   return (Array.isArray(e.content) ? e.content : []).some(e => e.type === "text" && e.text?.trim().length > 0);
 };
+// 语义锚点：tool_group 起始判定。
+// assistant 侧只要含 tool_use，或 user 侧只剩 tool_result / syntheticResult，就视为工具态消息。
 const r1 = e => {
   const t = Array.isArray(e.content) ? e.content : [];
   if (e.role === "assistant") {
@@ -94647,10 +94753,13 @@ const r1 = e => {
   }
   return false;
 };
+// 语义锚点：messageGroups 构造入口。
+// 当前消息已是工具态，或后 3 条内仍会继续接工具链时，会折成 tool_group，供 sidepanel 时间线统一渲染。
 const i1 = (e, t) => ((e, t = false) => {
   const n = [];
   let s = 0;
   const r = t => {
+    // 语义锚点：这里会向后看 3 条消息，判断当前 assistant 正文是否仍与即将到来的工具链相连。
     for (let n = t; n < Math.min(t + 3, e.length); n++) {
       if (r1(e[n])) {
         return true;
@@ -94661,6 +94770,7 @@ const i1 = (e, t) => ((e, t = false) => {
   while (s < e.length) {
     const i = e[s];
     const o = e.slice(s + 1).some(s1);
+    // 语义锚点：除了当前已是工具态、后 3 条仍会接工具链外，运行中且后面已无真实 user 文本的 assistant 尾段也会并入 tool_group。
     if (r1(i) || t && i.role === "assistant" && !o || i.role === "assistant" && r(s + 1)) {
       const o = {
         type: "tool_group",
@@ -94673,6 +94783,8 @@ const i1 = (e, t) => ((e, t = false) => {
         const n = e[a];
         const s = e.slice(a + 1).some(s1);
         if (!r1(n) && (!t || n.role !== "assistant" || !!s) && (n.role !== "assistant" || !r(a + 1))) {
+          // 语义锚点：tool_group 扩张边界。
+          // 遇到真实 user 文本，或不会继续接工具链的 assistant 正文后，停止吞并。
           break;
         }
         o.messages.push(n);
@@ -94693,6 +94805,9 @@ const i1 = (e, t) => ((e, t = false) => {
   }
   return n;
 })(e, t);
+const __cpSidepanelHasVisibleUserPrompt = s1;
+const __cpSidepanelIsToolLifecycleMessage = r1;
+const __cpSidepanelBuildMessageGroups = i1;
 function o1() {
   const n = t();
   const s = Ns();
@@ -95315,6 +95430,9 @@ function o1() {
   const Pe = a.useRef(null);
   const Fe = a.useRef(null);
   const ze = a.useRef(null);
+  const __cpSidepanelAutoscrollControllerRef = Pe;
+  const __cpSidepanelMessageBottomSentinelRef = ze;
+  // 语义锚点：scrollRefs 聚合 lastHuman / lastAssistant / extras / extraSpace / chatInput 这五组 viewport ref。
   const Ve = a.useRef({
     lastAssistantMessage: a.useRef(null),
     lastHumanMessage: a.useRef(null),
@@ -95322,6 +95440,7 @@ function o1() {
     extraSpace: a.useRef(null),
     chatInput: a.useRef(null)
   }).current;
+  const __cpSidepanelViewportScrollRefs = Ve;
   const $e = f || false;
   const {
     analytics: He
@@ -95832,6 +95951,7 @@ function o1() {
     }, [n, s, e, t, i]);
   })(dt, xt);
   const Nt = O;
+  // 语义锚点：sidepanel 当前消息会先折成 messageGroups，再交给 ok/ak 做 tool_group 与普通消息分流渲染。
   const At = a.useMemo(() => {
     try {
       return i1(dt, xt);
@@ -95844,6 +95964,7 @@ function o1() {
       }));
     }
   }, [dt, xt]);
+  const __cpSidepanelBuildCurrentTurnMessageGroups = At;
   const {
     recordingState: Lt,
     error: Ot,
@@ -97712,8 +97833,10 @@ function o1() {
       const __cpSidepanelQueryModeWindow = "window";
       const __cpSidepanelQueryKeySessionId = "sessionId";
       const __cpSidepanelQueryKeySkipPermissions = "skipPermissions";
+      // 语义锚点：sidepanel 的输入桥 runtime listener；真正消费 STOP_AGENT / EXECUTE_TASK / POPULATE_INPUT_TEXT。
       const a = (a, f, g) => {
         if (a.type === __cpSidepanelRuntimeMessageTypePingSidepanel) {
+          // 语义锚点：PING_SIDEPANEL 只是活性探针，收到后立即回 success + 当前 tabId。
           g({
             success: true,
             tabId: e
@@ -97721,6 +97844,7 @@ function o1() {
           return true;
         }
         if (a.type === __cpSidepanelRuntimeMessageTypeMainTabAckRequest) {
+          // 语义锚点：MAIN_TAB_ACK_REQUEST 只让主 tab 回 ACK；secondary tab 收到但不匹配时直接忽略。
           if (e === a.mainTabId && !t) {
             chrome.runtime.sendMessage({
               type: __cpSidepanelRuntimeMessageTypeMainTabAckResponse,
@@ -97736,6 +97860,7 @@ function o1() {
           return false;
         }
         if (a.type === __cpSidepanelRuntimeMessageTypeStopAgent) {
+          // 语义锚点：STOP_AGENT 当前不按 targetTabId 过滤；收到消息就直接走 cancel + permission deny 收口。
           if (n) {
             s();
           }
@@ -97746,6 +97871,8 @@ function o1() {
           return true;
         }
         if (a.type === __cpSidepanelRuntimeMessageTypeExecuteTask) {
+          // 语义锚点：EXECUTE_TASK 会先按 windowSessionId / targetTabId 过滤目标 sidepanel，再决定是否真正落 prompt。
+          // 语义锚点：EXECUTE_TASK 是“过滤后直接发送”分支，不灌草稿、不注入附件/模型。
           const t = new URLSearchParams(window.location.search);
           const s = t.get(__cpSidepanelQueryKeyMode) === __cpSidepanelQueryModeWindow;
           const r = t.get(__cpSidepanelQueryKeySessionId);
@@ -97764,6 +97891,7 @@ function o1() {
           if (t.get(__cpSidepanelQueryKeySkipPermissions) === "true") {
             o.setPermissionMode("skip_all_permission_checks");
           }
+          // 语义锚点：scheduled task 只是给 prompt 加任务名前缀；真正发送仍复用普通 sendMessage 主链。
           const c = a.isScheduledTask && a.taskName ? `[Scheduled Task: ${a.taskName}]\n${a.prompt}` : a.prompt;
           if (!n && (h || p) && c.trim()) {
             i.setInputText("");
@@ -97775,6 +97903,9 @@ function o1() {
           return true;
         }
         if (a.type === __cpSidepanelRuntimeMessageTypePopulateInputText) {
+          // 语义锚点：POPULATE_INPUT_TEXT 负责把 prompt / permissionMode / selectedModel / attachments 一次性灌进 sidepanel 草稿态。
+          // 它本身不按 tabId/sessionId 过滤；真正的面板选路发生在 service-worker 打开目标 panel 和 EXECUTE_TASK 分支里。
+          // 语义锚点：POPULATE_INPUT_TEXT 是“草稿灌入 + 条件满足时延迟自动发送”分支；pendingPrompt 也从这里建立。
           const e = a.prompt || "";
           i.setInputText(e);
           i.setPendingPrompt(e);
@@ -97820,6 +97951,7 @@ function o1() {
             }
           }
           setTimeout(() => {
+            // 语义锚点：带附件的 populate 走“先注入草稿/附件，再延迟触发发送”，避免 UI 状态还没准备好就开跑。
             if (!n && (h || p) && e.trim() && m) {
               i.setInputText("");
               i.setPendingPrompt(null);
@@ -97834,6 +97966,7 @@ function o1() {
         }
         return false;
       };
+      const __cpSidepanelConsumeRuntimeInputBridgeMessage = a;
       chrome.runtime.onMessage.addListener(a);
       return () => {
         chrome.runtime.onMessage.removeListener(a);
@@ -98056,6 +98189,7 @@ function o1() {
         x(v.BROWSER_CONTROL_PERMISSION_ACCEPTED, true).then(() => {
           _e(true);
           if (o.pendingPrompt) {
+            // 语义锚点：浏览器控制权限放行后，如果还有 pendingPrompt，会补发一次 sendMessage。
             setTimeout(() => {
               pt(o.pendingPrompt);
               o.setPendingPrompt(null);
@@ -98252,6 +98386,7 @@ function o1() {
                 }
               }, 0);
             },
+            // 语义锚点：YY(...) 作为 ak(children) 注入 sticky 底栏；它本身不参与 messageGroups 渲染，只负责底部输入区。
             children: l.jsx(YY, {
               inputText: o.inputText,
               setInputText: o.setInputText,

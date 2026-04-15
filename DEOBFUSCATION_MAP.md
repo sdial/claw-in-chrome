@@ -36,6 +36,9 @@
     - detached window lock storage listener：sidepanel 内 detached lock 的 storage 同步桥
     - `__cpSidepanelContractMessages`：sidepanel 侧读取 `contract.messages` 的别名
     - `__cpSidepanelRuntimeMessageType*`：sidepanel `runtime.onMessage` 的消息类型锚点（PING/ACK/EXECUTE/POPULATE/STOP）
+    - `__cpSidepanelBuildToolRenderContext` / `__cpSidepanelRenderMessageBlockDispatcher` / `__cpSidepanelRenderBrowserToolTimelineCard` / `__cpSidepanelRenderBrowserToolResultCard`：sidepanel 的 tool_result 账本、单块 dispatcher、浏览器工具卡片壳与结果卡片正文 consumer
+    - `__cpSidepanelRenderTimelineThumbnailWithPreview` / `__cpSidepanelRenderClickCoordinateOverlay` / `__cpSidepanelRenderDragPathOverlay`：timeline 缩略图与 click/drag 调试叠层
+    - `__cpSidepanelBuildAssistantTimelineGroups` / `__cpSidepanelRenderActiveToolTimeline` / `__cpSidepanelRenderMessageGroups` / `__cpSidepanelTimelineGroupShell`：tool_group 分组、活跃时间线 consumer、messageGroups 渲染器与可折叠 TimelineGroup 外壳
     - `__cpSidepanelQueryKey*`：独立窗口模式的 query key（mode/sessionId/skipPermissions）
     - `__cpSidepanelOutgoingMessageType*`：sidepanel 主动发往 background 的动作名锚点（permission notification / MCP response / panel opened/closed / sound / resize / open options）
     - `__cpSidepanelPairingContract*`：sidepanel 内联 pairing 弹层消费 `show_pairing_prompt`、并复用 `pairing_confirmed` 协议回传的字段/消息常量
@@ -45,6 +48,85 @@
     - `__cpSidepanelStorageKey*`：system/skip-perms/multi-tabs/explicit/tool-usage/custom-tool/purl/version-info/announcement 的 storage key 常量
     - `__cpSidepanelEditorQueryKeyTabId` / `__cpSidepanelBlockedTabsQueryKeyTabId`：编辑器快捷跳转与 blocked-tabs 清理链路复用的 tabId query key
     - 中文入口锚点：`工具执行主循环里的 permission_required 分支`、`工具执行返回 permission_required 时，统一从这里转到 sidepanel 权限弹窗`、`当前 sidepanel 权限请求的 Promise resolve 挂点`、`普通 sidepanel 权限链里，toolUseId 只用于一次性授权账本`、`sidepanel 页面 query 参数协议`、`MCP permission popup 的 query 消费分两段`、`mcpPermissionOnly 独立窗口启动后`、`MCP permission popup consumer 挂载点 1`、`sidepanel 的 MCP permission popup consumer 只消费 storage payload 里的 prompt`、`MCP permission popup consumer 挂载点 2`、`主面板状态层同样只读取 prompt`、`Ee.current(true) 实际上会 resolve 当前 requestId 对应的 MCP permission pending promise`、`Ee.current(false) 会把当前 requestId 对应的 MCP permission pending promise 解析为拒绝`、`权限弹窗“拒绝”处理器`、`sidepanel 内联 pairing 弹层状态`、`PANEL_CLOSED 由 visibilitychange(hidden) 触发`、`mcpPermissionOnly 专用窗口会绕过普通 sidepanel 的权限提示 UI 分支`、`sidepanel 内联 pairing 确认后`、`sidepanel 内联 pairing 的 dismiss 只关闭本地弹层`、`按 chromeGroupId 读取当前 sidepanel 作用域对应的 detached window 锁`
+    - 本轮继续补清：
+      - `sidepanel 工具标题压缩器`
+      - `read_page 标题只消费 filter，不在头部透出 depth/ref_id/max_chars`
+      - `find 标题只展示截断后的 query`
+      - `navigate 标题只展示截断后的 url`
+      - `sidepanel 的工具结果卡片 consumer`
+      - `computer 结果卡片优先读 input.action；如果 result.content 里还能解析出 action，就用它兜底恢复展示分支`
+      - `debug 展开态会把 click 坐标和 drag 路径叠加到最近一张 screenshot 上`
+      - `timeline group 的缩略图优先显示工具结果自带图片；没有图片时才退回 lastScreenshot + 坐标覆盖层`
+      - `sidepanel 的 tool_result 账本入口`
+      - `tool_result 图片会顺手写入 screenshotsByTab`
+      - `tool_use 渲染时会向后扫描同消息后的 user tool_result`
+      - `TimelineGroup 构造器会把连续的 tool_use/tool_result 相邻块折成一个 group`
+      - `_s(...) / __cpSidepanelBuildToolRenderContext`：扫描整段消息，建立 `toolResultsByToolId + screenshotsByTab`
+      - `Jw(...) / __cpSidepanelRenderMessageBlockDispatcher`：单个 assistant block dispatcher；先吃上游 toolResult，再兜底扫描 user tool_result
+      - `$b(...) / __cpSidepanelRenderBrowserToolTimelineCard`：TimelineGroup 模式下同时消费 `toolResult / screenshotsByTab / coordinate`
+      - `Vb(...) / __cpSidepanelRenderBrowserToolResultCard`：`computer / read_page / find / navigate` 的正文 consumer
+      - `mb/Fb/zb`：timeline thumbnail、click overlay、drag overlay 三件套；drag 只进 debug 展开态，不进 timeline fallback
+      - `timeline block renderer 读的是 tool_use 块，但展示时会去 toolResultsByToolId 账本里取对应结果`
+      - `turn_answer_start 会把 assistant 输出切成“时间线阶段”和“最终回答阶段”两段`
+      - `messageGroups 里的 tool_group 会被渲染成可折叠 TimelineGroup`
+      - `PING_SIDEPANEL 只是活性探针，收到后立即回 success + 当前 tabId`
+      - `MAIN_TAB_ACK_REQUEST 只让主 tab 回 ACK；secondary tab 收到但不匹配时直接忽略`
+      - `EXECUTE_TASK 会先按 windowSessionId / targetTabId 过滤目标 sidepanel`
+      - `OPEN_SIDE_PANEL`：`tabId` 只负责打开/绑定目标 panel；后续 `POPULATE_INPUT_TEXT` 不再携带 `tabId`
+      - `scheduled task 只是给 prompt 加任务名前缀；真正发送仍复用普通 sendMessage 主链`
+      - `scheduled task`：真正的定向键是 `windowSessionId`；当前 bridge 不生产 `targetTabId`
+      - `POPULATE_INPUT_TEXT 负责把 prompt / permissionMode / selectedModel / attachments 一次性灌进 sidepanel 草稿态`
+      - `POPULATE_INPUT_TEXT` 自身不按 `tabId/sessionId` 过滤；选路发生在 OPEN_SIDE_PANEL / EXECUTE_TASK
+      - `POPULATE_INPUT_TEXT`：本质是“草稿灌入 + 条件满足时延迟自动发送”；`pendingPrompt` 也从这里建立
+      - `带附件的 populate 走“先注入草稿/附件，再延迟触发发送”`
+      - `STOP_AGENT`：background 会补 `targetTabId`，但 sidepanel 当前 consumer 不读取这个字段
+      - `MCP_PERMISSION_RESPONSE`：service-worker 主桥只做轻量 ACK；`requestId/allowed` 留给 `mcpPermissions`
+      - `ACK 回包收口`：只消费 `success`；`secondaryTabId/mainTabId/timestamp` 只服务探测阶段
+      - `_s(...)`：sidepanel timeline renderContext 账本，不负责 messageGroups 构造
+      - `Ds(...) / __cpSidepanelMaintainBottomViewportSpacer`：同时参考 `lastAssistantMessage / lastHumanMessage / extras / chatInput` 计算 `extraSpace`
+      - `i1(...)`：messageGroups 构造入口
+      - `i1(...)` 起始判定：当前工具态 / 运行中且后面已无真实 user 文本的 assistant 尾段 / 后 3 条仍会接工具链
+      - `tool_group 起始判定`：当前消息已是工具态，或后 3 条内仍会继续接工具链
+      - `tool_group 扩张边界`：遇到真实 user 文本，或不会继续接工具链的 assistant 正文后停止
+      - `scrollRefs`：聚合 `lastHuman / lastAssistant / extras / extraSpace / chatInput` 五组 viewport ref
+      - `ok(...)`：把 `tool_group / single / result / compact summary` 分流到不同 renderer
+      - `ok(...)`：只消费已构造好的 `messageGroups`；`tool_group -> ik(...)`，`single assistant -> sk(...) -> Yw(...)`
+      - `Yw(...)`：只处理单条 assistant 消息内部的 block 组装；`tool_group` 路径不会经过这里
+      - `compact summary`：单独走 Conversation summary 折叠卡片
+      - `showThumbs`：只给 assistant 正文块；到对话尾部或后面已有新 user 提问时才显示
+      - `lastHumanMessage / lastAssistantMessage`：最后一个真实 user 组与其后的 assistant 尾段容器
+      - `ak(...)`：把 `messageHistory -> compact divider -> 当前 messageGroups -> extras/footer/chatInput` 拼成同一滚动层
+      - `ak(...) / __cpSidepanelRenderConversationScrollLayer`：会话滚动层装配器，不参与 `messageGroups` 分组
+      - `YY(...) / __cpSidepanelRenderChatInputFooter`：底部 sticky 输入区根组件；通过 `ak(children)` 挂进滚动层
+      - `chatInputContainerRef`：真正挂在输入卡片容器上，供 `extraSpace` 计算与 sticky 底栏定位复用
+      - `BR(...) / __cpSidepanelRenderScrollToBottomGuard`：底部输入区的“滚动到底部”守卫；依赖 `sentinelElement + autoscrollRef`
+      - `__cpSidepanelAutoscrollControllerRef` / `__cpSidepanelMessageBottomSentinelRef`：顶层 `autoScrollRef/sentinelRef` 两个 ref 槽位；`YY` 把 `sentinelRef.current` 作为 `sentinelElement` 传给 `BR`
+      - `activeBanner`：复用 `YY(...)` 顶部 banner 槽；`eligibility/error/refusal/messageLimit/highRisk/notification/announcement` 都从这里分流
+      - `FY(...) / __cpSidepanelProvideComposerShortcutMenuState`：slash/shortcut 命令菜单 provider（activeIndex/submenu/keydown 导航）
+      - `HY(...) / __cpSidepanelRenderInputAnchoredShortcutMenu`：菜单 overlay；优先锚到 `[data-chat-input-container]`，不存在则回退外部 `clientRect()`
+      - `BY(...) / __cpSidepanelRenderComposerCommandMenu`：命令菜单装配器；异步加载 shortcut submenu 数据，组合 `FY+HY` 完成渲染与关闭
+      - `GY(...) / __cpSidepanelBuildSlashShortcutSuggestionConfig`：tiptap suggestion 配置装配器；输入 `/` 时用 ReactRenderer 挂 `BY(...)`，并 append 到 `document.body`
+      - `KY(...) / __cpSidepanelSlashShortcutSuggestionExtension`：slash `/` 的 tiptap 扩展入口；注入 `char:"/" + allowSpaces:true` 与 `GY(...)` 的 suggestion 配置
+      - `底部 thinking/compacting 状态`：只在“仍在跑、没有 permission prompt、且最后一组没有展开 timeline”时显示
+      - `Wx(...)`：可折叠的状态 pill 头部，只管文案/caret/summary suffix
+      - `Wx(...) / __cpSidepanelRenderTimelineStatusPillHeader`：只负责状态头部显示与展开，不负责窗口裁剪
+      - `Kx(...)`：最后一组工具时间线的状态 pill 容器
+      - `Kx(...) / __cpSidepanelRenderTimelineStatusWindow`：负责可见 blocks 窗口、live working status 与退出缓冲区
+      - `working status 可见条件`：仍在流式执行、已有 timeline blocks、且还没进入 turn over 锁存
+      - `fadeOnStatus`：状态文案变化会切出新的 timeline 阶段窗口
+      - `collapse 模式`：只保留“等待输入工具 + 最近 N 个非 thinking 工具”
+      - `退出缓冲区`：可见时间线窗口收缩时，先短暂保留被移出的块给 fade/collapse 动画收尾
+      - `onStatusDisplayVisibilityChange`：只在 live working status 真正显示时通知父层
+      - `ik(...)` 的 `turnIsOver`：有 timelineBlocks 时需要 finalBlocks/后续 result-user/completion signal 任一命中；纯 answer_start 场景靠 foundTurnAnswerStart 等边界兜底
+      - `turn_answer_start`：只是阶段分割标记，本身不渲染
+      - `timeline statusText`：优先吃 currentStatusProp，没有外部状态时才回退默认 Working
+      - `ik(...) -> Kx(fadeOnStatus)`：状态文案变化会把最后一组时间线切成新的可见阶段
+      - `等待输入工具判定`：approval_options+approval_key、mcp_auth_required、外部 isToolAwaitingInput、AskUserQuestion
+      - `等待输入工具保活链`：未被 actionedToolIds 标记消费前，窗口裁剪也必须继续保留可见
+      - `streamingMinHeight 生效边界`：仅在未展开、当前窗口里没有等待输入工具、且还有可见 blocks 时生效
+      - `状态 pill 文案切换`：live status 可见且位置在 pill 内时显示 statusText，否则回退成 step count summary
+      - `当前活跃执行时间线`：固定走 `fadeOnStatus`，不走 `collapse`，也不传 `streamingMinHeight`
+      - `ik(...)` 当前不会额外传 actionedToolIds / isToolAwaitingInput；当前主链的等待输入主要靠 tool_use 自带 approval/mcp_auth_required/AskUserQuestion 字段兜底
 
 - `assets/service-worker.ts-H0DVM1LS.js`
   - 后台消息桥。
@@ -139,10 +221,85 @@
     - `__cpMcpPermissionPromptStorageKeyPrefix`：后台暂存 MCP 权限提示对象的 storage key 前缀
     - `__cpMcpBridgePairingQueryKey*` / `__cpMcpPermissionPopupQueryKey*`：pairing 页与 MCP 权限弹窗 sidepanel 的 query 参数契约
     - `__cpShortcutsExecuteStartInPopupWindow`：shortcuts_execute 打开独立窗口并发 EXECUTE_TASK 的总入口
+    - `const Xa = ["tabs_context_mcp", "tabs_create_mcp", "tabs_close_mcp"];`：tool executor 允许“无 tab 上下文先启动”的引导工具簇白名单
+    - `tabs_context_mcp`：当前 MCP tab group 的上下文引导工具；`CRITICAL: You must get the context at least once before using other browser automation tools so you know what tabs exist.`
+    - `tabs_create_mcp`：只在当前 session / MCP tab group 内新增空白 tab；缺组时会要求先 `Call tabs_context_mcp with createIfEmpty: true first`
+    - `tabs_close_mcp`：只允许关闭当前 session 可见 group 内的 tab；最后一页关闭后 `Chrome auto-removes the group`
     - `__cpMcpToolExecutor`：MCP 工具执行主入口（tab 编排、域名策略、权限提示、tool_result 回传）
     - `__cpMcpToolErrorResultFactory`：工具执行失败时的标准 error tool_result 格式
     - 中文入口锚点：`bridge 连接握手 payload`、`bridge 入站消息分发`、`bridge 权限请求握手`、`GIF 录制/导出主状态机`、`GIF 导出上传前的 permission_required 产出点`
     - 新增中文入口锚点：`bridge runtime listener 当前只显式消费 pairing_confirmed`、`bridge permission_request 待回包账本`、`requestId 只负责 bridge permission_request/permission_response 对账`、`requestId 是 bridge permission_request/permission_response 的对账键`、`bridge 断连/重连时，未完成的 permission_request 一律按拒绝收口`、`permission prompt storage payload 里的 tabId/timestamp 主要给 background 账本与清理链使用`、`这里把 requestId 绑定到 pending permission promise`、`手动关闭 permission popup 不会立即回包`
+    - 第三轮继续补清：
+      - `tabs_context_mcp / tabs_create_mcp / tabs_close_mcp`：tab 上下文建立 / 新建 / 收口的专用工具簇
+      - `No tab available`：只对非引导工具生效；缺 tab 时先回到 tabs_*_mcp 建上下文
+      - `tabId 是实际执行目标键，只从 tool args 进入后台工具链；toolUseId 继续负责外层 tool_call/tool_result 归属，requestId 仍留给权限握手`
+      - `tool executor 上下文对象`：`toolUseId` 稳定归属；`tabId/tabGroupId/sessionScope` 只负责选择执行环境
+      - `tool executor 的标准 tool_result 封装器`：`tool_use_id` 对应外层 tool_call id，错误不引入 `requestId`
+      - `permission_required sentinel`：`handleToolCall(...)` 返回带 `type` 的对象时，当前约定它仍是 sentinel，不是最终 `tool_result`
+      - `普通工具的 permission_required sentinel 统一形状`：`{ type, tool, url, toolUseId, actionData? }`
+      - `tool executor permission_required 重试链`：先等 permission handler resolve，再按 `toolUseId` 写一次性授权，最后重跑原始 tool_call
+      - `update_plan`：审批通过后直接回 `plan approved` 文本，不重跑普通工具
+      - `__cpDomainTransitionPermissionRequiredFactory / rn(...)`：`DOMAIN_TRANSITION` 专用 producer，本地生成 `toolUseId`
+      - `bridge tool_call -> tool executor -> tool_result 总链`
+      - `内层 tool_use id 与外层 toolUseId 分工`
+      - `tab 编排阶段`
+      - `执行前的 indicator/debugger 挂载链`
+      - `只要工具落到真实 tab，这里就会登记运行态、点亮前缀，并记录 requestId -> tab 的运行中账本`
+      - `tabs_context_mcp` 首次建组前若还没有真实 tab，会先放行 no-tab 例外，但不会提前点亮 indicator
+      - `真正执行工具的 provider 主调用`
+      - `执行结束后的 indicator/completion prefix 收口链`
+      - `tab 执行完成后的延迟收尾`
+      - `强制移除 indicator/prefix 的兜底清理入口`
+      - `service worker 重启或恢复时，批量清理遗留的运行态前缀`
+    - 第三轮后半段继续补清：
+      - `computer 是浏览器前台交互总入口`
+      - `computer 的 action -> permission 映射与 wait 例外`
+      - `permission_required 的 actionData 回填边界`
+      - `javascript_tool` 的 `permission_required`：只透出脚本文本，不带 timeout / eval 细节
+      - `form_input / upload_image` 的 `permission_required`：只回填 `ref/coordinate/value/imageId` 这类最小定位字段
+      - `find / get_page_text / read_page / read_console_messages / read_network_requests / navigate`：默认只返回基础四元组，不附 `actionData`
+      - `GIF 导出上传`：复用 `upload_image` 家族，但 popup 只吃 `coordinate` 预览，不携带 gif 二进制
+      - `navigate`：只有普通 URL 分支会做协议补全、blocklist 与域 permission；`back/forward` 复用历史栈，不重走 permission gate
+      - `get_page_text / read_page`：共用“先 permission，后 hideIndicator/read DOM”的读页模板
+      - `upload_image`：先过目标域 permission，再做原始 URL 安全校验与 message image 解析
+      - `A(...) / __cpMcpPreExecuteSameDomainGuard`：域权限放行后的同域重校验闸门；`click/type/key/drag/scroll_to/hover/javascript_tool/file upload/form_input/GIF export upload/upload_image` 共用
+      - `A(...)` 的调用家族：
+        - 页面级动作：`type / key / javascript_tool`
+        - 定位/指针动作：`click / double_click / triple_click / drag / scroll_to / hover`
+        - 表单/上传动作：`file upload / form_input / upload_image / GIF export upload`
+      - `M / __cpMcpScreenshotViewportContextLedger`：screenshot viewport context 账本，只保存 4 个尺寸字段给坐标换算，不保存图片字节
+      - `ne(...) / __cpMcpScaleScreenshotCoordinatesToViewport`：截图坐标 -> 当前 viewport 坐标缩放器；纯 coordinate 路径先缩放，再进 guard
+      - `me(...) / __cpMcpResolveRefToViewportCenter`：`read_page/find ref -> 可交互中心点坐标` 解析器；会清理失效 ref、`scrollIntoView(center)`，并写 `ref_lookup_ms`
+      - `window.__generateAccessibilityTree` 才是 `read_page/find` 共用的 ref writer；`file_upload / form_input / upload_image(ref)` 都是直接 consumer，不走 `me(...)`
+      - `file_upload`：直接解 `__claudeElementMap`；只有命中 `<input type=file>` 才继续桥接到 `DOM.setFileInputFiles`
+      - `form_input`：直接解 `__claudeElementMap` 并清理 stale ref，然后再分发到控件类型分支
+      - `upload_image(ref)`：直接解 `__claudeElementMap`；命中 `<input type=file>` 走 files 注入，否则统一按 drag-drop target 派发事件，不做 droppable 能力校验
+      - `clearContext / clearAllContexts`：当前只见定义，没有显式调用；screenshot context 主要靠后续 `setContext(...)` 覆盖刷新
+      - `scroll`：会复用 screenshot context 做坐标缩放，但不像 `click / hover / drag` 那样再进 `A(...)`
+      - `zoom`：只消费最近一次 screenshot context，不会回写或清理账本
+      - `click(ref)` / `hover(ref)`：先解 `ref` 成中心点坐标，再进 `A(...)`
+      - `scroll_to`：先过 `A(...)`，再解 `ref` / `scrollIntoView`
+      - `click(coordinate)` / `hover(coordinate)` / `drag`：先按截图上下文做坐标缩放，再进 `A(...)`
+      - `Me(...) / __cpMcpBeforeunloadNavigationGuard`：`navigate` 专用 beforeunload 三态收口器（`accepted / blocked / none`）
+      - `scroll_to / hover 与 read_page/find ref 链`
+      - `统一 tabContext`
+      - `click helper 会先临时隐藏 indicator，再走 mouseMoved -> mousePressed -> mouseReleased`
+      - `screenshot 先探测 viewport，再走 CDP captureScreenshot；超限时回退内容脚本压缩链`
+      - `screenshot 会把 viewport/screenshot 尺寸写进上下文，供后续坐标动作做缩放换算`
+      - `scroll 优先尝试 CDP scrollWheel；无效或超时再回退 DOM/事件注入滚动`
+      - `scroll 成功后会尽量补一张新截图，给后续模型继续定位`
+      - `left_click_drag 复用截图上下文做坐标换算，再串成完整拖拽事件序列`
+      - `zoom 会校验 region 边界，并用 CDP clip 截取局部高分辨率截图`
+      - `find 的 accessibility tree -> createAnthropicMessage(modelClass=small_fast) -> provider 文本提取`
+      - `find`：只解析 provider 文本里的 `ref_X | role | name | type | reason` 行，不回到 `__claudeElementMap` 验活；stale ref 留给后续 consumer 暴露
+      - `find 的 query 裁剪`
+      - `provider 文本提取兼容层`
+      - `navigate 的 Me beforeunload / unsaved changes(force)`
+      - `navigate 的 back / forward / 普通 URL 三路`
+      - `普通 URL 补 https + blocklist + permission`
+      - `read_page 的 hideIndicatorForToolUse`
+      - `read_page 的 main frame 失败转 allFrames`
+      - `read_page 的 finally restoreIndicatorAfterToolUse`
 
 - `assets/pairing-H3Cs7KHl.js`
   - pairing.html 的启动脚本（“连接浏览器”弹窗）。
@@ -172,11 +329,21 @@
 - `assets/accessibility-tree.js-D8KNCIWO.js`
   - `read_page` / DOM 序列化的可访问性树生成器（注入到页面上下文）。
   - 本轮补了几个关键锚点：
+    - `__cpAccessibilityTreeElementWeakRefLedger`：页面侧 `__claudeElementMap` WeakRef 账本
     - `__cpAccessibilityTreeGlobalGeneratorKey`：全局函数名 `window.__generateAccessibilityTree`
+    - `__cpAccessibilityTreeGenerate`：共享 ref writer 主入口别名
     - `__cpAccessibilityTreeInferRole` / `__cpAccessibilityTreeInferLabel`
     - `__cpAccessibilityTreeIsVisible` / `__cpAccessibilityTreeIsInteractive` / `__cpAccessibilityTreeIsStructural`
     - `__cpAccessibilityTreeShouldIncludeElement` / `__cpAccessibilityTreeTraverseAndSerialize`
     - `__cpAccessibilityTreeDefaultDepth` / `__cpAccessibilityTreeFilterInteractive`
+    - 第三轮继续补清：
+      - `read_page / find 共享的 ref writer 主入口`
+      - `ref writer 会先复用旧 ref，再为首次命中的元素分配新的 ref_X`
+      - `一次生成结束后，会对 WeakRef 账本做全表 sweep，删掉已经失效的陈旧 ref`
+      - `read_page 主入口：支持 filter/depth/charLimit/ref_id 四段参数`
+      - `interactive filter 只保留可操作控件`
+      - `ref_id 增量读取链`
+      - `序列化结果超限时不截断正文，而是返回收窄 depth / ref_id 的操作建议`
 
 - `assets/agent-visual-indicator.js-Ct7LqXhp.js`
   - 页面内的“执行态指示器”（边框/Stop 按钮）与“tab group 常驻提示条”。
@@ -190,6 +357,13 @@
     - `__cpAgentIndicatorHideTransitionDelayMs` / `__cpStaticIndicatorHeartbeatIntervalMs`：执行态隐藏过渡与常驻提示条心跳间隔
     - `__cpShowActiveAgentIndicators` / `__cpHideStaticTabGroupIndicator`：显隐主入口别名
     - 中文入口锚点：`tab group 常驻提示条入口`、`tab group 指示器通过后台心跳确认自己仍属于活跃主标签组`
+    - 第三轮继续补清：
+      - `active agent indicator 显示主链`
+      - `active agent indicator 隐藏主链`
+      - `Stop 按钮上报链`
+      - `静态提示条“Open chat” / “Dismiss” 上报链`
+      - `静态提示条关闭链`
+      - `indicator runtime handler`
 
 - `assets/startRecording-BeCDKY84.js`
   - “录制链”相关 chunk（更接近 session replay 事件录制，而非系统级屏幕/音频采集）。

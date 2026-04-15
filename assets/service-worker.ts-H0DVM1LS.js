@@ -657,6 +657,7 @@ async function z(e, s) {
             setTimeout(() => {
               if (!u) {
                 u = true;
+                // 语义锚点：scheduled task 通过 windowSessionId 定向独立 sidepanel；当前 bundle 不生产 targetTabId。
                 chrome.runtime.sendMessage({
                   type: __cpBackgroundMessageTypeExecuteTask,
                   prompt: s,
@@ -726,6 +727,7 @@ chrome.runtime.onMessage.addListener((e, s, a) => {
       // 轻量 ACK 类消息：仅回包确认，让 sidepanel / 指示器 / keepalive 调用方快速结束。
       // 其中 PANEL_OPENED / PANEL_CLOSED 只是面板生命周期 ACK，不参与 MCP permission promise 的解析。
       if (e.type === __cpBackgroundMessageTypePanelOpened || e.type === __cpBackgroundMessageTypePanelClosed || e.type === __cpBackgroundMessageTypeShowPermissionNotification || e.type === __cpBackgroundMessageTypeResizeWindow || e.type === __cpBackgroundMessageTypeMcpPermissionResponse) {
+        // 语义锚点：MCP_PERMISSION_RESPONSE 在 service-worker 主桥里只是轻量 ACK；requestId/allowed 不在这里解析。
         a({
           success: true
         });
@@ -743,6 +745,7 @@ chrome.runtime.onMessage.addListener((e, s, a) => {
       if (e.type !== __cpBackgroundMessageTypePlayNotificationSound) {
         // sidepanel 打开主链：打开侧栏后，按重试策略把 prompt/模型/附件注入输入框。
         if (e.type === __cpBackgroundMessageTypeOpenSidePanel) {
+          // 语义锚点：OPEN_SIDE_PANEL 的 tabId 只负责打开/绑定目标 sidepanel；后续 POPULATE_INPUT_TEXT 不再携带 tabId。
           const t = e.tabId || s.tab?.id;
           if (!t) {
             a({
@@ -913,6 +916,7 @@ chrome.runtime.onMessage.addListener((e, s, a) => {
             n = e.fromTabId;
           }
           if (n) {
+            // 语义锚点：background 会给 STOP_AGENT 补 targetTabId，但当前 sidepanel consumer 不读取这个字段。
             chrome.runtime.sendMessage({
               type: __cpBackgroundMessageTypeStopAgent,
               targetTabId: n
@@ -975,6 +979,7 @@ chrome.runtime.onMessage.addListener((e, s, a) => {
           });
         } else if (e.type === __cpBackgroundMessageTypeMainTabAckResponse) {
           // 主 tab ACK 回包：这里只透传 success，供 secondary heartbeat 判断主 tab 存活。
+          // secondaryTabId/mainTabId/timestamp 只服务探测阶段与 ACK cache，不进入最终收口结果。
           a({
             success: e.success
           });

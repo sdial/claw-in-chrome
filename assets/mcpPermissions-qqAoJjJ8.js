@@ -92,10 +92,13 @@ function C(e, t, r) {
     }
   }
 }
+// 语义锚点：M 是 screenshot viewport context 账本。
+// 它只保存 viewport/screenshot 尺寸，不保存图片字节；供后续 coordinate 路径做截图坐标 -> viewport 坐标换算。
 const M = new class {
   contexts = new Map();
   setContext(e, t) {
     if (t.viewportWidth && t.viewportHeight) {
+      // 语义锚点：setContext 只登记缩放所需的 4 个尺寸字段。
       const r = {
         viewportWidth: t.viewportWidth,
         viewportHeight: t.viewportHeight,
@@ -108,6 +111,8 @@ const M = new class {
   getContext(e) {
     return this.contexts.get(e);
   }
+  // 语义锚点：clearContext / clearAllContexts 是预留的 screenshot context 清理接口。
+  // 当前文件内未见显式 clear 调用；账本实际主要靠后续 screenshot 的 setContext 覆盖刷新。
   clearContext(e) {
     this.contexts.delete(e);
   }
@@ -115,6 +120,9 @@ const M = new class {
     this.contexts.clear();
   }
 }();
+const __cpMcpScreenshotViewportContextLedger = M;
+const __cpMcpClearScreenshotViewportContextForTab = e => M.clearContext(e);
+const __cpMcpClearAllScreenshotViewportContexts = () => M.clearAllContexts();
 function D(e) {
   if (!e.startsWith("http")) {
     e = `https://${e}`;
@@ -128,6 +136,9 @@ function D(e) {
 function R(e) {
   return e.toLowerCase().replace(/^(https?:\/\/)?(www\.)?/, "").replace(/\/.*$/, "");
 }
+// 语义锚点：A(...) 是域权限放行后的同域重校验闸门。
+// 它只比较调用前记录的目标 URL 与执行瞬间 tab 当前 URL 的 hostname；
+// 如果中途跳到别的域，就在 click/type/key/drag/scroll_to/hover/javascript/upload 等真实页面动作前阻断执行。
 async function A(e, t, r) {
   if (!t) {
     return null;
@@ -148,6 +159,7 @@ async function A(e, t, r) {
     return null;
   }
 }
+const __cpMcpPreExecuteSameDomainGuard = A;
 const P = "blockedUrlPatterns";
 function __cpNormalizeDomainCategory(e) {
   return e === "category1" || e === "category2" || e === "category_org_blocked" ? "category0" : e;
@@ -1428,6 +1440,8 @@ class B {
       return false;
     }
   }
+  // 语义锚点：tab 工具簇的可操作 tab 候选集入口。
+  // tabs_context_mcp 返回的 availableTabs/tabIds，本质上就是这里会认可的同组 tab 边界。
   async getValidTabIds(e) {
     try {
       await this.initialize();
@@ -1440,6 +1454,8 @@ class B {
       return [e];
     }
   }
+  // 语义锚点：把 tab 候选集扩展成 tool_result 里的 Tab Context 文本素材。
+  // tabs_context_mcp / tabs_create_mcp / tabs_close_mcp 以及其他浏览器工具最终都会复用这份 metadata 给模型刷新上下文。
   async getValidTabsWithMetadata(e) {
     try {
       const t = await this.getValidTabIds(e);
@@ -1476,6 +1492,8 @@ class B {
       }
     }
   }
+  // 语义锚点：浏览器工具显式指定 tabId 时的最终选中入口。
+  // 若没有显式 tabId，就回退到当前执行 tab；若指定了 tabId，必须先经过 tabs_context_mcp 暴露出的同组候选集校验。
   async getEffectiveTabId(e, t) {
     if (e === undefined) {
       return t;
@@ -1782,6 +1800,8 @@ class B {
     a = this.isMainTab(t) && r ? "pulsing" : "static";
     await this.setTabIndicatorState(t, a, o);
   }
+  // 语义锚点：后台浏览器工具的 tab 编排总入口。
+  // 优先尊重显式 tabId；其次按 tabGroupId 找当前上下文主 tab；失败时再交给上层报 “No tab available / tab group missing”。
   async getTabForMcp(e, t, r = false) {
     await this.initialize();
     await this.loadMcpTabGroupId();
@@ -1886,6 +1906,8 @@ class B {
     this.mcpTabGroupId = null;
     await chrome.storage.local.remove(this.MCP_TAB_GROUP_KEY);
   }
+  // 语义锚点：共享 MCP tab group 的发现/新建入口。
+  // tabs_context_mcp 会先用它把“当前可用 tabs + groupId”序列化成上下文；tabs_create_mcp / tabs_close_mcp 再在这份上下文上增删 tab。
   async getOrCreateMcpTabContext(e) {
     const {
       createIfEmpty: t = false
@@ -1945,6 +1967,8 @@ class B {
     }
   }
   static SESSION_GROUP_COLORS = [chrome.tabGroups.Color.BLUE, chrome.tabGroups.Color.CYAN, chrome.tabGroups.Color.GREEN, chrome.tabGroups.Color.ORANGE, chrome.tabGroups.Color.RED, chrome.tabGroups.Color.PINK, chrome.tabGroups.Color.PURPLE, chrome.tabGroups.Color.GREY];
+  // 语义锚点：bridge/session client 专属 tab group 的发现/新建入口。
+  // createIfEmpty 为 true 时，这里会种出“新窗口/新标签页 + 新 group”的初始工作上下文，供后续所有浏览器工具复用。
   async getOrCreateSessionTabContext(e, t) {
     if (e !== undefined) {
       try {
@@ -3158,6 +3182,8 @@ class H {
     });
   }
   async click(e, t, r, o = "left", a = 1, n = 0, s) {
+    // 语义锚点：click helper 会先临时隐藏 indicator，再走 mouseMoved -> mousePressed -> mouseReleased。
+    // multi-click 只是重复同一坐标的 press/release 序列，不会重新解析目标元素。
     if (!s?.skipIndicator) {
       await F.hideIndicatorForToolUse(e);
       await new Promise(e => setTimeout(e, 50));
@@ -3459,6 +3485,7 @@ class H {
     return H.networkTrackingEnabled.has(e);
   }
   async screenshot(e, t, r) {
+    // 语义锚点：screenshot 先探测 viewport，再走 CDP captureScreenshot；超限时回退内容脚本压缩链。
     const o = t || this.defaultResizeParams;
     const n = r?.span;
     const s = r?.format ?? "jpeg";
@@ -3581,6 +3608,8 @@ class H {
           viewportWidth: l,
           viewportHeight: d
         };
+        // 语义锚点：screenshot 会把 viewport/screenshot 尺寸写进上下文，供后续坐标动作做缩放换算。
+        // 原始截图直返与 content-script 压缩回退，最终都会写入同一份 M 尺寸账本。
         M.setContext(e, t);
         return t;
       }
@@ -3695,6 +3724,7 @@ class H {
       throw new Error("Failed to process screenshot in content script");
     }
     const l = c[0].result;
+    // 语义锚点：content-script 压缩回退链也会回填同一份 screenshot viewport context 账本。
     M.setContext(e, l);
     return l;
   }
@@ -3909,6 +3939,9 @@ function ne(e, t, r) {
   const a = r.viewportHeight / r.screenshotHeight;
   return [Math.round(e * o), Math.round(t * a)];
 }
+// 语义锚点：ne(...) 是截图坐标 -> 当前 viewport 坐标的缩放器。
+// 纯 coordinate 路径会先吃这层缩放，再进入 A(...) 同域 guard。
+const __cpMcpScaleScreenshotCoordinatesToViewport = ne;
 function se(e) {
   const [t, r] = e.split(",");
   const o = t.match(/:(.*?);/)?.[1] || "image/png";
@@ -4058,6 +4091,8 @@ const pe = {
   },
   execute: async (e, t) => {
     try {
+      // 语义锚点：computer 是浏览器前台交互总入口。
+      // 所有鼠标/键盘/截图/hover/scroll_to 动作都会先解析执行 tab，再按 action 分流到对应能力链。
       const o = e || {};
       if (!o.action) {
         throw new Error("Action parameter is required");
@@ -4065,16 +4100,22 @@ const pe = {
       if (!t?.tabId) {
         throw new Error("No active tab found in context");
       }
+      // 语义锚点：普通浏览器工具先把显式 tabId 与当前 session tabId 归一到 effective tab，
+      // 后续执行与返回都围绕同一个 executedOnTabId / tabContext 展开。
       const n = await F.getEffectiveTabId(o.tabId, t.tabId);
       const s = await chrome.tabs.get(n);
       if (!s.id) {
         throw new Error("Active tab has no ID");
       }
+      // 语义锚点：computer 的 action -> permission 映射与 wait 例外。
+      // wait 是纯本地 sleep，不读取页面内容也不触发域权限；其余 action 会先映射到 CLICK / TYPE / READ_PAGE_CONTENT。
       if (!["wait"].includes(o.action)) {
         const e = s.url;
         if (!e) {
           throw new Error("No URL available for active tab");
         }
+        // 语义锚点：computer 的 action -> permission 映射。
+        // wait 是唯一不走域名 permission 的动作；其余动作按 READ_PAGE_CONTENT / CLICK / TYPE 三类能力收口。
         const a = function (e) {
           const t = {
             screenshot: c.READ_PAGE_CONTENT,
@@ -4105,6 +4146,10 @@ const pe = {
               url: e,
               toolUseId: i
             };
+            // 语义锚点：permission_required 的 actionData 回填边界。
+            // 这里只回填 popup 预览/确认所需的最小动作载荷：
+            // click 系列可附截图与 coordinate，type 只附 text，drag 只附起止坐标；
+            // wait / scroll / key / screenshot / zoom / scroll_to / hover 不在这里扩展 actionData。
             if (o.action === "left_click" || o.action === "right_click" || o.action === "double_click" || o.action === "triple_click") {
               try {
                 const e = await K.screenshot(n);
@@ -4154,6 +4199,8 @@ const pe = {
               throw new Error("Text parameter is required for type action");
             }
             try {
+              // 语义锚点：type / key / javascript_tool 属于“页面级动作”家族。
+              // 它们不依赖 ref 命中；A(...) 通过后，动作直接落到当前页面/焦点上下文。
               const r = await A(e, o, "type action");
               return r || (await K.type(e, t.text), {
                 output: `Typed "${t.text}"`
@@ -4189,6 +4236,8 @@ const pe = {
               throw new Error("Coordinate parameter is required for scroll action");
             }
             let [n, s] = t.coordinate;
+            // 语义锚点：scroll 也会复用 screenshot context 做坐标缩放；
+            // 但和 click/hover/drag 不同，这里不会再进入 A(...) 同域重校验。
             const i = M.getContext(e);
             if (i) {
               const [e, t] = ne(n, s, i);
@@ -4217,6 +4266,7 @@ const pe = {
                 default:
                   throw new Error(`Invalid scroll direction: ${c}`);
               }
+              // 语义锚点：scroll 优先尝试 CDP scrollWheel；无效或超时再回退 DOM/事件注入滚动。
               if (a?.skipIndicator) {
                 await K.scrollWheel(e, n, s, t, i);
               } else {
@@ -4250,6 +4300,7 @@ const pe = {
                 }
               }
               if (!a?.skipIndicator) {
+                // 语义锚点：scroll 成功后会尽量补一张新截图，给后续模型继续定位。
                 const t = await async function (e, t, o) {
                   try {
                     const r = await chrome.tabs.get(e);
@@ -4363,6 +4414,7 @@ const pe = {
             let [s, i] = t.coordinate;
             const c = M.getContext(e);
             if (c) {
+              // 语义锚点：drag 是纯 coordinate 路径；start/end 两端都会先按截图上下文缩放，再进入 A(...) guard。
               const [e, t] = ne(a, n, c);
               const [r, o] = ne(s, i, c);
               a = e;
@@ -4370,6 +4422,7 @@ const pe = {
               s = r;
               i = o;
             }
+            // 语义锚点：left_click_drag 复用截图上下文做坐标换算，再串成完整拖拽事件序列。
             try {
               const t = await A(e, o, "drag action");
               return t || (await K.dispatchMouseEvent(e, {
@@ -4428,6 +4481,7 @@ const pe = {
               throw new Error("Invalid region coordinates: x0 and y0 must be non-negative, and x1 > x0, y1 > y0");
             }
             try {
+              // 语义锚点：zoom 只消费最近一次 screenshot context，不会回写或清理这本尺寸账本。
               const t = M.getContext(e);
               if (t) {
                 const [e, r] = ne(o, n, t);
@@ -4459,6 +4513,7 @@ const pe = {
               }
               const u = s - o;
               const h = i - n;
+              // 语义锚点：zoom 会校验 region 边界，并用 CDP clip 截取局部高分辨率截图。
               if (a()) {
                 try {
                   await K.sendCommand(e, "Page.bringToFront", {});
@@ -4492,6 +4547,9 @@ const pe = {
           }(n, o);
           break;
         case "scroll_to":
+          // 语义锚点：scroll_to / hover 与 read_page/find ref 链。
+          // scroll_to 必须消费 read_page/find 产出的 ref；hover 既可走 ref -> 定位元素中心，也可直接走 coordinate。
+          // 顺序上，scroll_to 会先过 A(...) guard，再去解析 ref / scrollIntoView。
           d = await async function (e, t, o, a) {
             if (!t.ref) {
               throw new Error("ref parameter is required for scroll_to action");
@@ -4523,6 +4581,7 @@ const pe = {
             let n;
             let s;
             if (t.ref) {
+              // 语义锚点：hover(ref) 会先把 ref 解析成中心点坐标，再进入 A(...) guard。
               const r = await me(e, t.ref, a?.span);
               if (!r.success) {
                 return {
@@ -4535,6 +4594,7 @@ const pe = {
                 throw new Error("Either ref or coordinate parameter is required for hover action");
               }
               {
+                // 语义锚点：hover(coordinate) 会先按截图上下文做坐标缩放，再进入 A(...) guard。
                 [n, s] = t.coordinate;
                 const r = M.getContext(e);
                 if (r) {
@@ -4569,6 +4629,9 @@ const pe = {
           throw new Error(`Unsupported action: ${o.action}`);
       }
       const h = await F.getValidTabsWithMetadata(t.tabId);
+      // 语义锚点：统一 tabContext。
+      // computer / find / navigate / read_page 这类工具都回填 currentTabId + executedOnTabId + availableTabs，
+      // 让后续工具能沿同一 session/tab 编排链继续执行。
       return {
         ...d,
         tabContext: {
@@ -4680,6 +4743,7 @@ async function me(e, t, r) {
           try {
             let t = null;
             if (window.__claudeElementMap && window.__claudeElementMap[e]) {
+              // 语义锚点：ref lookup 先从 __claudeElementMap 解引用；元素已失效或脱离文档时会顺手清理陈旧 ref。
               t = window.__claudeElementMap[e].deref() || null;
               if (!t || !document.contains(t)) {
                 delete window.__claudeElementMap[e];
@@ -4692,6 +4756,7 @@ async function me(e, t, r) {
                 error: `No element found with reference: "${e}". The element may have been removed from the page.`
               };
             }
+            // 语义锚点：ref 解析命中后，会先把元素滚到可视区中心，再取 bounding rect 中心点坐标。
             t.scrollIntoView({
               behavior: "instant",
               block: "center",
@@ -4716,6 +4781,7 @@ async function me(e, t, r) {
         args: [t]
       });
     } finally {
+      // 语义锚点：ref_lookup_ms 记录一次 ref -> 中心点坐标解析的总耗时。
       r?.setAttribute("ref_lookup_ms", performance.now() - o);
     }
     if (a && a.length !== 0) {
@@ -4733,10 +4799,14 @@ async function me(e, t, r) {
     };
   }
 }
+// 语义锚点：me(...) 是 read_page/find ref -> 当前页面可交互中心点坐标的解析器。
+// 它会先解引用元素、scrollIntoView 到可视区中心，再返回 bounding rect 中心点。
+const __cpMcpResolveRefToViewportCenter = me;
 async function fe(e, t, r = 1, o, a) {
   let n;
   let s;
   if (t.ref) {
+    // 语义锚点：click(ref) 会先把 ref 解析成中心点坐标，再进入 A(...) guard。
     const r = await me(e, t.ref, a?.span);
     if (!r.success) {
       return {
@@ -4749,6 +4819,7 @@ async function fe(e, t, r = 1, o, a) {
       throw new Error("Either ref or coordinate parameter is required for click action");
     }
     {
+      // 语义锚点：click(coordinate) 会先按截图上下文做坐标缩放，再进入 A(...) guard。
       [n, s] = t.coordinate;
       const r = M.getContext(e);
       if (r) {
@@ -4785,6 +4856,8 @@ async function fe(e, t, r = 1, o, a) {
     }(t.modifiers));
   }
   try {
+    // 语义锚点：click / double_click / triple_click 属于“定位/指针动作”家族。
+    // 这条链会先把 ref/coordinate 解析成实际坐标，再过 A(...) 同域重校验，最后才发真实鼠标事件。
     const l = await A(e, o, "click action");
     if (l) {
       return l;
@@ -4882,6 +4955,8 @@ const we = {
       const u = await t.permissionManager.checkPermission(s, i);
       if (!u.allowed) {
         if (u.needsPrompt) {
+          // 语义锚点：javascript_tool 的 permission_required 只透出脚本文本。
+          // timeout / eval 细节 / 返回值模式都留在真正 execute 分支里，不进入 permission popup。
           return {
             type: "permission_required",
             tool: c.EXECUTE_JAVASCRIPT,
@@ -5100,6 +5175,8 @@ const ye = {
           error: "Unable to get original URL for security check"
         };
       }
+      // 语义锚点：file upload / form_input / upload_image / GIF export upload 属于“表单/上传动作”家族。
+      // A(...) 通过前不会去碰 file input、表单控件或历史图片内容；同域 guard 是这些 DOM/二进制操作的最后前置闸门。
       const u = await A(n.id, d, "file upload action");
       if (u) {
         return u;
@@ -5110,6 +5187,9 @@ const ye = {
           tabId: n.id
         },
         func: (e, t) => {
+          // 语义锚点：file_upload 是直接 ref consumer；
+          // 它不走 me(ref)->坐标 helper，而是在页面上下文里直接验活 __claudeElementMap 的 WeakRef。
+          // 这里只有命中 <input type="file">，才会继续桥接到 CDP DOM.setFileInputFiles。
           const r = window.__claudeElementMap;
           if (!r?.[e]) {
             return {
@@ -5284,6 +5364,8 @@ const _e = {
       const l = await t.permissionManager.checkPermission(s, i);
       if (!l.allowed) {
         if (l.needsPrompt) {
+          // 语义锚点：find / get_page_text / read_page / read_console_messages / read_network_requests / navigate
+          // 这类读页/读状态/跳转型 permission_required 默认只返回基础四元组，不附 actionData。
           return {
             type: "permission_required",
             tool: c.READ_PAGE_CONTENT,
@@ -5295,6 +5377,9 @@ const _e = {
           error: "Permission denied for reading pages on this domain"
         };
       }
+      // 语义锚点：find 的 accessibility tree -> createAnthropicMessage(modelClass=small_fast) -> provider 文本提取。
+      // 先抓整页 accessibility tree，再交给 small_fast provider 做轻量语义筛选，最后把文本结果解析回 ref 列表。
+      // ref_X 本身来自 __generateAccessibilityTree 这一侧的页面账本；find 只是重排/裁剪已有 ref，不会自己生成新 ref。
       const d = await x({
         target: {
           tabId: n.id
@@ -5321,6 +5406,8 @@ const _e = {
       if (!h) {
         throw new Error("Custom provider client not available. Please check your custom provider settings.");
       }
+      // 语义锚点：find 的 query 裁剪。
+      // provider 提示词只带裁剪后的 accessibility tree 片段，按 query 命中行优先保留，避免超长上下文压垮 small_fast。
       const p = function (pageContent, query, maxChars = 18000) {
         if (typeof pageContent != "string") {
           return "";
@@ -5395,6 +5482,8 @@ const _e = {
           content: `You are helping find elements on a web page. The user wants to find: "${r}"\n\nHere is the accessibility tree of the page:\n${p}\n\nFind ALL elements that match the user's query. Return up to 20 most relevant matches, ordered by relevance.\n\nReturn plain text only in this exact format (one line per matching element):\n\nFOUND: <total_number_of_matching_elements>\nSHOWING: <number_shown_up_to_20>\n---\nref_X | role | name | type | reason why this matches\nref_Y | role | name | type | reason why this matches\n...\n\nIf there are more than 20 matches, add this line at the end:\nMORE: Use a more specific query to see additional results\n\nIf no matching elements are found, return only:\nFOUND: 0\nERROR: explanation of why no elements were found`
         }]
       }, "sampling_find_tool");
+      // 语义锚点：provider 文本提取兼容层。
+      // 这里统一吸收 output_text / content / message / choices 等不同返回形态，最后只保留可解析的纯文本。
       const f = function (e) {
         function t(e, t = false) {
           if (typeof e == "string") {
@@ -5471,6 +5560,8 @@ const _e = {
         throw new Error(`API returned no text content (received: ${e})`);
       }
       const g = f.split("\n").map(e => e.trim()).filter(e => e);
+      // 语义锚点：find 只消费 provider 文本里的 ref_X 行，不会回到 __claudeElementMap 验活。
+      // 所以 stale ref 是否仍然可用，要等 click/form_input/upload_image 这类后续 consumer 再次解引用时才会暴露。
       let b = 0;
       const w = [];
       let y;
@@ -5483,6 +5574,8 @@ const _e = {
         } else if (e.startsWith("MORE:")) {
           _ = true;
         } else if (e.includes("|") && e.startsWith("ref_")) {
+          // 语义锚点：find 这里只解析 provider 回传的 `ref | role | name | type | reason` 文本格式；
+          // 不做 DOM 二次确认，也不会补写新的 ref 账本。
           const t = e.split("|").map(e => e.trim());
           if (t.length >= 4) {
             w.push({
@@ -5507,6 +5600,7 @@ const _e = {
       const T = w.map(e => `- ${e.ref}: ${e.role}${e.name ? ` "${e.name}"` : ""}${e.type ? ` (${e.type})` : ""}${e.description ? ` - ${e.description}` : ""}`).join("\n");
       w.length;
       const I = await F.getValidTabsWithMetadata(t.tabId);
+      // 语义锚点：统一 tabContext。
       return {
         output: `${v}\n\n${T}`,
         tabContext: {
@@ -5583,6 +5677,8 @@ const ve = {
       const i = await t.permissionManager.checkPermission(n, s);
       if (!i.allowed) {
         if (i.needsPrompt) {
+          // 语义锚点：form_input / upload_image 这类 DOM 命中型 permission_required，
+          // 只回填 ref / coordinate / value / imageId 这类最小定位字段，不附 DOM 快照或二进制 payload。
           return {
             type: "permission_required",
             tool: c.TYPE,
@@ -5604,6 +5700,8 @@ const ve = {
           error: "Unable to get original URL for security check"
         };
       }
+      // 语义锚点：form_input 和 file/upload 家族共用同一层 A(...) 同域 guard；
+      // 只有 guard 通过后，才会继续做 ref 解引用、控件类型分支和实际赋值。
       const d = await A(a.id, l, "form input action");
       if (d) {
         return d;
@@ -5616,6 +5714,9 @@ const ve = {
           try {
             let r = null;
             if (window.__claudeElementMap && window.__claudeElementMap[e]) {
+              // 语义锚点：form_input 是直接 ref consumer；
+              // 它不走 me(ref)->坐标 helper，而是在页面上下文里直接验活 __claudeElementMap。
+              // stale ref 会在这里清掉，guard 通过后才进入 select/checkbox/radio/textbox 分支。
               r = window.__claudeElementMap[e].deref() || null;
               if (!r || !document.contains(r)) {
                 delete window.__claudeElementMap[e];
@@ -5874,6 +5975,8 @@ const Ie = {
         error: "Permission denied for reading page content on this domain"
       };
     }
+    // 语义锚点：get_page_text / read_page 共用“先 permission，后 hideIndicator/read DOM”的读页模板。
+    // 也就是说 permission popup 分支不会提前隐藏 indicator；真正读正文只发生在授权通过之后。
     await F.hideIndicatorForToolUse(a);
     await new Promise(e => setTimeout(e, 50));
     try {
@@ -6238,6 +6341,7 @@ const Ee = {
               const n = await o.permissionManager.checkPermission(r, a);
               if (!n.allowed) {
                 // 语义锚点：GIF 导出上传前的 permission_required 产出点。
+                // 它复用 upload_image 家族，但 permission popup 这里只需要 coordinate 预览，不携带 gif 二进制。
                 if (n.needsPrompt) {
                   return {
                     type: "permission_required",
@@ -6504,6 +6608,9 @@ function Ce(e) {
     left_click_drag: 1500
   }[e] ?? 800;
 }
+// 语义锚点：navigate 的 Me beforeunload / unsaved changes(force)。
+// 这个包装器把 leave-site 对话框统一收口成 accepted / blocked / none 三态；
+// force=true 时策略改为 accept，否则保留页面并返回阻塞错误。
 async function Me(e, t, r) {
   K.setBeforeunloadPolicy(e, t ? "accept" : "dismiss");
   await r();
@@ -6527,6 +6634,7 @@ async function Me(e, t, r) {
     };
   }
 }
+const __cpMcpBeforeunloadNavigationGuard = Me;
 const De = {
   name: "navigate",
   description: "Navigate to a URL, or go forward/back in browser history. If you don't have a valid tab ID, use tabs_context first to get available tabs.",
@@ -6579,6 +6687,8 @@ const De = {
       if (!i.id) {
         throw new Error("Active tab has no ID");
       }
+      // 语义锚点：navigate 的 back / forward / 普通 URL 三路。
+      // back/forward 直接走浏览器历史；普通 URL 则先补协议、过 blocklist，再做域权限检查。
       if (o.toLowerCase() === "back") {
         const e = await Me(s, n, () => chrome.tabs.goBack(i.id));
         if (e.kind === "blocked") {
@@ -6618,6 +6728,9 @@ const De = {
         };
       }
       let l = o;
+      // 语义锚点：普通 URL 补 https + blocklist + permission。
+      // 只有普通 URL 分支会做协议补全、组织/安全 blocklist 检查，以及 permission_required / denied 判定。
+      // back / forward 复用浏览器历史栈，不会重新走域名 permission gate。
       if (!l.match(/^https?:\/\//i)) {
         l = `https://${l}`;
       }
@@ -6653,6 +6766,7 @@ const De = {
         };
       }
       const p = await F.getValidTabsWithMetadata(t.tabId);
+      // 语义锚点：统一 tabContext。
       return {
         output: `Navigated to ${l}${h.kind === "accepted" ? h.suffix : ""}`,
         tabContext: {
@@ -7030,9 +7144,12 @@ const Pe = {
         error: "Permission denied for reading pages on this domain"
       };
     }
+    // 语义锚点：read_page 的 hideIndicatorForToolUse。
+    // 读取 accessibility tree 前先隐藏工具运行态指示器，避免把 overlay 自己读进页面内容。
     await F.hideIndicatorForToolUse(i);
     await new Promise(e => setTimeout(e, 50));
     try {
+      // 语义锚点：read_page 是原始 ref 产出面；ref_id 只是在既有 ref 树上聚焦某个子树，不会改写 ref 身份空间。
       const e = await x({
         target: {
           tabId: l.id
@@ -7056,6 +7173,8 @@ const Pe = {
       }
       const o = e[0].result;
       if (o.error || !o.pageContent?.trim()) {
+        // 语义锚点：read_page 的 main frame 失败转 allFrames。
+        // 主 frame 没拿到有效 pageContent 时，再并行读取所有 frame，把非空结果拼接成统一输出。
         const e = await x({
           target: {
             tabId: l.id,
@@ -7107,6 +7226,8 @@ const Pe = {
         error: `Failed to read page: ${p instanceof Error ? p.message : "Unknown error"}`
       };
     } finally {
+      // 语义锚点：read_page 的 finally restoreIndicatorAfterToolUse。
+      // 无论主 frame 成功、allFrames 回退成功，还是中途抛错，最终都恢复指示器状态。
       await F.restoreIndicatorAfterToolUse(i);
     }
   },
@@ -7570,6 +7691,8 @@ const He = {
           error: "Permission denied for uploading to this domain"
         };
       }
+      // 语义锚点：upload_image 先过目标域 permission，再做原始 URL 安全校验和 message image 解析。
+      // 也就是说 permission popup 不会读取历史图片二进制；真正取图发生在授权通过之后。
       const l = a.url;
       if (!l) {
         return {
@@ -7603,6 +7726,7 @@ const He = {
           try {
             let n = null;
             if (t) {
+              // 语义锚点：upload_image(coordinate) 先走 elementFromPoint 命中，必要时再进 iframe 内部坐标换算。
               n = document.elementFromPoint(t[0], t[1]);
               if (!n) {
                 return {
@@ -7630,6 +7754,8 @@ const He = {
                   error: "Neither coordinate nor elementRef provided"
                 };
               }
+              // 语义锚点：upload_image(ref) 不走 me(ref)->坐标 helper，而是在页面上下文里直接验活 __claudeElementMap。
+              // 命中 <input type="file"> 走 files 注入；否则统一按 drag-drop target 派发事件，不做 droppable 能力校验。
               if (window.__claudeElementMap && window.__claudeElementMap[e]) {
                 n = window.__claudeElementMap[e].deref() || null;
                 if (!n || !document.contains(n)) {
@@ -11966,9 +12092,11 @@ const __cpMcpBridgeSocketFieldUrl = "url";
 const __cpMcpBridgeSocketFieldActionData = "action_data";
 const __cpMcpBridgeSocketFieldMethod = "method";
 const __cpMcpBridgeSocketFieldParams = "params";
+const __cpMcpBridgeToolArgsFieldTabId = "tabId";
 const __cpMcpBridgeToolResultTextContentType = "text";
 const __cpMcpBridgeClientTypeChromeExtension = "chrome-extension";
 const __cpMcpBridgeDefaultPeerClientType = "desktop";
+const __cpMcpToolExecutionSourceBridge = "bridge";
 function Ma() {
   try {
     const e = navigator.userAgentData;
@@ -12104,6 +12232,11 @@ async function Pa() {
                 break;
               case __cpMcpBridgeSocketMessageTypeToolCall:
                 await async function (e) {
+                  // 语义锚点：bridge tool_call -> tool executor -> tool_result 总链。
+                  // 外层 socket message 用 toolUseId 对账，真正的执行细节再交给 MCP tool executor。
+                  // 语义锚点：bridge 入站 tool_call 分发主链：
+                  // 先校验 target_device/tool/toolUseId，再从 args 里拆执行参数，最后把 toolUseId 透传给 tool executor -> tool_result。
+                  // requestId 不参与这里的分发；它只会出现在后续 permission_request/permission_response 对账链。
                   const t = e[__cpMcpBridgeSocketFieldTargetDeviceId];
                   if (t && t !== ka) {
                     return;
@@ -12147,7 +12280,9 @@ async function Pa() {
                     });
                     return;
                   }
-                  const h = typeof s.tabId == "number" ? s.tabId : undefined;
+                  // 语义锚点：tabId 是实际执行目标键，只从 tool args 进入后台工具链；
+                  // toolUseId 继续负责外层 tool_call/tool_result 归属，requestId 仍留给权限握手。
+                  const h = typeof s[__cpMcpBridgeToolArgsFieldTabId] == "number" ? s[__cpMcpBridgeToolArgsFieldTabId] : undefined;
                   if (h !== undefined) {
                     try {
                       await chrome.tabs.get(h);
@@ -12173,13 +12308,16 @@ async function Pa() {
                     }
                   }
                   try {
+                    // 语义锚点：tool_call 外层只负责解析 bridge payload、补齐执行上下文，再把实际执行交给 wn。
+                    // 语义锚点：bridge tool_call -> tool executor 交接点：
+                    // 这里把 tabId/tabGroupId/sessionScope 作为执行上下文传给 wn，而 toolUseId 保留给最终 tool_result 对账。
                     const e = await wn({
                       toolName: a,
                       args: s,
                       tabId: h,
                       tabGroupId: s.tabGroupId,
                       clientId: n,
-                      source: "bridge",
+                      source: __cpMcpToolExecutionSourceBridge,
                       permissionMode: i,
                       allowedDomains: c,
                       toolUseId: o,
@@ -12190,12 +12328,16 @@ async function Pa() {
                       ...u,
                       success: true
                     });
+                    // 语义锚点：tool_result 外层回包会复用原始 toolUseId；
+                    // 内层 tool_use id 只在 provider/processToolResults 这一跳里使用。
                     La({
                       ...e,
                       type: __cpMcpBridgeSocketMessageTypeToolResult,
                       [__cpMcpBridgeSocketFieldToolUseId]: o
                     });
                   } catch (p) {
+                    // 语义锚点：bridge tool_call 异常收口为标准 error tool_result；
+                    // 失败时仍沿用同一个 toolUseId，避免把 permission/request 级别的 requestId 混入结果层。
                     m("claude_chrome.bridge.tool_call", {
                       ...u,
                       success: false,
@@ -12495,6 +12637,8 @@ async function Wa(e) {
   } = e;
   const i = `session_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
   const c = `shortcut_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
+  // 语义锚点：shortcuts_execute 的 tabId 只是独立 sidepanel 窗口后续要执行的目标 tab；
+  // 它不会变成 bridge permission_request 的 requestId，也不会替代 toolUseId。
   await b(r.TARGET_TAB_ID, t);
   await async function (e) {
     const {
@@ -12600,6 +12744,8 @@ async function Ka(e) {
     }
   }
 }
+// 语义锚点：MCP 浏览器自动化工具注册表。
+// tabs_context_mcp / tabs_create_mcp / tabs_close_mcp 是最底层的 tab 编排工具，其他页面读写工具默认依赖这组上下文。
 const za = [Pe, _e, ve, pe, De, Ie, $e, {
   name: "tabs_context_mcp",
   description: "Get context information about the current MCP tab group. Returns all tab IDs inside the group if it exists. CRITICAL: You must get the context at least once before using other browser automation tools so you know what tabs exist. Each new conversation should create its own new tab (using tabs_create) rather than reusing existing tabs, unless the user explicitly asks to use an existing tab.",
@@ -12611,6 +12757,8 @@ const za = [Pe, _e, ve, pe, De, Ie, $e, {
   },
   execute: async (e, t) => {
     try {
+      // 语义锚点：tabs_context_mcp 是浏览器自动化工具簇的上下文根工具。
+      // 先决定当前 session/legacy client 应该绑定哪个 tab group，再把可操作 tab 列表暴露给后续工具。
       const {
         createIfEmpty: r,
         includePermissionState: o,
@@ -12631,7 +12779,10 @@ const za = [Pe, _e, ve, pe, De, Ie, $e, {
         return t;
       }(a) : undefined;
       await F.initialize();
+      // 语义锚点：tabs_context_mcp 会先探测/建立 tab group，再把 availableTabs 固定成后续工具可引用的上下文快照。
       if (t?.sessionScope) {
+        // 语义锚点：session scope 模式下，优先解析“当前会话专属”的 MCP tab group；
+        // createIfEmpty 也只会创建这次 session 自己的工作组，而不是回退到共享组。
         const e = function () {
           let e = 0;
           for (const t of hn.values()) {
@@ -12666,14 +12817,18 @@ const za = [Pe, _e, ve, pe, De, Ie, $e, {
             });
           })(t.sessionScope, a.tabGroupId);
         }
-        if (o) {
-          await Ka(a.availableTabs);
-        }
-        return {
-          output: J(a.availableTabs, a.tabGroupId, undefined, n),
-          tabContext: a
-        };
+      if (o) {
+        await Ka(a.availableTabs);
       }
+      return {
+        // 语义锚点：tabs_context_mcp 返回的 tabContext 是后续普通浏览器工具的输入快照。
+        // 后面的 tools 不再重新“发明”候选 tab 集合，而是复用这里暴露出的 availableTabs/tabGroupId。
+        output: J(a.availableTabs, a.tabGroupId, undefined, n),
+        tabContext: a
+      };
+      }
+      // 语义锚点：没有 sessionScope 时，退回 legacy/shared MCP group 读法；
+      // 这层主要服务旧 bridge/client，不参与新 session 专属隔离。
       const s = await F.getOrCreateMcpTabContext({
         createIfEmpty: r
       });
@@ -12720,9 +12875,13 @@ const za = [Pe, _e, ve, pe, De, Ie, $e, {
   parameters: {},
   execute: async (e, t) => {
     try {
+      // 语义锚点：tabs_create_mcp 只负责在“当前 session 可见的 MCP group”里追加新 tab，
+      // 不负责自己决定 group；group 解析前置依赖 tabs_context_mcp。
       let e;
       await F.initialize();
       if (t?.sessionScope) {
+        // 语义锚点：session scope 模式下，必须先有 tabs_context_mcp 建好的 group；
+        // 否则 create 不能凭空猜一个目标组。
         if (t.tabGroupId === undefined) {
           return {
             error: "No tab group exists for this session yet. Call tabs_context_mcp with createIfEmpty: true first — that creates this session's group and returns its tab IDs."
@@ -12737,6 +12896,7 @@ const za = [Pe, _e, ve, pe, De, Ie, $e, {
           };
         }
       } else {
+        // 语义锚点：legacy/shared 模式下，tabs_create_mcp 才会回退到共享 MCP group。
         const t = await F.getOrCreateMcpTabContext({
           createIfEmpty: false
         });
@@ -12754,6 +12914,8 @@ const za = [Pe, _e, ve, pe, De, Ie, $e, {
       if (!r.id) {
         throw new Error("Failed to create tab - no tab ID returned");
       }
+      // 语义锚点：新 tab 先创建，再显式并入目标 group；
+      // 返回值里的 tabContext 会把这个新 tab 设成 executedOn/currentTabId，供后续工具直接接力。
       await chrome.tabs.group({
         tabIds: r.id,
         groupId: e
@@ -12768,6 +12930,7 @@ const za = [Pe, _e, ve, pe, De, Ie, $e, {
       return {
         output: `Created new tab. Tab ID: ${r.id}`,
         tabContext: {
+          // 语义锚点：create 后立刻把新 tab 写成当前执行 tab，并带上最新 availableTabs 快照。
           currentTabId: r.id,
           executedOnTabId: r.id,
           availableTabs: o,
@@ -12805,6 +12968,8 @@ const za = [Pe, _e, ve, pe, De, Ie, $e, {
   },
   execute: async (e, t) => {
     try {
+      // 语义锚点：tabs_close_mcp 的职责边界：
+      // 只允许关闭当前 session/group 可见的 tab，不允许跨组关闭任意 tab。
       const r = function (e) {
         if (typeof e != "object" || e === null) {
           return "Expected an object with tabId";
@@ -12829,6 +12994,8 @@ const za = [Pe, _e, ve, pe, De, Ie, $e, {
       let a;
       let n;
       await F.initialize();
+      // 语义锚点：tabs_close_mcp 复用 tabs_context_mcp 暴露出的同一组边界。
+      // 先确认目标 group 仍存在，再验证 tabId 属于该组，避免跨组误关。
       if (t?.sessionScope) {
         if (t.tabGroupId === undefined) {
           return {
@@ -12867,6 +13034,7 @@ const za = [Pe, _e, ve, pe, De, Ie, $e, {
         };
       }
       await chrome.tabs.remove(o);
+      // 语义锚点：关闭后立即重拍 group 快照；若最后一个 tab 被关掉，Chrome 会自动移除 group，因此 tabGroupId 会降成 undefined。
       const s = (await chrome.tabs.query({
         groupId: a
       })).filter(e => e.id !== undefined).map(e => ({
@@ -12877,6 +13045,7 @@ const za = [Pe, _e, ve, pe, De, Ie, $e, {
       return {
         output: s.length > 0 ? `Closed tab ${o}. ${s.length} tab(s) remain.` : `Closed tab ${o}. Group is now empty (auto-removed).`,
         tabContext: {
+          // 语义锚点：close 后同样回传刷新后的 tab 快照，让下一跳工具继续沿用同一份上下文。
           currentTabId: s[0]?.id,
           availableTabs: s,
           tabCount: s.length,
@@ -13039,7 +13208,13 @@ const za = [Pe, _e, ve, pe, De, Ie, $e, {
     }
   })
 }];
+// 语义锚点：浏览器 tab 编排工具簇。
+// 这三个工具负责建立/刷新/收缩执行上下文，所以在 tool executor 里被允许“先于普通 tab 工具”运行。
 const Xa = ["tabs_context_mcp", "tabs_create_mcp", "tabs_close_mcp"];
+// 语义锚点：tabs 工具簇白名单别名。
+// class Va 的 no-tab 例外、以及后续阅读时“上下文工具 vs 普通执行工具”的边界，都以这份名单为准。
+const __cpMcpTabManagementToolNames = Xa;
+// 语义锚点：后台 tool executor 运行时（tool_call -> tool.execute -> permission_required/tool_result）。
 class Va {
   constructor(e) {
     this.context = e;
@@ -13047,6 +13222,8 @@ class Va {
   async handleToolCall(e, t, r, o, a, n, s, i) {
     const c = t.action;
     return await _(`tool_execution_${e}${c ? "_" + c : ""}`, async n => {
+      // 语义锚点：除 tab 编排工具簇外，普通浏览器工具都必须先有一个已解析好的当前 tab 上下文。
+      // indicator/prefix 也不在这里挂载；那要等 wn(...) 先把真实执行 tab 编排出来之后才会发生。
       if (!this.context.tabId && !Xa.includes(e)) {
         throw new Error("No tab available");
       }
@@ -13095,6 +13272,8 @@ class Va {
           n.setAttribute("target_tab_gone", true);
         }
       }
+      // 语义锚点：tool executor 上下文对象：
+      // toolUseId 是本次工具调用/结果的稳定归属键；tabId/tabGroupId/sessionScope 只负责选择执行环境。
       const l = {
         toolUseId: r,
         span: n,
@@ -13139,6 +13318,9 @@ class Va {
           n.addEvent("tool_execute_end");
         }
         if ("type" in o) {
+          // 语义锚点：工具返回带 type 的对象时，当前分支约定它是 permission_required sentinel，而不是最终 tool_result。
+          // 普通工具的 permission_required sentinel 统一形状是 { type, tool, url, toolUseId, actionData? }；
+          // actionData 只回填 permission popup 预览所需的最小字段，不是完整执行上下文。
           u.success = false;
           n.setAttribute("success", false);
           n.setAttribute("failure_reason", "needs_permission");
@@ -13409,6 +13591,8 @@ class Va {
         return "";
       }
     };
+    // 语义锚点：tool executor 的标准 tool_result 封装器：
+    // tool_use_id 对应外层 tool_call id，错误统一降成 is_error + content，不引入 requestId。
     const a = (e, t) => {
       const r = !!t.error;
       return {
@@ -13431,6 +13615,10 @@ class Va {
         const n = await this.handleToolCall(s.name, s.input, s.id, undefined, undefined, undefined, undefined, t?.permissionManager);
         i("first_execute_ms");
         if ("type" in n && n.type === "permission_required") {
+          // 语义锚点：handleToolCall 返回的 permission_required 仍是 sentinel；
+          // 是否弹窗、按 toolUseId 写一次性授权、以及拒绝时如何降成 tool_result，统一由 processToolResults 收口。
+          // 语义锚点：tool executor permission_required 重试链：
+          // 先等 permission handler resolve，再按 toolUseId 写一次性授权，最后重跑原始 tool_call。
           const c = t?.onPermissionRequired ?? this.context.onPermissionRequired;
           if (!c || !this.context.tabId) {
             r.push(a(s.id, {
@@ -13449,6 +13637,8 @@ class Va {
             continue;
           }
           if (s.name === "update_plan") {
+            // 语义锚点：update_plan 在 permission approve 后直接返回“plan approved”文本，
+            // 它的 permission_required 只作为计划审批闸门，不会像普通工具那样重跑 provider execute。
             r.push(a(s.id, {
               output: "User has approved your plan. You can now start executing the plan. Start with updating your todo list if applicable."
             }));
@@ -13490,6 +13680,16 @@ class Va {
     return r;
   }
 }
+const __cpMcpToolCallRuntime = Va;
+const __cpMcpToolCallRuntimeHandleToolCall = Va.prototype.handleToolCall;
+const __cpMcpToolCallRuntimeProcessToolResults = Va.prototype.processToolResults;
+// 语义锚点：tab 编排 helper 的可维护别名集合。
+// tabs_* 工具与普通浏览器工具共享同一套 group/tab 解析逻辑；这里只是把 B 上的方法职责显式命名出来，不改任何运行路径。
+const __cpMcpTabOrchestratorGetExecutionTab = B.prototype.getTabForMcp;
+const __cpMcpTabOrchestratorGetValidTabsWithMetadata = B.prototype.getValidTabsWithMetadata;
+const __cpMcpTabOrchestratorGetEffectiveTabId = B.prototype.getEffectiveTabId;
+const __cpMcpTabOrchestratorGetOrCreateMcpTabContext = B.prototype.getOrCreateMcpTabContext;
+const __cpMcpTabOrchestratorGetOrCreateSessionTabContext = B.prototype.getOrCreateSessionTabContext;
 async function Ya(e, t) {
   const r = t === e;
   await F.initialize();
@@ -13534,6 +13734,8 @@ async function en(e, t) {
 function tn(e) {
   return chrome.runtime.getURL(`blocked.html?url=${encodeURIComponent(e)}`);
 }
+// 语义锚点：DOMAIN_TRANSITION 专用 permission_required producer。
+// 它复用普通 permission_required sentinel 形状，但 toolUseId 在这里本地生成，requestId 继续留给 bridge permission 握手。
 function rn(e, t, r, o, a) {
   return {
     type: "permission_required",
@@ -13548,6 +13750,7 @@ function rn(e, t, r, o, a) {
     }
   };
 }
+const __cpDomainTransitionPermissionRequiredFactory = rn;
 let on;
 let an;
 let nn;
@@ -13663,10 +13866,13 @@ const bn = e => ({
   is_error: true
 });
 // 语义锚点：MCP tool_call 的标准错误返回结构（tool_result.error 的兼容格式）
+// 语义锚点：这里产出的 error payload 不包含 requestId；bridge/tool 层始终用 toolUseId 关联这次失败结果。
 const __cpMcpToolErrorResultFactory = bn;
 async function wn(e) {
   // 语义锚点：MCP 工具执行主入口（tab 编排、域名策略、权限提示与结果回传）
   const t = crypto.randomUUID();
+  // 语义锚点：内层 tool_use id 与外层 toolUseId 分工：
+  // `t` 只服务 provider/processToolResults；`e.toolUseId` 继续作为 bridge tool_call/tool_result 的归属键。
   const r = e.clientId;
   const o = Date.now();
   const n = {};
@@ -13703,6 +13909,9 @@ async function wn(e) {
   let h;
   s = Date.now();
   try {
+    // 语义锚点：tab 编排阶段。
+    // 这里统一决定这次工具实际落到哪个 tab / group / domain / url，再把结果提供给后续权限和执行链。
+    // tabs_context_mcp / tabs_create_mcp / tabs_close_mcp 负责把 group 与 availableTabs 维持成稳定上下文，其他浏览器工具再在这里消费那份上下文。
     const t = await F.getTabForMcp(e.tabId, e.tabGroupId, e.sessionScope !== undefined);
     l = t.tabId;
     d = t.domain;
@@ -13775,6 +13984,9 @@ async function wn(e) {
   let g = false;
   try {
     if (l !== undefined) {
+      // 语义锚点：执行前的 indicator/debugger 挂载链。
+      // 只要工具落到真实 tab，这里就会登记运行态、点亮前缀，并记录 requestId -> tab 的运行中账本。
+      // tabs_context_mcp 首次建组前若还没有真实 tab，上面的 no-tab 例外会先放行，但不会提前点亮 indicator。
       await async function (e, t, r, o) {
         yn.set(e, {
           toolName: t,
@@ -13803,6 +14015,7 @@ async function wn(e) {
         ln = Date.now();
       });
     }
+    // 语义锚点：到这里为止，tabs 工具簇负责“上下文存在且可引用”，wn 才负责“把普通工具接到具体 tab + indicator + tool_result 主链”。
     const r = await fn(l, e.tabGroupId, e.sessionScope);
     const o = {
       onStageTiming: (e, t) => {
@@ -13831,6 +14044,7 @@ async function wn(e) {
           return new Promise(o => {
             // 语义锚点：requestId 只负责 bridge permission_request/permission_response 对账；
             // toolUseId 继续挂在外层消息上，用来标识这次权限请求属于哪次 tool_call。
+            // tabId 不进入 websocket 权限账本；真实执行 tab 仍留在本地 tool executor / sidepanel scope。
             __cpMcpBridgePendingPermissionResponseLedger.set(r, {
               resolve: o
             });
@@ -13848,6 +14062,8 @@ async function wn(e) {
     }
     s = Date.now();
     g = true;
+    // 语义锚点：真正执行工具的 provider 主调用。
+    // 外层把本次 tool 伪装成单条 `tool_use`，再由 processToolResults 返回标准 MCP content / error 结构。
     [h] = await r.processToolResults([{
       type: "tool_use",
       id: t,
@@ -13873,6 +14089,7 @@ async function wn(e) {
     }
   }
   if (l !== undefined) {
+    // 语义锚点：执行结束后的 indicator/completion prefix 收口链。
     In(l, r);
   }
   const b = u ? fa(u) : undefined;
@@ -13908,6 +14125,8 @@ function In(e, t) {
   if (yn.has(e)) {
     yn.get(e);
     yn.delete(e);
+    // 语义锚点：tab 执行完成后的延迟收尾。
+    // 如果这段时间内没有新的工具继续占用该 tab，就切 completion prefix 并尝试卸载 debugger。
     const t = setTimeout(async () => {
       if (!yn.has(e) && _n.has(e)) {
         F.addCompletionPrefix(e).catch(() => {});
@@ -13925,12 +14144,14 @@ function kn(e) {
   if (t) {
     clearTimeout(t);
   }
+  // 语义锚点：强制移除 indicator/prefix 的兜底清理入口。
   _n.delete(e);
   F.removePrefix(e).catch(() => {});
 }
 async function Tn() {
   try {
     const e = await F.getAllGroups();
+    // 语义锚点：service worker 重启或恢复时，批量清理遗留的运行态前缀。
     for (const t of e) {
       kn(t.mainTabId);
     }
@@ -14013,6 +14234,7 @@ async function Sn(e, t) {
   xn = r.catch(() => false);
   return r;
 }
+const __cpMcpPopupPermissionPromptHandler = Sn;
 let En = false;
 function Cn() {
   if ("ServiceWorkerGlobalScope" in globalThis) {

@@ -9,6 +9,7 @@
     let o = false;
     let l = null;
     let r = false;
+    // 语义锚点：e/n/t 分别缓存执行态边框、Stop 容器、静态 tab group 提示条 DOM；i/a 是当前显示态；s/o 记录 tool_use 临时隐藏前的显示态；l 是静态提示条心跳定时器；r 表示 MCP 模式下不展示 Stop 按钮。
     // 语义锚点：执行态边框 / Stop 按钮 / tab group 常驻提示条共享的后台消息协议。
     const __cpAgentIndicatorContractMessages = globalThis.__CP_CONTRACT__?.messages || {};
     const __cpAgentIndicatorContract = globalThis.__CP_CONTRACT__?.agentIndicator || {};
@@ -43,6 +44,7 @@
     // 语义锚点：执行态隐藏过渡与静态提示条心跳。
     const __cpAgentIndicatorHideTransitionDelayMs = __cpAgentIndicatorContract.HIDE_TRANSITION_DELAY_MS || 300;
     const __cpStaticIndicatorHeartbeatIntervalMs = __cpAgentIndicatorContract.HEARTBEAT_INTERVAL_MS || 5000;
+    // 语义锚点：active agent indicator 显示主链：注入动画样式 -> 创建 glow border -> 非 MCP 模式挂载 Stop 按钮 -> requestAnimationFrame 做入场动画。
     function p() {
       i = true;
       (function () {
@@ -89,6 +91,8 @@
                 n.style.boxShadow = "0 40px 80px rgba(217, 119, 87, 0.24), 0 4px 14px rgba(217, 119, 87, 0.24)";
               }
             });
+            // 语义锚点：Stop 按钮上报链：内容脚本只发送 STOP_AGENT + CURRENT_TAB 哨兵，真正的停止执行逻辑由后台收口。
+            // 语义锚点：indicator Stop 只负责上报，不直接消费 sidepanel 输入桥协议。
             n.addEventListener("click", async () => {
               await chrome.runtime.sendMessage({
                 type: __cpAgentIndicatorMessageTypeStopAgent,
@@ -114,6 +118,7 @@
         }
       });
     }
+    // 语义锚点：active agent indicator 隐藏主链：先做离场动画，再延迟回收 DOM，避免快速切换时闪烁。
     function c() {
       if (i) {
         i = false;
@@ -167,6 +172,7 @@
                 t.style.opacity = "0";
               }
             });
+            // 语义锚点：静态提示条“Open chat”只请求后台切回主 tab，不直接在内容脚本里操作窗口焦点。
             n.addEventListener("click", async () => {
               try {
                 await chrome.runtime.sendMessage({
@@ -190,6 +196,7 @@
                 a.style.opacity = "0";
               }
             });
+            // 语义锚点：静态提示条“Dismiss”只上报 group 级关闭请求，真正的 group dismiss 账本由后台维护。
             i.addEventListener("click", async () => {
               try {
                 await chrome.runtime.sendMessage({
@@ -220,6 +227,7 @@
         }
       }, __cpStaticIndicatorHeartbeatIntervalMs);
     }
+    // 语义锚点：静态提示条关闭链：清理心跳定时器并移除 DOM；heartbeat 失败、后台 hide、页面卸载都复用这里。
     function L() {
       if (a) {
         a = false;
@@ -237,6 +245,7 @@
     const __cpHideActiveAgentIndicators = c;
     const __cpShowStaticTabGroupIndicator = d;
     const __cpHideStaticTabGroupIndicator = L;
+    // 语义锚点：indicator runtime handler：SHOW/HIDE 控制执行态显隐，HIDE_FOR_TOOL_USE/SHOW_AFTER_TOOL_USE 处理临时收起恢复，SHOW/HIDE_STATIC_INDICATOR 控制 tab group 常驻条。
     chrome.runtime.onMessage.addListener((l, u, y) => {
       if (l.type === __cpAgentIndicatorRuntimeMessageShowAgentIndicators) {
         r = r || l.isMcp === true;
@@ -293,6 +302,7 @@
         });
       }
     });
+    // 语义锚点：页面卸载时强制收口动态/静态 indicator，避免残留定时器和悬空 DOM。
     window.addEventListener("beforeunload", () => {
       c();
       L();
