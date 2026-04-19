@@ -88,6 +88,7 @@ function createSharedHarness(options = {}) {
   const sandbox = {
     console,
     Date: options.DateImpl || Date,
+    URL,
     chrome: chromeMock.chrome,
     window: {
       open(url, target, features) {
@@ -128,6 +129,28 @@ function testVersionHelpersAndSummaries() {
   assert.equal(shared.summarizeNotes("line1\r\nline2", 64), "line1\nline2");
   assert.equal(shared.summarizeNotes("abcdef", 4), "abcd...");
   assert.equal(shared.formatTimestamp("not-a-date"), "not-a-date");
+}
+
+function testMarkdownRendererProducesSafeStructuredHtml() {
+  const { shared } = createSharedHarness({});
+
+  const html = shared.renderMarkdownToHtml([
+    "#### New Features",
+    "",
+    "**Alias** support with [release link](https://example.com/release)",
+    "",
+    "- First item",
+    "- Second item",
+    "",
+    "<script>alert(1)</script>"
+  ].join("\n"));
+
+  assert.match(html, /<h4>New Features<\/h4>/);
+  assert.match(html, /<strong>Alias<\/strong>/);
+  assert.match(html, /<a href="https:\/\/example\.com\/release" target="_blank" rel="noopener noreferrer">release link<\/a>/);
+  assert.match(html, /<ul><li>First item<\/li><li>Second item<\/li><\/ul>/);
+  assert.equal(html.includes("<script>alert(1)</script>"), false);
+  assert.equal(html.includes("&lt;script&gt;alert(1)&lt;/script&gt;"), true);
 }
 
 function testNormalizeStoredInfoUsesAliasesAndDefaults() {
@@ -293,6 +316,7 @@ async function testOpenUrlFallsBackToWindowOpen() {
 
 async function main() {
   testVersionHelpersAndSummaries();
+  testMarkdownRendererProducesSafeStructuredHtml();
   testNormalizeStoredInfoUsesAliasesAndDefaults();
   testNormalizeLatestPayloadUsesFixedClockAndValidatesVersion();
   testLocaleReadersIncludeAccessibleUiAttributes();

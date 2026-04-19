@@ -4,6 +4,7 @@
   const PROFILES_STORAGE_KEY = contract.PROFILES_STORAGE_KEY || "customProviderProfiles";
   const ACTIVE_PROFILE_STORAGE_KEY = contract.ACTIVE_PROFILE_STORAGE_KEY || "customProviderActiveProfileId";
   const HTTP_PROVIDER_STORAGE_KEY = contract.HTTP_PROVIDER_STORAGE_KEY || "customProviderAllowHttp";
+  const DEFAULT_HTTP_PROVIDER_ENABLED = true;
   const HTTP_PROVIDER_DISABLED_MESSAGE = "HTTP 协议未启用。请前往 Options 打开“允许 HTTP 协议”后再使用 http:// 地址。";
   const PATCH_FLAG = "__customProviderFormatAdapterPatched__";
   const NATIVE_FETCH_KEY = "__customProviderNativeFetch__";
@@ -71,10 +72,11 @@
     }
     const storage = globalThis.chrome?.storage?.local;
     if (!storage) {
-      throw new Error(HTTP_PROVIDER_DISABLED_MESSAGE);
+      return;
     }
     const stored = await storage.get(HTTP_PROVIDER_STORAGE_KEY);
-    if (stored[HTTP_PROVIDER_STORAGE_KEY] !== true) {
+    const enabled = typeof stored[HTTP_PROVIDER_STORAGE_KEY] === "boolean" ? stored[HTTP_PROVIDER_STORAGE_KEY] : DEFAULT_HTTP_PROVIDER_ENABLED;
+    if (!enabled) {
       throw new Error(HTTP_PROVIDER_DISABLED_MESSAGE);
     }
   }

@@ -96,8 +96,12 @@ function createSidepanelHarness(options = {}) {
     formatTimestamp(value) {
       return `fmt:${value}`;
     },
-    summarizeNotes(value) {
-      return String(value || "");
+    renderMarkdownToHtml(value) {
+      const text = String(value || "");
+      if (!text.trim()) {
+        return "";
+      }
+      return "<h4>converted</h4><p><strong>parsed</strong></p>";
     },
     async readStoredState() {
       return JSON.parse(JSON.stringify(readState));
@@ -179,6 +183,20 @@ function createSidepanelHarness(options = {}) {
   };
 }
 
+function findNode(root, predicate) {
+  const queue = [root];
+  while (queue.length > 0) {
+    const current = queue.shift();
+    if (current && predicate(current)) {
+      return current;
+    }
+    for (const child of current?.children || []) {
+      queue.push(child);
+    }
+  }
+  return null;
+}
+
 async function testUpdateModalAllowsSkippingDismissedVersion() {
   const harness = createSidepanelHarness({});
   await harness.flushRenders();
@@ -242,10 +260,36 @@ async function testSidepanelModalFollowsUiLocaleInsteadOfNavigatorLanguage() {
   assert.ok(findElementByText(root, "button", "下载最新版本"));
 }
 
+async function testUpdateModalRendersMarkdownNotesInsteadOfPlainMarkdown() {
+  const harness = createSidepanelHarness({
+    state: {
+      info: {
+        currentVersion: "1.0.0.0",
+        latestVersion: "1.1.0.0",
+        hasUpdate: true,
+        notes: "#### New Features\n\n**Alias** support",
+        publishedAt: "2026-04-18T10:00:00.000Z",
+        minSupportedVersion: null
+      },
+      dismissedVersion: ""
+    }
+  });
+  await harness.flushRenders();
+
+  const root = harness.root();
+  const notesNode = findNode(root, function (node) {
+    return typeof node?.innerHTML === "string" && node.innerHTML.includes("<h4>converted</h4>");
+  });
+
+  assert.ok(notesNode, "release notes should be rendered as HTML");
+  assert.equal(String(notesNode.innerHTML || "").includes("<strong>parsed</strong>"), true);
+}
+
 async function main() {
   await testUpdateModalAllowsSkippingDismissedVersion();
   await testBlockedModalRendersRequiredUpgradeActions();
   await testSidepanelModalFollowsUiLocaleInsteadOfNavigatorLanguage();
+  await testUpdateModalRendersMarkdownNotesInsteadOfPlainMarkdown();
   console.log("github update sidepanel tests passed");
 }
 

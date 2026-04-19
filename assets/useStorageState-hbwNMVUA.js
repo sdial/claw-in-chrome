@@ -37893,6 +37893,25 @@ const bA = () => n.jsx("div", {
     className: "animate-spin rounded-full h-8 w-8 border-b-2 border-text-100"
   })
 });
+function __cpIsProviderOnboardingChineseLocale(e) {
+  const t = String(e || typeof navigator < "u" && navigator?.language || "").toLowerCase();
+  return t.startsWith("zh");
+}
+function __cpGetLocalizedProviderOnboardingTitle(e) {
+  return __cpIsProviderOnboardingChineseLocale(e) ? "配置你的模型供应商" : "Configure your model provider";
+}
+function __cpGetLocalizedProviderOnboardingDescription(e, t) {
+  if (__cpIsProviderOnboardingChineseLocale(e)) {
+    return t ? "检测到旧会话已过期。你可以直接改用自定义供应商模式，在设置页填写 Base URL、API Key 和默认模型后重新打开侧边栏。" : "当前没有检测到可用登录态。你可以直接改用自定义供应商模式，在设置页填写 Base URL、API Key 和默认模型后重新打开侧边栏。";
+  }
+  return t ? "Your previous session has expired. You can switch to a custom provider instead. Open settings, fill in the Base URL, API Key, and default model, then reopen the side panel." : "No available sign-in session was detected. You can switch to a custom provider instead. Open settings, fill in the Base URL, API Key, and default model, then reopen the side panel.";
+}
+function __cpGetLocalizedProviderOnboardingActionText(e) {
+  return __cpIsProviderOnboardingChineseLocale(e) ? "前往设置" : "Open settings";
+}
+function __cpGetLocalizedProviderOnboardingRetryText(e) {
+  return __cpIsProviderOnboardingChineseLocale(e) ? "重新检测" : "Retry";
+}
 const wA = ({
   reason: t
 }) => {
@@ -37901,20 +37920,22 @@ const wA = ({
     className: "w-full max-w-md rounded-[24px] border border-border-300 bg-bg-000 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.08)]",
     children: [n.jsx("div", {
       className: "text-xl font-semibold text-text-100",
-      children: "配置你的模型供应商"
+      children: __cpGetLocalizedProviderOnboardingTitle()
     }), n.jsx("p", {
       className: "mt-3 text-sm leading-6 text-text-300",
-      children: e ? "检测到旧会话已过期。你可以直接改用自定义供应商模式，在设置页填写 Base URL、API Key 和默认模型后重新打开侧边栏。" : "当前没有检测到可用登录态。你可以直接改用自定义供应商模式，在设置页填写 Base URL、API Key 和默认模型后重新打开侧边栏。"
+      children: __cpGetLocalizedProviderOnboardingDescription(void 0, e)
     }), n.jsxs("div", {
       className: "mt-5 flex gap-3",
       children: [n.jsx("button", {
         className: "h-10 rounded-full bg-text-100 px-4 text-sm font-medium text-bg-000",
-        onClick: () => chrome.runtime.openOptionsPage(),
-        children: "打开设置页"
+        onClick: () => chrome.tabs.create({
+          url: chrome.runtime.getURL("options.html#options?provider=true")
+        }),
+        children: __cpGetLocalizedProviderOnboardingActionText()
       }), n.jsx("button", {
         className: "h-10 rounded-full border border-border-300 px-4 text-sm font-medium text-text-200",
         onClick: () => window.location.reload(),
-        children: "重新检测"
+        children: __cpGetLocalizedProviderOnboardingRetryText()
       })]
     })]
   });
@@ -37969,7 +37990,7 @@ function __cpOptionsDebugLog(e, t, n) {
   } catch {}
 }
 function __cpIsOptionsCustomProviderPrivacyMode(e) {
-  return !!e?.enabled && !!e?.baseUrl && !!e?.apiKey;
+  return !!e?.baseUrl && !!e?.apiKey && !!e?.defaultModel;
 }
 const _A = e.createContext(null);
 // 语义锚点：options 页账号态 bootstrap。
@@ -37980,7 +38001,7 @@ const xA = ({
   const [r, o] = e.useState(false);
   const [a, i] = e.useState(false);
   const [s, u] = e.useState(true);
-  const c = e.useCallback((e, t) => !!t || !!e?.enabled && !!e?.baseUrl && !!e?.apiKey, []);
+  const c = e.useCallback((e, t) => !!t || !!e?.baseUrl && !!e?.apiKey && !!e?.defaultModel, []);
   e.useEffect(() => {
     __cpOptionsDebugLog("options.account.init.start", {
       href: location.pathname + location.search + location.hash
@@ -37992,9 +38013,10 @@ const xA = ({
         i(c(t.customProviderConfig, e));
         __cpOptionsDebugLog("options.account.init.success", {
           hasAnthropicApiKey: !!e,
-          hasCustomProvider: !!t.customProviderConfig?.enabled,
+          hasCustomProvider: !!t.customProviderConfig?.baseUrl && !!t.customProviderConfig?.apiKey && !!t.customProviderConfig?.defaultModel,
           hasCustomProviderBaseUrl: !!t.customProviderConfig?.baseUrl,
-          hasCustomProviderApiKey: !!t.customProviderConfig?.apiKey
+          hasCustomProviderApiKey: !!t.customProviderConfig?.apiKey,
+          hasCustomProviderDefaultModel: !!t.customProviderConfig?.defaultModel
         });
       } catch (e) {
         o(false);
@@ -38017,7 +38039,7 @@ const xA = ({
         i(c(n, t));
         __cpOptionsDebugLog("options.account.storage.anthropic", {
           hasAnthropicApiKey: !!t,
-          hasCustomProvider: !!n?.enabled
+          hasCustomProvider: !!n?.baseUrl && !!n?.apiKey && !!n?.defaultModel
         });
       }
       if ("customProviderConfig" in e) {
@@ -38026,13 +38048,14 @@ const xA = ({
           i(c(t, e[y.ANTHROPIC_API_KEY]));
           __cpOptionsDebugLog("options.account.storage.provider", {
             hasAnthropicApiKey: !!e[y.ANTHROPIC_API_KEY],
-            hasCustomProvider: !!t?.enabled,
-            hasCustomProviderBaseUrl: !!t?.baseUrl
+            hasCustomProvider: !!t?.baseUrl && !!t?.apiKey && !!t?.defaultModel,
+            hasCustomProviderBaseUrl: !!t?.baseUrl,
+            hasCustomProviderDefaultModel: !!t?.defaultModel
           });
         }).catch(() => {
           i(c(t, undefined));
           __cpOptionsDebugLog("options.account.storage.provider.error", {
-            hasCustomProvider: !!t?.enabled
+            hasCustomProvider: !!t?.baseUrl && !!t?.apiKey && !!t?.defaultModel
           }, "warn");
         });
       }

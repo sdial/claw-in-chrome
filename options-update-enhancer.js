@@ -30,7 +30,7 @@
       close: "关闭",
       unknown: "未知",
       httpCardTitle: "HTTP 协议",
-      httpCardSubtitle: "允许自定义供应商使用非加密 HTTP 协议。默认关闭，仅建议在可信内网或开发环境中启用。",
+      httpCardSubtitle: "允许自定义供应商使用非加密 HTTP 协议。默认开启，建议仅在可信内网或开发环境中使用。",
       httpToggleLabel: "允许 HTTP 协议",
       httpToggleHelp: "关闭时，保存配置、获取模型、健康检测和运行时请求都会拒绝 http:// 地址。",
       httpToggleOn: "已开启",
@@ -53,7 +53,7 @@
       close: "Close",
       unknown: "Unknown",
       httpCardTitle: "HTTP Protocol",
-      httpCardSubtitle: "Allow custom providers to use unencrypted HTTP endpoints. Disabled by default and only recommended on trusted local networks or in development.",
+      httpCardSubtitle: "Allow custom providers to use unencrypted HTTP endpoints. Enabled by default, and best used only on trusted local networks or in development.",
       httpToggleLabel: "Allow HTTP Protocol",
       httpToggleHelp: "When disabled, saving profiles, fetching models, health checks, and runtime requests will all reject http:// addresses.",
       httpToggleOn: "Enabled",
@@ -601,7 +601,7 @@
       return !!(await helpers.readHttpProviderSupportEnabled());
     }
     const stored = await chrome.storage.local.get(HTTP_PROVIDER_STORAGE_KEY);
-    return stored[HTTP_PROVIDER_STORAGE_KEY] === true;
+    return stored[HTTP_PROVIDER_STORAGE_KEY] !== false;
   }
   async function setHttpProviderSupportEnabled(enabled) {
     const nextEnabled = !!enabled;

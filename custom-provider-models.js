@@ -21,6 +21,7 @@
   const QUICK_MODEL_SELECTION_SYNC_SIGNATURE_KEY = contract.QUICK_MODEL_SELECTION_SYNC_SIGNATURE_KEY || "customProviderSelectedModelQuickModeSyncSignature";
   const HTTP_PROVIDER_STORAGE_KEY = contract.HTTP_PROVIDER_STORAGE_KEY || "customProviderAllowHttp";
   const HTTP_PROVIDER_MIGRATED_KEY = contract.HTTP_PROVIDER_MIGRATED_KEY || "customProviderAllowHttpMigrated";
+  const DEFAULT_HTTP_PROVIDER_ENABLED = true;
   const HTTP_PROVIDER_DISABLED_MESSAGE = "HTTP 协议未启用。请前往 Options 打开“允许 HTTP 协议”后再使用 http:// 地址。";
   const FETCHED_MODELS_CACHE_LIMIT = 24;
   const HEALTH_CHECK_PROMPT = "Reply with OK only.";
@@ -362,22 +363,17 @@
   }
   async function ensureHttpProviderSupportMigration(storage, stored) {
     if (!storage) {
-      return false;
+      return DEFAULT_HTTP_PROVIDER_ENABLED;
     }
     const snapshot = stored && typeof stored === "object" ? stored : await storage.get([HTTP_PROVIDER_STORAGE_KEY, HTTP_PROVIDER_MIGRATED_KEY, LEGACY_STORAGE_KEY, PROFILES_STORAGE_KEY, ACTIVE_PROFILE_STORAGE_KEY]);
     if (typeof snapshot[HTTP_PROVIDER_STORAGE_KEY] === "boolean") {
       return snapshot[HTTP_PROVIDER_STORAGE_KEY];
     }
-    if (snapshot[HTTP_PROVIDER_MIGRATED_KEY] === true) {
-      return false;
-    }
-    const shouldEnable = hasLegacyActiveHttpProvider(snapshot);
+    const shouldEnable = hasLegacyActiveHttpProvider(snapshot) || DEFAULT_HTTP_PROVIDER_ENABLED;
     const payload = {
-      [HTTP_PROVIDER_MIGRATED_KEY]: true
+      [HTTP_PROVIDER_MIGRATED_KEY]: true,
+      [HTTP_PROVIDER_STORAGE_KEY]: shouldEnable
     };
-    if (shouldEnable) {
-      payload[HTTP_PROVIDER_STORAGE_KEY] = true;
-    }
     await storage.set(payload);
     return shouldEnable;
   }
@@ -388,7 +384,7 @@
     }
     const storage = settings.storageArea || globalThis.chrome?.storage?.local;
     if (!storage) {
-      return false;
+      return DEFAULT_HTTP_PROVIDER_ENABLED;
     }
     const stored = settings.storedState && typeof settings.storedState === "object" ? settings.storedState : null;
     if (stored && typeof stored[HTTP_PROVIDER_STORAGE_KEY] === "boolean") {
@@ -530,7 +526,7 @@
         originalApiKey: undefined,
         currentApiKey: "",
         migrated: false,
-        httpEnabled: false
+        httpEnabled: DEFAULT_HTTP_PROVIDER_ENABLED
       };
     }
     const stored = await storage.get([LEGACY_STORAGE_KEY, PROFILES_STORAGE_KEY, ACTIVE_PROFILE_STORAGE_KEY, BACKUP_KEY, ANTHROPIC_API_KEY_STORAGE_KEY, HTTP_PROVIDER_STORAGE_KEY, HTTP_PROVIDER_MIGRATED_KEY]);

@@ -118,9 +118,9 @@ async function testLoggerSanitizesSensitiveValuesAndSupportsReadClearDump() {
     prompt: "please keep this prompt private",
     note: "token=visible",
     customProviderConfig: {
-      enabled: true,
       apiKey: "another-secret",
       baseUrl: "https://api.example.com/v1",
+      defaultModel: "gpt-5.4",
       name: "OpenRouter mirror",
       notes: "internal notes",
       fetchedModels: [{
@@ -132,8 +132,10 @@ async function testLoggerSanitizesSensitiveValuesAndSupportsReadClearDump() {
   }, "warn");
 
   assert.equal(entry.level, "warn");
+  assert.equal(entry.payload.customProviderConfig.enabled, true);
   assert.equal(entry.payload.customProviderConfig.hasApiKey, true);
   assert.equal(entry.payload.customProviderConfig.hasBaseUrl, true);
+  assert.equal(entry.payload.customProviderConfig.hasDefaultModel, true);
   assert.equal(entry.payload.customProviderConfig.fetchedModelCount, 2);
   assert.equal(entry.payload.customProviderConfig.hasNotes, true);
   await harness.flushLogs();
@@ -146,7 +148,9 @@ async function testLoggerSanitizesSensitiveValuesAndSupportsReadClearDump() {
   assert.equal(target.payload.authorization, "[redacted-secret]");
   assert.equal(target.payload.url, "[redacted-url]");
   assert.equal(target.payload.prompt.startsWith("[redacted-text]:"), true);
+  assert.equal(target.payload.customProviderConfig.enabled, true);
   assert.equal(target.payload.customProviderConfig.name, "OpenRouter mirror");
+  assert.equal(target.payload.customProviderConfig.hasDefaultModel, true);
   assert.equal(harness.consoleMock.warnCalls.length >= 1, true);
 
   const dumped = await harness.api.dumpToConsole();

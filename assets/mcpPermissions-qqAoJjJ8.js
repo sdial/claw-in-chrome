@@ -5,11 +5,143 @@ const __cpBackgroundDebugStorageKey = __cpDebugContract.SIDEPANEL_LOGS_STORAGE_K
 const __cpBackgroundDebugMetaKey = __cpDebugContract.SIDEPANEL_META_STORAGE_KEY || "sidepanelDebugMeta";
 const __cpBackgroundDebugLimit = 500;
 let __cpBackgroundDebugSequence = 0;
+const __cpBackgroundDebugSensitiveKeys = new Set(["apikey", "anthropicapikey", "accesstoken", "refreshtoken", "authtoken", "authorization", "token", "secret", "password", "currentapikey", "originalapikey"]);
+const __cpBackgroundDebugPrivateUrlKeys = new Set(["baseurl", "providerurl", "requesturl", "url", "href", "uri", "filename", "source", "origin"]);
+const __cpBackgroundDebugPrivateTextKeys = new Set(["bodypreview", "notes", "prompt", "content", "requestbody", "responsebody", "rawbody", "inputtext", "outputtext"]);
+const __cpBackgroundDebugRedactedSecret = "[redacted-secret]";
+const __cpBackgroundDebugRedactedText = "[redacted-text]";
+const __cpBackgroundDebugRedactedUrl = "[redacted-url]";
+function __cpBackgroundDebugNormalizeKey(e) {
+  return String(e || "").replace(/[^a-z0-9]/gi, "").toLowerCase();
+}
+function __cpBackgroundDebugIsSensitiveKey(e) {
+  const t = __cpBackgroundDebugNormalizeKey(e);
+  return !!t && __cpBackgroundDebugSensitiveKeys.has(t);
+}
+function __cpBackgroundDebugIsPrivateUrlKey(e) {
+  const t = __cpBackgroundDebugNormalizeKey(e);
+  return !!t && __cpBackgroundDebugPrivateUrlKeys.has(t);
+}
+function __cpBackgroundDebugIsPrivateTextKey(e) {
+  const t = __cpBackgroundDebugNormalizeKey(e);
+  return !!t && __cpBackgroundDebugPrivateTextKeys.has(t);
+}
+function __cpBackgroundDebugSanitizeInlineSecrets(e) {
+  return String(e || "").replace(/\b(?:https?|wss?|chrome-extension):\/\/[^\s"'<>]+/gi, __cpBackgroundDebugRedactedUrl).replace(/\bBearer\s+[A-Za-z0-9._-]+\b/gi, "Bearer [redacted]").replace(/\b(?:sk|rk|pk)-[A-Za-z0-9*._-]{5,}\b/gi, t => t.split("-")[0] + "-[redacted]").replace(/\b(?:api[_-]?key|access[_-]?token|refresh[_-]?token|auth(?:orization|[_-]?token)?|secret|password)\b\s*[:=]\s*[^\s,;]+/gi, e => e.replace(/[:=]\s*[^\s,;]+$/, ": [redacted]"));
+}
+function __cpBackgroundDebugSanitizeString(e, t) {
+  const r = __cpBackgroundDebugNormalizeKey(t);
+  let o = String(e || "");
+  if (!o) {
+    return o;
+  }
+  if (__cpBackgroundDebugIsSensitiveKey(r)) {
+    return __cpBackgroundDebugRedactedSecret;
+  }
+  if (r === "useragent") {
+    return "[redacted-user-agent]";
+  }
+  if (__cpBackgroundDebugIsPrivateTextKey(r)) {
+    return `${__cpBackgroundDebugRedactedText}:${o.length}`;
+  }
+  if (__cpBackgroundDebugIsPrivateUrlKey(r)) {
+    if (r === "href" && o.startsWith("/")) {
+      return o.split(/[?#]/)[0] || __cpBackgroundDebugRedactedUrl;
+    }
+    return __cpBackgroundDebugRedactedUrl;
+  }
+  o = __cpBackgroundDebugSanitizeInlineSecrets(o);
+  return o.length > 600 ? o.slice(0, 600) + "...[truncated]" : o;
+}
+function __cpBackgroundDebugSummarizeProviderConfig(e) {
+  const t = Array.isArray(e?.fetchedModels) ? e.fetchedModels : [];
+  const r = typeof e?.hasBaseUrl == "boolean" ? e.hasBaseUrl : !!e?.baseUrl;
+  const o = typeof e?.hasApiKey == "boolean" ? e.hasApiKey : !!e?.apiKey;
+  const a = typeof e?.hasDefaultModel == "boolean" ? e.hasDefaultModel : !!e?.defaultModel;
+  return {
+    enabled: r && o && a,
+    format: __cpBackgroundDebugSanitizeString(e?.format || "", "format"),
+    defaultModel: __cpBackgroundDebugSanitizeString(e?.defaultModel || "", "defaultModel"),
+    reasoningEffort: __cpBackgroundDebugSanitizeString(e?.reasoningEffort || "", "reasoningEffort"),
+    maxOutputTokens: typeof e?.maxOutputTokens == "number" ? e.maxOutputTokens : e?.maxOutputTokens || undefined,
+    contextWindow: typeof e?.contextWindow == "number" ? e.contextWindow : e?.contextWindow || undefined,
+    name: __cpBackgroundDebugSanitizeString(e?.name || "", "name"),
+    fetchedModelCount: typeof e?.fetchedModelCount == "number" ? e.fetchedModelCount : t.length,
+    hasApiKey: o,
+    hasBaseUrl: r,
+    hasDefaultModel: a,
+    hasNotes: typeof e?.hasNotes == "boolean" ? e.hasNotes : !!String(e?.notes || "").trim()
+  };
+}
+function __cpBackgroundDebugSafeClone(e, t, r, o) {
+  if (e == null) {
+    return e;
+  }
+  if (t > 4) {
+    return "[max-depth]";
+  }
+  if (typeof e == "string") {
+    return __cpBackgroundDebugSanitizeString(e, o);
+  }
+  if (typeof e == "number" || typeof e == "boolean") {
+    return e;
+  }
+  if (typeof e == "bigint") {
+    return e.toString();
+  }
+  if (typeof e == "function") {
+    return "[function]";
+  }
+  if (e instanceof Error) {
+    return {
+      name: e.name,
+      message: __cpBackgroundDebugSanitizeString(e.message, "message"),
+      stack: __cpBackgroundDebugSanitizeString(e.stack || "", "stack")
+    };
+  }
+  if (typeof URL != "undefined" && e instanceof URL) {
+    return __cpBackgroundDebugSanitizeString(e.toString(), o);
+  }
+  if (Array.isArray(e)) {
+    return e.slice(0, 20).map(e => __cpBackgroundDebugSafeClone(e, t + 1, r));
+  }
+  if (typeof e != "object") {
+    return String(e);
+  }
+  if (r.has(e)) {
+    return "[circular]";
+  }
+  r.add(e);
+  if (__cpBackgroundDebugIsSensitiveKey(o)) {
+    return __cpBackgroundDebugRedactedSecret;
+  }
+  const a = __cpBackgroundDebugNormalizeKey(o);
+  if (a === "customproviderconfig" || a === "customprovider") {
+    return __cpBackgroundDebugSummarizeProviderConfig(e);
+  }
+  const n = {};
+  for (const s of Object.keys(e).slice(0, 30)) {
+    n[s] = __cpBackgroundDebugIsSensitiveKey(s) ? __cpBackgroundDebugRedactedSecret : __cpBackgroundDebugSafeClone(e[s], t + 1, r, s);
+  }
+  return n;
+}
+function __cpBackgroundDebugSanitizeEntry(e) {
+  const t = e && typeof e == "object" ? e : {};
+  return {
+    id: String(t.id || ""),
+    sessionId: String(t.sessionId || "service-worker"),
+    ts: String(t.ts || new Date().toISOString()),
+    level: String(t.level || "info"),
+    type: String(t.type || "service-worker.unknown"),
+    href: __cpBackgroundDebugSanitizeString(String(t.href || "/service-worker"), "href"),
+    payload: __cpBackgroundDebugSafeClone(t.payload, 0, new WeakSet(), "payload")
+  };
+}
 async function __cpBackgroundDebugLog(e, t = {}, r = "info") {
   try {
     __cpBackgroundDebugSequence += 1;
     const o = new Date().toISOString();
-    const a = {
+    const a = __cpBackgroundDebugSanitizeEntry({
       id: `bg-${Date.now().toString(36)}-${__cpBackgroundDebugSequence}`,
       sessionId: "service-worker",
       ts: o,
@@ -17,9 +149,9 @@ async function __cpBackgroundDebugLog(e, t = {}, r = "info") {
       type: e,
       href: "/service-worker",
       payload: t
-    };
+    });
     const n = await chrome.storage.local.get([__cpBackgroundDebugStorageKey, __cpBackgroundDebugMetaKey]);
-    const s = Array.isArray(n[__cpBackgroundDebugStorageKey]) ? n[__cpBackgroundDebugStorageKey] : [];
+    const s = Array.isArray(n[__cpBackgroundDebugStorageKey]) ? n[__cpBackgroundDebugStorageKey].map(__cpBackgroundDebugSanitizeEntry) : [];
     const i = n[__cpBackgroundDebugMetaKey] && typeof n[__cpBackgroundDebugMetaKey] == "object" ? n[__cpBackgroundDebugMetaKey] : {};
     await chrome.storage.local.set({
       [__cpBackgroundDebugStorageKey]: s.concat(a).slice(-__cpBackgroundDebugLimit),
@@ -38,6 +170,11 @@ async function __cpBackgroundDebugLog(e, t = {}, r = "info") {
   } catch (o) {
     console.debug("[service-worker-debug] log_failed", e, t, o);
   }
+}
+function __cpBackgroundDebugTrack(e, t = {}, r = "info") {
+  __cpBackgroundDebugLog(e, t, r).catch(o => {
+    console.debug("[service-worker-debug] track_failed", e, o instanceof Error ? o.message : String(o || ""));
+  });
 }
 class T extends Error {
   constructor(e) {
@@ -12196,23 +12333,31 @@ async function Pa() {
           await async function (e) {
             switch (e.type) {
               case __cpMcpBridgeSocketMessageTypePaired:
-                m("claude_chrome.bridge.connected", {
-                  status: "paired",
-                  sw_uptime_ms: Date.now() - Ta,
-                  previous_close_code: xa ?? null,
-                  reconnect_attempt: ya
-                });
+                {
+                  const e = {
+                    status: "paired",
+                    sw_uptime_ms: Date.now() - Ta,
+                    previous_close_code: xa ?? null,
+                    reconnect_attempt: ya
+                  };
+                  m("claude_chrome.bridge.connected", e);
+                  __cpBackgroundDebugTrack("claude_chrome.bridge.connected", e);
+                }
                 Ra();
                 ba = false;
                 ya = 0;
                 break;
               case __cpMcpBridgeSocketMessageTypeWaiting:
-                m("claude_chrome.bridge.connected", {
-                  status: "waiting",
-                  sw_uptime_ms: Date.now() - Ta,
-                  previous_close_code: xa ?? null,
-                  reconnect_attempt: ya
-                });
+                {
+                  const e = {
+                    status: "waiting",
+                    sw_uptime_ms: Date.now() - Ta,
+                    previous_close_code: xa ?? null,
+                    reconnect_attempt: ya
+                  };
+                  m("claude_chrome.bridge.connected", e);
+                  __cpBackgroundDebugTrack("claude_chrome.bridge.connected", e);
+                }
                 Ra();
                 ba = false;
                 ya = 0;
@@ -12226,9 +12371,11 @@ async function Pa() {
                 break;
               case __cpMcpBridgeSocketMessageTypePeerConnected:
                 m("claude_chrome.bridge.peer_connected");
+                __cpBackgroundDebugTrack("claude_chrome.bridge.peer_connected");
                 break;
               case __cpMcpBridgeSocketMessageTypePeerDisconnected:
                 m("claude_chrome.bridge.peer_disconnected");
+                __cpBackgroundDebugTrack("claude_chrome.bridge.peer_disconnected");
                 break;
               case __cpMcpBridgeSocketMessageTypeToolCall:
                 await async function (e) {
@@ -12257,6 +12404,14 @@ async function Pa() {
                     client_type: n,
                     tool_use_id: o
                   });
+                  __cpBackgroundDebugTrack("claude_chrome.bridge.tool_received", {
+                    tool_name: a,
+                    client_type: n,
+                    tool_use_id: o,
+                    handle_permission_prompts: l,
+                    tab_id: typeof s[__cpMcpBridgeToolArgsFieldTabId] == "number" ? s[__cpMcpBridgeToolArgsFieldTabId] : null,
+                    session_id: d?.sessionId || ""
+                  });
                   const u = {
                     tool_name: a,
                     client_type: n,
@@ -12268,6 +12423,11 @@ async function Pa() {
                       success: false,
                       error: "session_expired"
                     });
+                    __cpBackgroundDebugTrack("claude_chrome.bridge.tool_call", {
+                      ...u,
+                      success: false,
+                      error: "session_expired"
+                    }, "warn");
                     La({
                       type: __cpMcpBridgeSocketMessageTypeToolResult,
                       [__cpMcpBridgeSocketFieldToolUseId]: o,
@@ -12293,6 +12453,12 @@ async function Pa() {
                           success: false,
                           error: "tab_not_found"
                         });
+                        __cpBackgroundDebugTrack("claude_chrome.bridge.tool_call", {
+                          ...u,
+                          success: false,
+                          error: "tab_not_found",
+                          tab_id: h
+                        }, "warn");
                         La({
                           type: __cpMcpBridgeSocketMessageTypeToolResult,
                           [__cpMcpBridgeSocketFieldToolUseId]: o,
@@ -12328,6 +12494,12 @@ async function Pa() {
                       ...u,
                       success: true
                     });
+                    __cpBackgroundDebugTrack("claude_chrome.bridge.tool_call", {
+                      ...u,
+                      success: true,
+                      tab_id: h ?? null,
+                      session_id: d?.sessionId || ""
+                    });
                     // 语义锚点：tool_result 外层回包会复用原始 toolUseId；
                     // 内层 tool_use id 只在 provider/processToolResults 这一跳里使用。
                     La({
@@ -12343,6 +12515,13 @@ async function Pa() {
                       success: false,
                       error: p instanceof Error ? p.message : String(p)
                     });
+                    __cpBackgroundDebugTrack("claude_chrome.bridge.tool_call", {
+                      ...u,
+                      success: false,
+                      error: p instanceof Error ? p.message : String(p),
+                      tab_id: h ?? null,
+                      session_id: d?.sessionId || ""
+                    }, "error");
                     La({
                       type: __cpMcpBridgeSocketMessageTypeToolResult,
                       [__cpMcpBridgeSocketFieldToolUseId]: o,
@@ -12410,12 +12589,17 @@ async function Pa() {
     };
     i.onclose = e => {
       xa = e.code;
-      m("claude_chrome.bridge.disconnected", {
+      const t = {
         code: e.code,
         reason: e.reason,
         reconnect_attempt: ya,
         sw_uptime_ms: Date.now() - Ta
-      });
+      };
+      m("claude_chrome.bridge.disconnected", t);
+      __cpBackgroundDebugTrack("claude_chrome.bridge.disconnected", {
+        ...t,
+        pending_permission_count: __cpMcpBridgePendingPermissionResponseLedger.size
+      }, "warn");
       if (ga === i) {
         Aa();
         ba = false;
@@ -12425,9 +12609,11 @@ async function Pa() {
       }
     };
     i.onerror = e => {
-      m("claude_chrome.bridge.error", {
+      const t = {
         error: String(e)
-      });
+      };
+      m("claude_chrome.bridge.error", t);
+      __cpBackgroundDebugTrack("claude_chrome.bridge.error", t, "error");
       if (ga === i) {
         ba = false;
       }
@@ -12466,6 +12652,13 @@ function Oa(e, t) {
 }
 function Ga() {
   // 语义锚点：bridge 断连/重连时，未完成的 permission_request 一律按拒绝收口，避免 requestId 账本泄漏。
+  const e = __cpMcpBridgePendingPermissionResponseLedger.size;
+  if (e > 0) {
+    __cpBackgroundDebugTrack("claude_chrome.permission.pending_cleared", {
+      reason: "bridge_disconnected",
+      pending_count: e
+    }, "warn");
+  }
   for (const [, e] of __cpMcpBridgePendingPermissionResponseLedger) {
     e.resolve(false);
   }
@@ -12487,12 +12680,14 @@ function La(e) {
     ga.send(JSON.stringify(e));
   }
   if (e.type === __cpMcpBridgeSocketMessageTypeToolResult && e[__cpMcpBridgeSocketFieldToolUseId]) {
-    m("claude_chrome.bridge.result_sent", {
+    const t = {
       tool_use_id: e[__cpMcpBridgeSocketFieldToolUseId],
       socket_state: ga?.readyState ?? -1,
       buffered_amount: ga?.bufferedAmount ?? -1,
       is_error: Boolean(e.error)
-    });
+    };
+    m("claude_chrome.bridge.result_sent", t);
+    __cpBackgroundDebugTrack("claude_chrome.bridge.result_sent", t, t.is_error ? "warn" : "info");
   }
 }
 // 语义锚点：MCP Bridge 连接与消息发送入口（供后续定位/外提逻辑时搜索）
@@ -13763,18 +13958,21 @@ const un = "__legacy_shared__";
 const hn = new Map();
 function __cpNormalizeBackgroundProviderConfig(e) {
   const t = e && typeof e == "object" ? e : {};
+  const r = String(t.baseUrl || "").trim();
+  const o = String(t.apiKey || "").trim();
+  const a = String(t.defaultModel || "").trim();
   return {
-    enabled: !!t.enabled,
-    baseUrl: String(t.baseUrl || "").trim(),
-    apiKey: String(t.apiKey || "").trim(),
-    defaultModel: String(t.defaultModel || "").trim(),
+    enabled: !!(r && o && a),
+    baseUrl: r,
+    apiKey: o,
+    defaultModel: a,
     fastModel: String(t.fastModel || t.small_fast_model || "").trim()
   };
 }
 function __cpRequireBackgroundProviderConfig(e) {
   const t = __cpNormalizeBackgroundProviderConfig(e);
-  if (!t.enabled || !t.baseUrl) {
-    throw new Error("Custom provider is required. Please enable it in Claw in Chrome.");
+  if (!t.baseUrl) {
+    throw new Error("Custom provider is required. Please configure your custom provider in Claw in Chrome.");
   }
   if (!t.apiKey) {
     throw new Error("Custom provider API key is required. Please update your settings in Claw in Chrome.");
@@ -13888,7 +14086,7 @@ async function wn(e) {
       const t = cn;
       cn = undefined;
       ln = undefined;
-      m("claude_chrome.mcp.tool_called", {
+      const a = {
         tool_name: e.toolName,
         client_id: r,
         model: c,
@@ -13897,7 +14095,9 @@ async function wn(e) {
         duration_ms: Date.now() - o,
         tool_use_id: e.toolUseId,
         session_id: e.sessionScope?.sessionId
-      });
+      };
+      m("claude_chrome.mcp.tool_called", a);
+      __cpBackgroundDebugTrack("claude_chrome.mcp.tool_called", a, "warn");
       return bn(t);
     }
     cn = undefined;
@@ -13919,7 +14119,7 @@ async function wn(e) {
     i("tab_orchestration_ms");
   } catch {
     i("tab_orchestration_ms");
-    m("claude_chrome.mcp.tool_called", {
+    const t = {
       tool_name: e.toolName,
       client_id: r,
       model: c,
@@ -13929,14 +14129,16 @@ async function wn(e) {
       tool_use_id: e.toolUseId,
       session_id: e.sessionScope?.sessionId,
       ...n
-    });
+    };
+    m("claude_chrome.mcp.tool_called", t);
+    __cpBackgroundDebugTrack("claude_chrome.mcp.tool_called", t, "warn");
     return bn("No tabs available. Please open a new tab or window in Chrome.");
   }
   if (u) {
     const t = await O.getCategory(u);
     i("blocklist_ms");
     if (Ja(t)) {
-      m("claude_chrome.mcp.tool_called", {
+      const o = {
         tool_name: e.toolName,
         client_id: r,
         model: c,
@@ -13949,7 +14151,9 @@ async function wn(e) {
         ...(d && {
           domain: d
         })
-      });
+      };
+      m("claude_chrome.mcp.tool_called", o);
+      __cpBackgroundDebugTrack("claude_chrome.mcp.tool_called", o, "warn");
       return bn(t === "category_org_blocked" ? "This site is blocked by your organization's policy." : "This site is blocked.");
     }
   }
@@ -14094,7 +14298,7 @@ async function wn(e) {
   }
   const b = u ? fa(u) : undefined;
   const w = l !== undefined && K.isScreencastActive(l);
-  m("claude_chrome.mcp.tool_called", {
+  const S = {
     tool_name: e.toolName,
     client_id: r,
     model: c,
@@ -14115,7 +14319,9 @@ async function wn(e) {
     ...(p && {
       error_type: p
     })
-  });
+  };
+  m("claude_chrome.mcp.tool_called", S);
+  __cpBackgroundDebugTrack("claude_chrome.mcp.tool_called", S, f ? "warn" : "info");
   return h;
 }
 const yn = new Map();
@@ -14163,9 +14369,9 @@ async function Sn(e, t) {
   const r = xn.then(() => async function (e, t) {
     const r = crypto.randomUUID();
     const o = Date.now();
-    const a = _n.get(t);
-    if (a) {
-      clearTimeout(a);
+    const n = _n.get(t);
+    if (n) {
+      clearTimeout(n);
     }
     await F.addPermissionPrefix(t);
     _n.set(t, null);
@@ -14173,10 +14379,18 @@ async function Sn(e, t) {
       [__cpMcpPermissionPopupBuildStorageKey(r)]: __cpMcpPermissionPopupCreateStorageEntry(e, t, Date.now())
     });
     // 语义锚点：permission prompt storage payload 里的 tabId/timestamp 主要给 background 账本与清理链使用；sidepanel consumer 实际只读 prompt。
-    m("claude_chrome.permission.prompted", {
+    const a = {
       permission_type: e.type,
       tool_type: e.tool,
       tab_id: t
+    };
+    m("claude_chrome.permission.prompted", a);
+    __cpBackgroundDebugTrack("claude_chrome.permission.prompted", {
+      ...a,
+      request_id: r,
+      url: e.url,
+      action_data: e.actionData,
+      tool_use_id: e.toolUseId
     });
     return new Promise(a => {
       // 语义锚点：这里把 requestId 绑定到 pending permission promise；sidepanel 的 requestId/allowed 回包会 resolve 它。
@@ -14184,10 +14398,10 @@ async function Sn(e, t) {
       // toolUseId 留在 bridge/tool 层，tabId 只负责 sidepanel 作用域与前缀恢复，不参与最终 resolve。
       let n;
       let s = false;
-      const i = async (i = false) => {
+      const i = async (i = false, c = i ? "approved" : "rejected") => {
         if (!s) {
           s = true;
-          chrome.runtime.onMessage.removeListener(c);
+          chrome.runtime.onMessage.removeListener(l);
           m("claude_chrome.permission.responded", {
             permission_type: e.type,
             tool_type: e.tool,
@@ -14195,6 +14409,16 @@ async function Sn(e, t) {
             allowed: i,
             response_time_ms: Date.now() - o
           });
+          __cpBackgroundDebugTrack("claude_chrome.permission.responded", {
+            permission_type: e.type,
+            tool_type: e.tool,
+            tab_id: t,
+            allowed: i,
+            response_time_ms: Date.now() - o,
+            request_id: r,
+            resolution: c,
+            popup_window_id: n ?? null
+          }, i ? "info" : "warn");
           await chrome.storage.local.remove(__cpMcpPermissionPopupBuildStorageKey(r));
           if (n) {
             // 语义锚点：收到 runtime MCP_PERMISSION_RESPONSE 后，background 会主动关闭 popup；手动关闭则留给 timeout 兜底。
@@ -14205,14 +14429,14 @@ async function Sn(e, t) {
           a(i);
         }
       };
-      const c = e => {
+      const l = e => {
         // 语义锚点：permission 链只消费 MCP_PERMISSION_RESPONSE；
         // pairing_dismissed 属于配对链 no-op，不会触发这里的 pending permission promise。
         if (e.type === __cpMcpBridgeRuntimeMessageTypeMcpPermissionResponse && e[__cpMcpBridgeRuntimeMessageFieldRequestId] === r) {
-          i(e[__cpMcpBridgeRuntimeMessageFieldAllowed]);
+          i(e[__cpMcpBridgeRuntimeMessageFieldAllowed], "runtime_response");
         }
       };
-      chrome.runtime.onMessage.addListener(c);
+      chrome.runtime.onMessage.addListener(l);
       // 语义锚点：popup URL/window 配置已收口到 helper；这里只负责把 tabId/requestId 注入到 sidepanel permission-only 页面。
       chrome.windows.create(__cpMcpPermissionPopupCreateWindowOptions(chrome.runtime.getURL, {
         tabId: t,
@@ -14222,12 +14446,12 @@ async function Sn(e, t) {
           n = e.id;
         } else {
           // 语义锚点：popup 创建失败按拒绝处理，避免 pending promise 长时间悬挂。
-          i(false);
+          i(false, "popup_create_failed");
         }
       });
       setTimeout(() => {
         // 语义锚点：手动关闭 permission popup 不会立即回包；background 侧最终由 30s timeout 兜底拒绝。
-        i(false);
+        i(false, "timeout");
       }, __cpMcpPermissionPopupResponseTimeoutMs);
     });
   }(e, t));

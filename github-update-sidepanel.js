@@ -7,17 +7,18 @@
   const {
     STORAGE_KEYS,
     formatTimestamp,
-    summarizeNotes,
     detectUiLocaleKey,
     getUiLocaleTag,
     readStoredState,
     openReleasePage,
     openDownloadPage,
     isBlockedByMinVersion,
-    normalizeVersion
+    normalizeVersion,
+    renderMarkdownToHtml
   } = shared;
 
   const ROOT_ID = "cp-github-update-sidepanel-root";
+  const STYLE_ID = "cp-github-update-sidepanel-style";
   const BACKDROP_CLASS = "fixed inset-0 bg-always-black/50 z-50";
   const WRAPPER_CLASS = "fixed inset-0 z-50 flex items-center justify-center pointer-events-none p-5 sm:p-6";
   const STRINGS = {
@@ -119,6 +120,7 @@
   }
 
   function ensureRoot() {
+    ensureStyles();
     if (root && root.isConnected) {
       return root;
     }
@@ -130,6 +132,85 @@
     root.id = ROOT_ID;
     document.body.appendChild(root);
     return root;
+  }
+
+  function ensureStyles() {
+    if (document.getElementById(STYLE_ID)) {
+      return;
+    }
+    const style = document.createElement("style");
+    style.id = STYLE_ID;
+    style.textContent = `
+      #${ROOT_ID} .cp-gus-md {
+        color: #0f172a;
+        font-size: 14px;
+        line-height: 1.7;
+        word-break: break-word;
+        white-space: normal;
+      }
+      #${ROOT_ID} .cp-gus-md > :first-child {
+        margin-top: 0;
+      }
+      #${ROOT_ID} .cp-gus-md > :last-child {
+        margin-bottom: 0;
+      }
+      #${ROOT_ID} .cp-gus-md h1,
+      #${ROOT_ID} .cp-gus-md h2,
+      #${ROOT_ID} .cp-gus-md h3,
+      #${ROOT_ID} .cp-gus-md h4,
+      #${ROOT_ID} .cp-gus-md h5,
+      #${ROOT_ID} .cp-gus-md h6 {
+        margin: 16px 0 8px;
+        font-weight: 700;
+        line-height: 1.35;
+        color: #0f172a;
+      }
+      #${ROOT_ID} .cp-gus-md p,
+      #${ROOT_ID} .cp-gus-md ul,
+      #${ROOT_ID} .cp-gus-md ol,
+      #${ROOT_ID} .cp-gus-md blockquote,
+      #${ROOT_ID} .cp-gus-md pre {
+        margin: 0 0 12px;
+      }
+      #${ROOT_ID} .cp-gus-md ul,
+      #${ROOT_ID} .cp-gus-md ol {
+        padding-left: 1.35rem;
+      }
+      #${ROOT_ID} .cp-gus-md a {
+        color: #2563eb;
+        text-decoration: underline;
+      }
+      #${ROOT_ID} .cp-gus-md code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Courier New", monospace;
+        font-size: 0.92em;
+        padding: 0.12rem 0.32rem;
+        border-radius: 6px;
+        background: rgba(148, 163, 184, 0.16);
+      }
+      #${ROOT_ID} .cp-gus-md pre {
+        overflow: auto;
+        padding: 12px 14px;
+        border-radius: 12px;
+        border: 1px solid rgba(148, 163, 184, 0.24);
+        background: rgba(15, 23, 42, 0.04);
+      }
+      #${ROOT_ID} .cp-gus-md pre code {
+        padding: 0;
+        background: transparent;
+      }
+      #${ROOT_ID} .cp-gus-md blockquote {
+        padding: 10px 14px;
+        border-left: 3px solid rgba(37, 99, 235, 0.45);
+        background: rgba(219, 234, 254, 0.35);
+        border-radius: 10px;
+      }
+      #${ROOT_ID} .cp-gus-notes-scroll {
+        max-height: min(42vh, 360px);
+        overflow: auto;
+        padding-right: 4px;
+      }
+    `;
+    document.head.appendChild(style);
   }
 
   function createNode(tag, className, text) {
@@ -173,12 +254,17 @@
     return shell;
   }
 
-  function createNotesSection(label, value) {
-    const shell = createSection(label, value);
-    const valueNode = shell.lastChild;
-    if (valueNode) {
-      valueNode.classList.add("whitespace-pre-wrap");
+  function createNotesSection(label, markdown, fallbackText) {
+    const shell = createNode("div", SECTION_CLASS);
+    shell.appendChild(createNode("div", SECTION_LABEL_CLASS, label));
+    const valueNode = createNode("div", SECTION_VALUE_CLASS + " cp-gus-md cp-gus-notes-scroll");
+    const renderedHtml = typeof renderMarkdownToHtml === "function" ? String(renderMarkdownToHtml(markdown || "") || "").trim() : "";
+    if (renderedHtml) {
+      valueNode.innerHTML = renderedHtml;
+    } else {
+      valueNode.textContent = fallbackText;
     }
+    shell.appendChild(valueNode);
     return shell;
   }
 
@@ -289,7 +375,7 @@
     metaGrid.appendChild(createSection(strings.latestVersion, formatVersion(info.latestVersion)));
     metaGrid.appendChild(createSection(strings.publishedAt, info.publishedAt ? formatDateTime(info.publishedAt) : strings.unknown));
     sectionList.appendChild(metaGrid);
-    sectionList.appendChild(createNotesSection(strings.releaseNotes, info.notes ? summarizeNotes(info.notes, 320) : strings.notesFallback));
+    sectionList.appendChild(createNotesSection(strings.releaseNotes, info.notes, strings.notesFallback));
     body.appendChild(sectionList);
 
     const footer = createNode("div", "mt-6 flex flex-wrap items-center gap-3");

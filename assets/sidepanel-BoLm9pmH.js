@@ -81383,25 +81383,27 @@ function YY({
             // 语义锚点：activeBanner 复用输入区顶部 banner 槽；eligibility/error/refusal/messageLimit/highRisk/notification/announcement 都从这里分流。
             if (F === "eligibility") {
               return l.jsx("div", {
-                className: "flex h-full items-center justify-center px-3 py-6",
+                className: "flex h-full min-h-screen items-center justify-center px-6 py-10",
                 children: l.jsxs("div", {
-                  className: "w-full max-w-md rounded-[24px] border border-border-300 bg-bg-000 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.08)]",
+                  className: "flex w-full max-w-[360px] flex-col items-center text-center",
                   children: [l.jsx("div", {
-                    className: "text-xl font-semibold text-text-100",
-                    children: "请先配置自定义模型供应商"
+                    className: "text-text-100 text-base font-semibold text-center font-claude-response",
+                    children: __cpGetLocalizedProviderPromptTitle(ye?.locale)
                   }), l.jsx("p", {
-                    className: "mt-3 text-sm leading-6 text-text-300",
-                    children: "请先配置自定义模型供应商。打开设置页，填写 Base URL、API Key 和默认模型后再继续。"
+                    className: "text-text-300 text-sm font-normal mt-2 text-center max-w-[360px] font-base",
+                    children: __cpGetLocalizedProviderPromptDescription(ye?.locale)
                   }), l.jsxs("div", {
-                    className: "mt-5 flex gap-3",
+                    className: "mt-6 flex flex-wrap items-center justify-center gap-2",
                     children: [l.jsx("button", {
-                      className: "h-10 rounded-full bg-text-100 px-4 text-sm font-medium text-bg-000",
-                      onClick: () => chrome.runtime.openOptionsPage(),
-                      children: "打开设置页"
+                      className: "px-4 py-2.5 rounded-[14px] bg-text-100 hover:bg-text-200 active:bg-text-000 text-bg-100 font-button transition-all hover:shadow-md",
+                      onClick: () => chrome.tabs.create({
+                        url: chrome.runtime.getURL("options.html#options?provider=true")
+                      }),
+                      children: __cpGetLocalizedProviderPromptActionText(ye?.locale)
                     }), l.jsx("button", {
-                      className: "h-10 rounded-full border border-border-300 px-4 text-sm font-medium text-text-200",
+                      className: "px-5 py-[10px] border border-border-300 text-text-200 rounded-[14px] hover:bg-bg-200 transition-colors font-ui font-medium text-[14px]",
                       onClick: () => window.location.reload(),
-                      children: "重新检测"
+                      children: __cpGetLocalizedProviderPromptRetryText(ye?.locale)
                     })]
                   })]
                 })
@@ -88180,7 +88182,7 @@ function CQ({
           customProvider: __cpPanelDebugMaskProvider(P),
           message: r instanceof Error ? r.message : String(r || "")
         }, "warn");
-        z(r instanceof Error ? r.message : "请先配置自定义模型供应商。");
+        z(r instanceof Error ? r.message : __cpGetLocalizedProviderPromptFallbackError());
       }
     })();
     return () => {
@@ -91207,6 +91209,7 @@ function __cpNormalizeProviderModelEntries(e) {
 }
 const __cpFetchedModelsCacheKey = "customProviderFetchedModelsCache";
 const __cpHttpProviderStorageKey = "customProviderAllowHttp";
+const __cpHttpProviderDefaultEnabled = true;
 const __cpHttpProviderDisabledMessage = "HTTP 协议未启用。请前往 Options 打开“允许 HTTP 协议”后再使用 http:// 地址。";
 async function __cpReadCurrentProviderConfig() {
   try {
@@ -91251,7 +91254,7 @@ async function __cpAssertSidepanelProviderHttpAllowed(e) {
   }
   try {
     const t = await chrome.storage.local.get(__cpHttpProviderStorageKey);
-    if (t[__cpHttpProviderStorageKey] === true) {
+    if (typeof t[__cpHttpProviderStorageKey] == "boolean" ? t[__cpHttpProviderStorageKey] : __cpHttpProviderDefaultEnabled) {
       return;
     }
   } catch (e) {}
@@ -91931,6 +91934,21 @@ const __cpDetachedWindowLockStorageKey = __CP_DETACHED_WINDOW_LOCKS_KEY;
 function __cpIsChineseLocale(e) {
   const t = String(e || typeof navigator < "u" && navigator?.language || "").toLowerCase();
   return t.startsWith("zh");
+}
+function __cpGetLocalizedProviderPromptTitle(e) {
+  return __cpIsChineseLocale(e) ? "请先配置自定义模型供应商" : "Please configure a custom model provider first";
+}
+function __cpGetLocalizedProviderPromptDescription(e) {
+  return __cpIsChineseLocale(e) ? "请前往设置页的“模型供应商”界面完成配置。填写 Base URL、API Key 和默认模型后再继续。" : "Open the Model Providers settings page and finish configuring your provider before continuing. Fill in the Base URL, API Key, and default model first.";
+}
+function __cpGetLocalizedProviderPromptActionText(e) {
+  return __cpIsChineseLocale(e) ? "前往设置" : "Open settings";
+}
+function __cpGetLocalizedProviderPromptRetryText(e) {
+  return __cpIsChineseLocale(e) ? "重新检测" : "Retry";
+}
+function __cpGetLocalizedProviderPromptFallbackError(e) {
+  return __cpIsChineseLocale(e) ? "请先配置自定义模型供应商。" : "Please configure a custom model provider first.";
 }
 function __cpGetLocalizedNewChatText(e, t = "title") {
   return __cpIsChineseLocale(e) ? "新建会话" : "New session";
@@ -98110,30 +98128,29 @@ function o1() {
   }
   if (q) {
     return l.jsx("div", {
-      className: "flex h-screen items-center justify-center bg-bg-100 p-4",
+      className: "flex h-screen items-center justify-center bg-bg-100 px-6 py-10",
       "data-theme": "claude",
       children: l.jsxs("div", {
-        className: "w-full max-w-md rounded-[24px] border border-border-300 bg-bg-000 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.08)]",
+        className: "flex w-full max-w-[360px] flex-col items-center text-center",
         children: [l.jsx("div", {
-          className: "text-xl font-semibold text-text-100",
-          children: "请先配置自定义模型供应商"
+          className: "text-text-100 text-base font-semibold text-center font-claude-response",
+          children: __cpGetLocalizedProviderPromptTitle(n?.locale)
         }), l.jsx("p", {
-          className: "mt-3 text-sm leading-6 text-text-300",
-          children: "请先配置自定义模型供应商。打开设置页，填写 Base URL、API Key 和默认模型后再继续。"
+          className: "text-text-300 text-sm font-normal mt-2 text-center max-w-[360px] font-base",
+          children: __cpGetLocalizedProviderPromptDescription(n?.locale)
         }), l.jsxs("div", {
-          className: "mt-5 flex gap-3",
+          className: "mt-6 flex flex-wrap items-center justify-center gap-2",
           children: [l.jsx("button", {
-            className: "h-10 rounded-full bg-text-100 px-4 text-sm font-medium text-bg-000",
-            onClick: () => chrome.runtime.openOptionsPage(),
-            children: "打开设置页"
+            className: "px-4 py-2.5 rounded-[14px] bg-text-100 hover:bg-text-200 active:bg-text-000 text-bg-100 font-button transition-all hover:shadow-md",
+            onClick: () => chrome.tabs.create({
+              url: chrome.runtime.getURL("options.html#options?provider=true")
+            }),
+            children: __cpGetLocalizedProviderPromptActionText(n?.locale)
           }), l.jsx("button", {
-            className: "h-10 rounded-full border border-border-300 px-4 text-sm font-medium text-text-200",
+            className: "px-5 py-[10px] border border-border-300 text-text-200 rounded-[14px] hover:bg-bg-200 transition-colors font-ui font-medium text-[14px]",
             onClick: () => window.location.reload(),
-            children: "重新检测"
+            children: __cpGetLocalizedProviderPromptRetryText(n?.locale)
           })]
-        }), G && l.jsx("p", {
-          className: "mt-4 text-xs leading-5 text-text-400",
-          children: "当前还没有可用的供应商配置。"
         })]
       })
     });

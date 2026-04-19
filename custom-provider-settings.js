@@ -1382,11 +1382,7 @@
       flex: 0 0 auto;
     }
     .cp-model-action-btn-add {
-      min-width: 3rem;
-      padding-left: 1rem;
-      padding-right: 1rem;
-      font-size: 1.5rem;
-      line-height: 1;
+      flex: 0 0 auto;
     }
     .cp-page-label {
       font-family: var(--font-ui, ui-sans-serif, system-ui);
@@ -3053,7 +3049,7 @@
     const modelActionGroup = createNode("div", "cp-model-action-group");
     const fetchModelsButton = createNode("button", "cp-model-action-btn cp-model-action-btn-main px-6 py-3 bg-bg-100 text-text-200 border border-border-300 rounded-xl hover:bg-bg-200 hover:text-text-100 transition-all font-large disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2", strings.fetchModels);
     fetchModelsButton.type = "button";
-    const addModelButton = createNode("button", "cp-model-action-btn cp-model-action-btn-add px-6 py-3 bg-bg-100 text-text-200 border border-border-300 rounded-xl hover:bg-bg-200 hover:text-text-100 transition-all font-large disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2", "+");
+    const addModelButton = createNode("button", "cp-model-action-btn cp-model-action-btn-add px-6 py-3 bg-bg-100 text-text-200 border border-border-300 rounded-xl hover:bg-bg-200 hover:text-text-100 transition-all font-large disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2", strings.manualAddModelTitle);
     addModelButton.type = "button";
     addModelButton.setAttribute("aria-label", strings.addModelAria);
     const healthCheckButton = createNode("button", "cp-model-action-btn cp-model-action-btn-main px-6 py-3 bg-bg-100 text-text-200 border border-border-300 rounded-xl hover:bg-bg-200 hover:text-text-100 transition-all font-large disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2", strings.healthCheck);

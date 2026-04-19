@@ -13,3 +13,10 @@ Thumbs.db
 /docs
 任务规格计划书.md
 学习路线.md
+.tmp_*.js
+git-hash.txt
+custom-build-badge.css
+/public/offscreen.html
+学习路线.md
+/build-release-import.bat
+/_local-release-import/

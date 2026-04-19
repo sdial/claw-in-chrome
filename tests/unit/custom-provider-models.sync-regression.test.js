@@ -389,7 +389,7 @@ async function testSyncModelOptionsUsesAliasButKeepsModelIdValue() {
   assert.equal(select.children[1].value, "MiniMax-M2.7");
   assert.equal(select.value, "MiniMax-M2.7");
 }
-async function testSavingHttpProfileRequiresExplicitToggle() {
+async function testSavingHttpProfileDefaultsToEnabled() {
   const httpProfile = createProfile({
     baseUrl: "http://provider-a.example/v1"
   });
@@ -400,12 +400,15 @@ async function testSavingHttpProfileRequiresExplicitToggle() {
   const models = loadModels(storageArea);
   await waitForMicrotasks();
 
-  await assert.rejects(models.saveProviderProfile(httpProfile, {
+  await models.saveProviderProfile(httpProfile, {
     profileId: httpProfile.id,
     storageArea
-  }), /HTTP 协议未启用/);
+  });
 
-  assert.equal(storageArea.state.customProviderProfiles?.length || 0, 0);
+  assert.equal(storageArea.state.customProviderConfig.baseUrl, "http://provider-a.example/v1");
+  assert.equal(storageArea.state.customProviderProfiles[0].baseUrl, "http://provider-a.example/v1");
+  assert.equal(storageArea.state.customProviderAllowHttp, true);
+  assert.equal(storageArea.state.customProviderAllowHttpMigrated, true);
 }
 async function testSavingHttpProfileSucceedsWhenToggleEnabled() {
   const httpProfile = createProfile({
@@ -426,7 +429,7 @@ async function testSavingHttpProfileSucceedsWhenToggleEnabled() {
   assert.equal(storageArea.state.customProviderConfig.baseUrl, "http://provider-a.example/v1");
   assert.equal(storageArea.state.customProviderProfiles[0].baseUrl, "http://provider-a.example/v1");
 }
-async function testActivatingHttpProfileRequiresExplicitToggle() {
+async function testActivatingHttpProfileDefaultsToEnabled() {
   const activeProfile = createProfile();
   const httpProfile = createProfile({
     id: "provider_http",
@@ -444,17 +447,88 @@ async function testActivatingHttpProfileRequiresExplicitToggle() {
   const models = loadModels(storageArea);
   await waitForMicrotasks();
 
-  await assert.rejects(models.setActiveProviderProfile(httpProfile.id, {
+  await models.setActiveProviderProfile(httpProfile.id, {
     storageArea
-  }), /HTTP 协议未启用/);
+  });
 
-  assert.equal(storageArea.state.customProviderActiveProfileId, activeProfile.id);
+  assert.equal(storageArea.state.customProviderActiveProfileId, httpProfile.id);
+  assert.equal(storageArea.state.customProviderAllowHttp, true);
+  assert.equal(storageArea.state.customProviderAllowHttpMigrated, true);
 }
-async function testFetchAndProbeRejectDisabledHttpBeforeNetwork() {
+async function testFetchAndProbeAllowHttpByDefault() {
   const httpProfile = createProfile({
     baseUrl: "http://provider-a.example/v1"
   });
   const storageArea = createStorageArea({});
+  let fetchCalls = 0;
+  const fetchImpl = async (input) => {
+    fetchCalls += 1;
+    const url = String(input);
+    if (url.endsWith("/models")) {
+      return {
+        ok: true,
+        status: 200,
+        headers: {
+          get() {
+            return "application/json";
+          }
+        },
+        async text() {
+          return JSON.stringify({
+            data: [{
+              id: "gpt-5.4"
+            }]
+          });
+        }
+      };
+    }
+    return {
+      ok: true,
+      status: 200,
+      headers: {
+        get() {
+          return "application/json";
+        }
+      },
+      async text() {
+        return JSON.stringify({
+          content: [{
+            type: "text",
+            text: "OK"
+          }]
+        });
+      }
+    };
+  };
+  const models = loadModels(storageArea);
+  await waitForMicrotasks();
+
+  const fetched = await models.fetchProviderModels(httpProfile, {
+    storageArea,
+    fetchImpl
+  });
+  const probe = await models.probeProviderModel(httpProfile, {
+    storageArea,
+    fetchImpl
+  });
+
+  assert.equal(fetched.length, 1);
+  assert.equal(fetched[0].value, "gpt-5.4");
+  assert.equal(fetched[0].label, "gpt-5.4");
+  assert.equal(fetched[0].manual, false);
+  assert.equal(probe.ok, true);
+  assert.equal(fetchCalls, 2);
+  assert.equal(storageArea.state.customProviderAllowHttp, true);
+  assert.equal(storageArea.state.customProviderAllowHttpMigrated, true);
+}
+async function testFetchAndProbeRejectWhenHttpExplicitlyDisabled() {
+  const httpProfile = createProfile({
+    baseUrl: "http://provider-a.example/v1"
+  });
+  const storageArea = createStorageArea({
+    customProviderAllowHttp: false,
+    customProviderAllowHttpMigrated: true
+  });
   let fetchCalls = 0;
   const fetchImpl = async () => {
     fetchCalls += 1;
@@ -471,6 +545,7 @@ async function testFetchAndProbeRejectDisabledHttpBeforeNetwork() {
     storageArea,
     fetchImpl
   }), /HTTP 协议未启用/);
+
   assert.equal(fetchCalls, 0);
 }
 async function testLegacyActiveHttpProfileMigratesToggleToEnabled() {
@@ -499,10 +574,11 @@ async function main() {
   await testLoadingLegacyStorageCleansDeprecatedFields();
   await testManualAliasOnlyChangesDisplayName();
   await testSyncModelOptionsUsesAliasButKeepsModelIdValue();
-  await testSavingHttpProfileRequiresExplicitToggle();
+  await testSavingHttpProfileDefaultsToEnabled();
   await testSavingHttpProfileSucceedsWhenToggleEnabled();
-  await testActivatingHttpProfileRequiresExplicitToggle();
-  await testFetchAndProbeRejectDisabledHttpBeforeNetwork();
+  await testActivatingHttpProfileDefaultsToEnabled();
+  await testFetchAndProbeAllowHttpByDefault();
+  await testFetchAndProbeRejectWhenHttpExplicitlyDisabled();
   await testLegacyActiveHttpProfileMigratesToggleToEnabled();
   console.log("custom-provider-models sync regression tests passed");
 }
