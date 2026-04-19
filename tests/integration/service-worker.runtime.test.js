@@ -128,7 +128,8 @@ async function testRuntimeMessageHandlerDelegatesToDetachedWindowOpener() {
   const listener = chromeMock.events.runtimeOnMessage.listeners[0];
   const response = await invokeMessageHandler(listener, {
     type: "OPEN_GROUP_DETACHED_WINDOW",
-    mainTabId: 77
+    mainTabId: 77,
+    sessionId: "session-a"
   }, {
     tab: {
       id: 55
@@ -140,6 +141,7 @@ async function testRuntimeMessageHandlerDelegatesToDetachedWindowOpener() {
   assert.equal(openCalls.length, 1);
   assert.equal(openCalls[0].tabId, 55);
   assert.equal(openCalls[0].mainTabId, 77);
+  assert.equal(openCalls[0].sessionId, "session-a");
 }
 
 async function testUnknownMessageReturnsFalseWithoutCallingOpener() {

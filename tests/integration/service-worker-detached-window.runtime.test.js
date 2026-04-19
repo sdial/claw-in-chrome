@@ -23,7 +23,8 @@ function createDetachedWindowHarness(options = {}) {
   const sandbox = {
     console: consoleApi,
     chrome: chromeMock.chrome,
-    URL
+    URL,
+    URLSearchParams
   };
   sandbox.globalThis = sandbox;
   runScriptInSandbox(contractPath, sandbox);
@@ -66,12 +67,15 @@ async function testReadDetachedWindowLocksDropsInvalidEntries() {
 }
 
 async function testOpenDetachedWindowCreatesPopupAndPersistsLock() {
+  const restoreUrl = "https://example.com/search";
+  const sessionId = "session-a";
   const { api, chromeMock } = createDetachedWindowHarness({
     tabById: {
       55: {
         id: 55,
         windowId: 7,
-        groupId: -1
+        groupId: -1,
+        url: restoreUrl
       }
     },
     groupIdResult: 777,
@@ -80,7 +84,8 @@ async function testOpenDetachedWindowCreatesPopupAndPersistsLock() {
   });
 
   const result = await api.openDetachedWindowForGroup({
-    tabId: 55
+    tabId: 55,
+    sessionId
   });
 
   assert.equal(result.success, true);
@@ -88,19 +93,25 @@ async function testOpenDetachedWindowCreatesPopupAndPersistsLock() {
   assert.equal(result.groupId, 777);
   assert.equal(chromeMock.calls.tabs.group.length, 1);
   assert.equal(chromeMock.calls.windows.create.length, 1);
-  assert.match(chromeMock.calls.windows.create[0].url, /sidepanel\.html\?mode=window&tabId=55&groupId=777$/);
+  assert.equal(
+    chromeMock.calls.windows.create[0].url,
+    `chrome-extension://test-extension-id/sidepanel.html?mode=window&tabId=55&groupId=777&restoreUrl=${encodeURIComponent(restoreUrl)}&sessionId=${encodeURIComponent(sessionId)}`
+  );
   assert.equal(chromeMock.storageMock.state["claw.detachedWindowLocks"]["777"].windowId, 901);
   assert.equal(chromeMock.storageMock.state["claw.detachedWindowLocks"]["777"].mainTabId, 55);
   assert.equal(chromeMock.storageMock.state["claw.detachedWindowLocks"]["777"].hostWindowId, 7);
 }
 
 async function testOpenDetachedWindowReusesExistingPopupAndRefreshesTargetTab() {
+  const restoreUrl = "https://example.com/search";
+  const sessionId = "session-a";
   const { api, chromeMock } = createDetachedWindowHarness({
     tabById: {
       55: {
         id: 55,
         windowId: 7,
-        groupId: 12
+        groupId: 12,
+        url: restoreUrl
       }
     },
     windowsList: [
@@ -110,7 +121,7 @@ async function testOpenDetachedWindowReusesExistingPopupAndRefreshesTargetTab() 
         tabs: [
           {
             id: 601,
-            url: "chrome-extension://test-extension-id/sidepanel.html?mode=window&tabId=44&groupId=12"
+            url: `chrome-extension://test-extension-id/sidepanel.html?mode=window&tabId=44&groupId=12&restoreUrl=${encodeURIComponent(restoreUrl)}&sessionId=${encodeURIComponent(sessionId)}`
           }
         ]
       }
@@ -118,7 +129,8 @@ async function testOpenDetachedWindowReusesExistingPopupAndRefreshesTargetTab() 
   });
 
   const result = await api.openDetachedWindowForGroup({
-    tabId: 55
+    tabId: 55,
+    sessionId
   });
 
   assert.equal(result.success, true);
@@ -127,7 +139,10 @@ async function testOpenDetachedWindowReusesExistingPopupAndRefreshesTargetTab() 
   assert.equal(chromeMock.calls.windows.create.length, 0);
   assert.equal(chromeMock.calls.tabs.update.length >= 1, true);
   assert.equal(chromeMock.calls.tabs.update[0].tabId, 601);
-  assert.match(String(chromeMock.calls.tabs.update[0].payload.url || ""), /tabId=55&groupId=12$/);
+  assert.equal(
+    String(chromeMock.calls.tabs.update[0].payload.url || ""),
+    `chrome-extension://test-extension-id/sidepanel.html?mode=window&tabId=55&groupId=12&restoreUrl=${encodeURIComponent(restoreUrl)}&sessionId=${encodeURIComponent(sessionId)}`
+  );
   assert.deepEqual(chromeMock.calls.windows.update, [
     {
       windowId: 501,
@@ -139,7 +154,113 @@ async function testOpenDetachedWindowReusesExistingPopupAndRefreshesTargetTab() 
   assert.equal(chromeMock.storageMock.state["claw.detachedWindowLocks"]["12"].popupTabId, 601);
 }
 
+async function testOpenDetachedWindowReusesRestoredPopupByRestoreUrlAcrossGroupChange() {
+  const restoreUrl = "https://example.com/search";
+  const sessionId = "session-a";
+  const { api, chromeMock } = createDetachedWindowHarness({
+    storageState: {
+      "claw.detachedWindowLocks": {
+        "12": {
+          groupId: 12,
+          windowId: 501,
+          popupTabId: 601,
+          mainTabId: 55,
+          hostWindowId: 7
+        }
+      }
+    },
+    tabById: {
+      77: {
+        id: 77,
+        windowId: 8,
+        groupId: 88,
+        url: restoreUrl
+      }
+    },
+    windowsList: [
+      {
+        id: 501,
+        type: "popup",
+        tabs: [
+          {
+            id: 601,
+            url: `chrome-extension://test-extension-id/sidepanel.html?mode=window&tabId=55&groupId=12&restoreUrl=${encodeURIComponent(restoreUrl)}&sessionId=${encodeURIComponent(sessionId)}`
+          }
+        ]
+      }
+    ]
+  });
+
+  const result = await api.openDetachedWindowForGroup({
+    tabId: 77,
+    sessionId
+  });
+
+  assert.equal(result.success, true);
+  assert.equal(result.reused, true);
+  assert.equal(result.groupId, 88);
+  assert.equal(result.windowId, 501);
+  assert.equal(chromeMock.storageMock.state["claw.detachedWindowLocks"]["12"], undefined);
+  assert.equal(chromeMock.storageMock.state["claw.detachedWindowLocks"]["88"].popupTabId, 601);
+  assert.equal(chromeMock.storageMock.state["claw.detachedWindowLocks"]["88"].mainTabId, 77);
+}
+
+async function testOpenDetachedWindowCreatesNewPopupWhenSameUrlIsOccupiedByAnotherSession() {
+  const restoreUrl = "https://example.com/search";
+  const occupiedSessionId = "session-a";
+  const nextSessionId = "session-b";
+  const { api, chromeMock } = createDetachedWindowHarness({
+    storageState: {
+      "claw.detachedWindowLocks": {
+        "12": {
+          groupId: 12,
+          windowId: 501,
+          popupTabId: 601,
+          mainTabId: 55,
+          hostWindowId: 7
+        }
+      }
+    },
+    tabById: {
+      77: {
+        id: 77,
+        windowId: 8,
+        groupId: 88,
+        url: restoreUrl
+      }
+    },
+    windowsList: [
+      {
+        id: 501,
+        type: "popup",
+        tabs: [
+          {
+            id: 601,
+            url: `chrome-extension://test-extension-id/sidepanel.html?mode=window&tabId=55&groupId=12&restoreUrl=${encodeURIComponent(restoreUrl)}&sessionId=${encodeURIComponent(occupiedSessionId)}`
+          }
+        ]
+      }
+    ]
+  });
+
+  const result = await api.openDetachedWindowForGroup({
+    tabId: 77,
+    sessionId: nextSessionId
+  });
+
+  assert.equal(result.success, true);
+  assert.equal(result.reused, false);
+  assert.equal(result.groupId, 88);
+  assert.equal(chromeMock.calls.windows.create.length, 1);
+  assert.equal(chromeMock.calls.tabs.update.length, 0);
+  assert.equal(chromeMock.calls.windows.update.length, 0);
+  assert.notEqual(chromeMock.storageMock.state["claw.detachedWindowLocks"]["12"], undefined);
+  assert.equal(chromeMock.storageMock.state["claw.detachedWindowLocks"]["88"].mainTabId, 77);
+}
+
 async function testSweepDetachedWindowLocksRemovesMissingPopupAndRefreshesHostWindow() {
+  const restoreUrl = "https://example.com/search";
+  const sessionId = "session-a";
   const { api, chromeMock } = createDetachedWindowHarness({
     storageState: {
       "claw.detachedWindowLocks": {
@@ -163,7 +284,8 @@ async function testSweepDetachedWindowLocksRemovesMissingPopupAndRefreshesHostWi
       55: {
         id: 55,
         windowId: 88,
-        groupId: 12
+        groupId: 12,
+        url: restoreUrl
       }
     },
     windowsList: [
@@ -173,7 +295,7 @@ async function testSweepDetachedWindowLocksRemovesMissingPopupAndRefreshesHostWi
         tabs: [
           {
             id: 601,
-            url: "chrome-extension://test-extension-id/sidepanel.html?mode=window&tabId=55&groupId=12"
+            url: `chrome-extension://test-extension-id/sidepanel.html?mode=window&tabId=55&groupId=12&restoreUrl=${encodeURIComponent(restoreUrl)}&sessionId=${encodeURIComponent(sessionId)}`
           }
         ]
       }
@@ -186,6 +308,55 @@ async function testSweepDetachedWindowLocksRemovesMissingPopupAndRefreshesHostWi
   assert.equal(nextLocks["12"].hostWindowId, 88);
   assert.equal(nextLocks["12"].popupTabId, 601);
   assert.equal(chromeMock.storageMock.state["claw.detachedWindowLocks"]["14"], undefined);
+}
+
+async function testSweepDetachedWindowLocksDoesNotRekeyAcrossSameUrlOtherSession() {
+  const restoreUrl = "https://example.com/recovered";
+  const occupiedSessionId = "session-a";
+  const { api, chromeMock } = createDetachedWindowHarness({
+    storageState: {
+      "claw.detachedWindowLocks": {
+        "12": {
+          groupId: 12,
+          windowId: 501,
+          popupTabId: 601,
+          mainTabId: 55,
+          hostWindowId: 7
+        }
+      }
+    },
+    tabById: {},
+    windowsList: [
+      {
+        id: 501,
+        type: "popup",
+        tabs: [
+          {
+            id: 601,
+            url: `chrome-extension://test-extension-id/sidepanel.html?mode=window&tabId=55&groupId=12&restoreUrl=${encodeURIComponent(restoreUrl)}&sessionId=${encodeURIComponent(occupiedSessionId)}`
+          }
+        ]
+      },
+      {
+        id: 88,
+        type: "normal",
+        tabs: [
+          {
+            id: 77,
+            url: restoreUrl,
+            groupId: 99
+          }
+        ]
+      }
+    ]
+  });
+
+  const nextLocks = await api.sweepDetachedWindowLocks();
+
+  assert.deepEqual(Object.keys(nextLocks), ["12"]);
+  assert.equal(nextLocks["12"].mainTabId, 55);
+  assert.equal(nextLocks["12"].hostWindowId, 7);
+  assert.equal(chromeMock.storageMock.state["claw.detachedWindowLocks"]["12"].popupTabId, 601);
 }
 
 async function testCloseDetachedWindowForLockEntryRemovesWindowAndLock() {
@@ -217,22 +388,31 @@ async function testCloseDetachedWindowForLockEntryRemovesWindowAndLock() {
 
 async function testBuildAndParseDetachedWindowUrlRoundTrip() {
   const { api } = createDetachedWindowHarness({});
+  const restoreUrl = "https://example.com/search";
+  const sessionId = "session-a";
 
   const url = api.buildDetachedWindowUrl({
     tabId: 55,
-    groupId: 12
+    groupId: 12,
+    restoreUrl,
+    sessionId
   });
   const parsed = api.parseDetachedWindowUrl(url);
 
   assert.equal(parsed.groupId, 12);
   assert.equal(parsed.tabId, 55);
+  assert.equal(parsed.restoreUrl, restoreUrl);
+  assert.equal(parsed.sessionId, sessionId);
 }
 
 async function main() {
   await testReadDetachedWindowLocksDropsInvalidEntries();
   await testOpenDetachedWindowCreatesPopupAndPersistsLock();
   await testOpenDetachedWindowReusesExistingPopupAndRefreshesTargetTab();
+  await testOpenDetachedWindowReusesRestoredPopupByRestoreUrlAcrossGroupChange();
+  await testOpenDetachedWindowCreatesNewPopupWhenSameUrlIsOccupiedByAnotherSession();
   await testSweepDetachedWindowLocksRemovesMissingPopupAndRefreshesHostWindow();
+  await testSweepDetachedWindowLocksDoesNotRekeyAcrossSameUrlOtherSession();
   await testCloseDetachedWindowForLockEntryRemovesWindowAndLock();
   await testBuildAndParseDetachedWindowUrlRoundTrip();
   console.log("service worker detached window runtime integration tests passed");

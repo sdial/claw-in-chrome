@@ -403,7 +403,7 @@ async function testSavingHttpProfileRequiresExplicitToggle() {
   await assert.rejects(models.saveProviderProfile(httpProfile, {
     profileId: httpProfile.id,
     storageArea
-  }), /HTTP Base URL 未启用/);
+  }), /HTTP 协议未启用/);
 
   assert.equal(storageArea.state.customProviderProfiles?.length || 0, 0);
 }
@@ -446,7 +446,7 @@ async function testActivatingHttpProfileRequiresExplicitToggle() {
 
   await assert.rejects(models.setActiveProviderProfile(httpProfile.id, {
     storageArea
-  }), /HTTP Base URL 未启用/);
+  }), /HTTP 协议未启用/);
 
   assert.equal(storageArea.state.customProviderActiveProfileId, activeProfile.id);
 }
@@ -466,11 +466,11 @@ async function testFetchAndProbeRejectDisabledHttpBeforeNetwork() {
   await assert.rejects(models.fetchProviderModels(httpProfile, {
     storageArea,
     fetchImpl
-  }), /HTTP Base URL 未启用/);
+  }), /HTTP 协议未启用/);
   await assert.rejects(models.probeProviderModel(httpProfile, {
     storageArea,
     fetchImpl
-  }), /HTTP Base URL 未启用/);
+  }), /HTTP 协议未启用/);
   assert.equal(fetchCalls, 0);
 }
 async function testLegacyActiveHttpProfileMigratesToggleToEnabled() {

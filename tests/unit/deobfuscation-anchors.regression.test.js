@@ -128,9 +128,10 @@ async function testSidepanelAnchorsExist() {
   assertIncludes(source, "语义锚点：scope 切换后的 session hydrate 总入口", "sidepanel bundle");
   assertIncludes(source, "语义锚点：scope 切换后的 session hydrate 主流程", "sidepanel bundle");
   assertIncludes(source, "语义锚点：scope 绑定的 storage 变化同步桥", "sidepanel bundle");
-  assertIncludes(source, "语义锚点：hydrate 迁移策略 1，按旧 chromeGroup scope 兜底迁移", "sidepanel bundle");
-  assertIncludes(source, "语义锚点：hydrate 迁移策略 2，按当前 scope 精确匹配 mainTab/group 迁移", "sidepanel bundle");
-  assertIncludes(source, "语义锚点：hydrate 迁移策略 3，按当前 URL / 标题做近似匹配迁移", "sidepanel bundle");
+  assertIncludes(source, "语义锚点：旧的 group/tab 历史恢复链已退役；跨重启只按 URL restore anchor 找回旧 scope。", "sidepanel bundle");
+  assertIncludes(source, "语义锚点：hydrate 恢复只把 URL anchor 当作跨重启的持久身份。", "sidepanel bundle");
+  assertIncludes(source, "chromeGroupId/mainTabId 仍只服务当前运行期 live scope，不再参与历史 scope 的恢复匹配。", "sidepanel bundle");
+  assertIncludes(source, "语义锚点：detached window 启动时，旧 query tabId 失效后要回退到 restoreUrl/live targetTab，不能把历史 tabId 当持久身份。", "sidepanel bundle");
   assertIncludes(source, "语义锚点：会话恢复主链从这里开始", "sidepanel bundle");
   assertIncludes(source, "语义锚点：scope hydrate 主流程", "sidepanel bundle");
   assertIncludes(source, "语义锚点：把草稿态恢复回当前 sidepanel 会话的入口。", "sidepanel bundle");
@@ -729,10 +730,13 @@ async function testDetachedWindowRuntimeAnchorsExist() {
   assertIncludes(source, "detached window lock 归一化边界：", "detached window runtime");
   assertIncludes(source, "detached lock 读取边界：从 storage.local 拉全量账本后逐项归一化，", "detached window runtime");
   assertIncludes(source, "detached window URL 契约：", "detached window runtime");
+  assertIncludes(source, "restoreUrl 是跨重启唯一稳定的会话锚点；tabId/groupId 只服务当前运行期复用/聚焦。", "detached window runtime");
+  assertIncludes(source, "sessionId 只用于区分“同 URL 下的不同本地会话”，避免别的会话抢占正在使用的独立窗口。", "detached window runtime");
   assertIncludes(source, "detached window URL 解析边界：", "detached window runtime");
   assertIncludes(source, "detached window 查找链：", "detached window runtime");
   assertIncludes(source, "detached lock 巡检链：", "detached window runtime");
   assertIncludes(source, "openDetachedWindowForGroup 的职责边界：", "detached window runtime");
+  assertIncludes(source, "同 URL 下若已有别的 session 占用独立窗，当前请求只能新开，不能切走占用中的窗口。", "detached window runtime");
 }
 
 async function testServiceWorkerRuntimeAnchorsExist() {

@@ -52751,16 +52751,42 @@ function xU() {
 const __cpModelsConfigReader = xU;
 const xUDefaultModelConfig = {};
 const __cpModelsConfigDefaultValue = xUDefaultModelConfig;
+function __cpNormalizeModelsConfigOptionEntry(e, t = {}) {
+  if (typeof e == "string") {
+    const n = String(e).trim();
+    if (!n) {
+      return null;
+    }
+    return {
+      model: n,
+      name: EU(n, t)
+    };
+  }
+  if (!e || typeof e != "object") {
+    return null;
+  }
+  const n = String(e?.model || e?.value || "").trim();
+  if (!n) {
+    return null;
+  }
+  const r = String(e?.name || e?.label || "").trim();
+  return {
+    ...e,
+    model: n,
+    name: r || EU(n, t)
+  };
+}
 function EU(e, t) {
   if (t.options) {
     for (const o of t.options) {
-      if (typeof o != "string" && o.model === e) {
-        return o.name;
+      const n = __cpNormalizeModelsConfigOptionEntry(o, t);
+      if (n?.model === e) {
+        return n.name;
       }
     }
   }
   if (t.models) {
-    const n = t.models.find(t => t.model === e);
+    const n = t.models.map(n => __cpNormalizeModelsConfigOptionEntry(n, t)).find(t => t?.model === e);
     if (n) {
       return n.name;
     }
@@ -53080,10 +53106,7 @@ function PU({
 }) {
   const A = l();
   const T = x ? "space-y-2" : "space-y-3";
-  const O = (R?.options || []).map(e => typeof e == "string" ? {
-    model: e,
-    name: EU(e, R || {})
-  } : e);
+  const O = (R?.options || []).map(e => __cpNormalizeModelsConfigOptionEntry(e, R || {})).filter(Boolean);
   return n.jsxs("div", {
     className: T,
     children: [n.jsxs("div", {

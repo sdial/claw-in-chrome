@@ -91160,6 +91160,34 @@ function __cpAreModelOptionsEqual(e, t) {
   }
   return true;
 }
+function __cpNormalizeSelectableModelOption(e, t) {
+  if (typeof e == "string") {
+    const n = String(e).trim();
+    if (!n) {
+      return null;
+    }
+    return {
+      model: n,
+      name: et(n, t || {})
+    };
+  }
+  if (!e || typeof e != "object") {
+    return null;
+  }
+  const n = String(e?.model || e?.value || "").trim();
+  if (!n) {
+    return null;
+  }
+  const s = et(n, t || {});
+  return {
+    ...e,
+    model: n,
+    name: String(e?.name || e?.label || s).trim() || s
+  };
+}
+function __cpNormalizeSelectableModelOptions(e, t) {
+  return (Array.isArray(e) ? e : []).map(e => __cpNormalizeSelectableModelOption(e, t)).filter(Boolean);
+}
 function __cpNormalizeProviderModelEntries(e) {
   if (!Array.isArray(e)) {
     return [];
@@ -91179,7 +91207,7 @@ function __cpNormalizeProviderModelEntries(e) {
 }
 const __cpFetchedModelsCacheKey = "customProviderFetchedModelsCache";
 const __cpHttpProviderStorageKey = "customProviderAllowHttp";
-const __cpHttpProviderDisabledMessage = "HTTP Base URL 未启用。请前往 Options 打开“允许 HTTP Base URL”后再使用 http:// 地址。";
+const __cpHttpProviderDisabledMessage = "HTTP 协议未启用。请前往 Options 打开“允许 HTTP 协议”后再使用 http:// 地址。";
 async function __cpReadCurrentProviderConfig() {
   try {
     const e = globalThis.CustomProviderModels;
@@ -91441,6 +91469,7 @@ function $Q(e = {}) {
     };
   }, []);
   const __cpResolvedModelConfig = a.useMemo(() => __cpBuildCustomProviderModelConfig(n, __cpCustomProviderConfig), [n, __cpCustomProviderConfig]);
+  const __cpNormalizedAvailableModelOptions = a.useMemo(() => __cpNormalizeSelectableModelOptions(__cpResolvedModelConfig.options, __cpResolvedModelConfig), [__cpResolvedModelConfig]);
   const {
     loadStickyModel: s,
     setStickyModel: r
@@ -91476,7 +91505,7 @@ function $Q(e = {}) {
   const [i, o] = a.useState(__cpResolvedModelConfig.default || "");
   const l = a.useRef(i);
   const c = a.useRef(false);
-  const [u, d] = a.useState(() => __cpResolvedModelConfig.options || []);
+  const [u, d] = a.useState(() => __cpNormalizedAvailableModelOptions);
   const h = a.useCallback(e => {
     if (l.current !== e) {
       __cpPanelDebugLog("model.set_selected", {
@@ -91500,16 +91529,19 @@ function $Q(e = {}) {
   }, [__cpResolvedModelConfig.default, __cpResolvedModelConfig.default_model_override_id]);
   a.useEffect(() => {
     if (__cpResolvedModelConfig.options) {
-      d(e => __cpAreModelOptionsEqual(e, __cpResolvedModelConfig.options) ? e : __cpResolvedModelConfig.options);
+      d(e => __cpAreModelOptionsEqual(e, __cpNormalizedAvailableModelOptions) ? e : __cpNormalizedAvailableModelOptions);
     }
-  }, [__cpResolvedModelConfig.options]);
+  }, [__cpResolvedModelConfig.options, __cpNormalizedAvailableModelOptions]);
   return {
     selectedModel: i,
     setSelectedModel: h,
     selectedModelRef: l,
     availableModelOptions: u,
     setAvailableModelOptions: d,
-    modelConfig: __cpResolvedModelConfig,
+    modelConfig: {
+      ...__cpResolvedModelConfig,
+      options: __cpNormalizedAvailableModelOptions
+    },
     usingFallbackNonStickyModelRef: c,
     loadStickyModel: s,
     setStickyModel: r
@@ -92423,13 +92455,14 @@ function __cpNormalizeActiveSessionRef(e) {
     chromeGroupId: Number.isFinite(Number(e.chromeGroupId)) ? Number(e.chromeGroupId) : null
   };
 }
+// 语义锚点：chromeGroupId/mainTabId 只用于当前浏览器运行期的 live scope 分桶；跨重启恢复仍靠 URL restore anchor。
 function __cpGetScopeIdByGroupContext(e, t) {
-  const s = Number(t);
-  if (Number.isFinite(s) && s > 0) {
-    return `group:${s}`;
-  }
   const n = Number(e);
-  return Number.isFinite(n) && n !== chrome.tabGroups.TAB_GROUP_ID_NONE ? `chrome-group:${n}` : "";
+  if (Number.isFinite(n) && n !== chrome.tabGroups.TAB_GROUP_ID_NONE) {
+    return `chrome-group:${n}`;
+  }
+  const s = Number(t);
+  return Number.isFinite(s) && s > 0 ? `group:${s}` : "";
 }
 function __cpMergeRecentSessionMeta(e, t) {
   const n = __cpNormalizeSessionMeta(e);
@@ -92794,29 +92827,32 @@ class LocalSessionRepository {
     });
     return l?.currentUrl ? await this.saveRestoreAnchor(s, l) : null;
   }
-  static async isScopeClaimedByLiveGroup(e) {
-    const t = __cpNormalizeSessionScopeId(e);
-    if (!t) {
+  static async isScopeClaimedByLiveContext(e, t = "") {
+    const n = __cpNormalizeSessionScopeId(e);
+    const s = __cpNormalizeSessionUrl(t);
+    if (!n || !s) {
       return false;
     }
     try {
-      if (t.startsWith("group:")) {
-        const e = Number(t.slice("group:".length));
+      if (n.startsWith("group:")) {
+        const e = Number(n.slice("group:".length));
         if (!Number.isFinite(e) || e <= 0) {
           return false;
         }
-        const n = await chrome.tabs.get(e);
-        return !!n && Number.isFinite(Number(n.groupId)) && n.groupId !== chrome.tabGroups.TAB_GROUP_ID_NONE;
+        const t = await chrome.tabs.get(e);
+        return __cpNormalizeSessionUrl(t?.url) === s;
       }
-      if (t.startsWith("chrome-group:")) {
-        const e = Number(t.slice("chrome-group:".length));
+      if (n.startsWith("chrome-group:")) {
+        const e = Number(n.slice("chrome-group:".length));
         if (!Number.isFinite(e) || e === chrome.tabGroups.TAB_GROUP_ID_NONE) {
           return false;
         }
-        await chrome.tabGroups.get(e);
-        return true;
+        const t = await chrome.tabs.query({
+          groupId: e
+        });
+        return Array.isArray(t) && t.some(e => __cpNormalizeSessionUrl(e?.url) === s);
       }
-    } catch (n) {}
+    } catch (r) {}
     return false;
   }
   static async clearScopeStorage(e) {
@@ -92840,48 +92876,6 @@ class LocalSessionRepository {
         scopeId: t,
         message: s instanceof Error ? s.message : String(s || "")
       }, "warn");
-    }
-  }
-  static async findMatchingLegacyScopes(e, t = "") {
-    const n = Number(e);
-    if (!Number.isFinite(n) || n === chrome.tabGroups.TAB_GROUP_ID_NONE) {
-      return [];
-    }
-    const s = __cpNormalizeSessionScopeId(t);
-    try {
-      const e = await chrome.storage.local.get(null);
-      const t = [];
-      for (const [r, i] of Object.entries(e)) {
-        const e = this.__cpExtractScopeIdFromKey(r);
-        if (!e || e === s) {
-          continue;
-        }
-        const o = (Array.isArray(i) ? i : []).map(__cpNormalizeSessionMeta).filter(Boolean);
-        const a = o.some(e => Number(e.chromeGroupId) === n);
-        if (!a) {
-          continue;
-        }
-        const l = o.reduce((e, t) => Math.max(e, Number(t.updatedAt) || 0), 0);
-        t.push({
-          scopeId: e,
-          updatedAt: l
-        });
-      }
-      const r = t.sort((e, t) => t.updatedAt - e.updatedAt);
-      __cpPanelDebugLog("session.find_legacy_scopes_done", {
-        chromeGroupId: n,
-        excludeScopeId: s,
-        count: r.length,
-        scopeIds: r.map(e => e.scopeId)
-      });
-      return r;
-    } catch (r) {
-      __cpPanelDebugLog("session.find_legacy_scopes_failed", {
-        chromeGroupId: n,
-        excludeScopeId: s,
-        message: r instanceof Error ? r.message : String(r || "")
-      }, "warn");
-      return [];
     }
   }
   static async migrateScope(e, t, n = {}) {
@@ -92980,103 +92974,7 @@ class LocalSessionRepository {
       recent: a
     };
   }
-  static async migrateExactScopes(e = {}) {
-    const t = {
-      scopeId: __cpNormalizeSessionScopeId(e?.scopeId),
-      mainTabId: Number.isFinite(Number(e?.mainTabId)) ? Number(e.mainTabId) : null,
-      chromeGroupId: Number.isFinite(Number(e?.chromeGroupId)) ? Number(e.chromeGroupId) : null,
-      domain: __cpNormalizeSessionDomain(e?.domain || e?.currentDomain),
-      currentUrl: __cpNormalizeSessionUrl(e?.currentUrl),
-      tabTitle: __cpNormalizeSessionLabel(e?.tabTitle)
-    };
-    const n = [...new Set([Number.isFinite(t.chromeGroupId) && t.chromeGroupId !== chrome.tabGroups.TAB_GROUP_ID_NONE ? `chrome-group:${t.chromeGroupId}` : "", Number.isFinite(t.mainTabId) && t.mainTabId > 0 ? `group:${t.mainTabId}` : ""].map(__cpNormalizeSessionScopeId).filter(e => e && e !== t.scopeId))];
-    for (const e of n) {
-      const [n, s, r] = await Promise.all([this.readValidatedIndex(e), this.readDraft(e), this.readActiveSession(e)]);
-      if (n.length === 0 && !s && !r) {
-        continue;
-      }
-      __cpPanelDebugLog("session.migrate_exact_scope_match", {
-        sourceScopeId: e,
-        targetScopeId: t.scopeId,
-        chromeGroupId: t.chromeGroupId,
-        mainTabId: t.mainTabId,
-        recentCount: n.length,
-        hasDraft: !!s,
-        hasActiveSession: !!r
-      });
-      const i = await this.migrateScope(e, t, {
-        transfer: true
-      });
-      return {
-        sourceScopeId: e,
-        migratedCount: i?.migratedCount || 0,
-        recent: Array.isArray(i?.recent) ? i.recent : []
-      };
-    }
-    if (Number.isFinite(t.mainTabId) && t.mainTabId > 0) {
-      const e = await this.findMatchingMainTabScopes(t.mainTabId, t.scopeId);
-      for (const n of e) {
-        if (!n?.scopeId || n.scopeId === t.scopeId) {
-          continue;
-        }
-        const s = await this.migrateScope(n.scopeId, t, {
-          transfer: true
-        });
-        return {
-          sourceScopeId: n.scopeId,
-          migratedCount: s?.migratedCount || 0,
-          recent: Array.isArray(s?.recent) ? s.recent : []
-        };
-      }
-    }
-    return {
-      sourceScopeId: "",
-      migratedCount: 0,
-      recent: []
-    };
-  }
-  static async findMatchingMainTabScopes(e, t = "") {
-    const n = Number(e);
-    const s = __cpNormalizeSessionScopeId(t);
-    if (!Number.isFinite(n) || n <= 0) {
-      return [];
-    }
-    try {
-      const e = await chrome.storage.local.get(null);
-      const t = [];
-      for (const [r, i] of Object.entries(e)) {
-        const e = this.__cpExtractScopeIdFromKey(r);
-        if (!e || e === s || !r.endsWith(".index")) {
-          continue;
-        }
-        const o = (Array.isArray(i) ? i : []).map(__cpNormalizeSessionMeta).filter(Boolean);
-        const a = o.filter(e => Number(e.mainTabId) === n);
-        if (a.length === 0) {
-          continue;
-        }
-        t.push({
-          scopeId: e,
-          updatedAt: a.reduce((e, t) => Math.max(e, Number(t.updatedAt) || 0), 0),
-          recentCount: a.length
-        });
-      }
-      const r = t.sort((e, t) => t.updatedAt - e.updatedAt);
-      __cpPanelDebugLog("session.find_main_tab_scopes_done", {
-        mainTabId: n,
-        excludeScopeId: s,
-        count: r.length,
-        scopeIds: r.map(e => e.scopeId)
-      });
-      return r;
-    } catch (r) {
-      __cpPanelDebugLog("session.find_main_tab_scopes_failed", {
-        mainTabId: n,
-        excludeScopeId: s,
-        message: r instanceof Error ? r.message : String(r || "")
-      }, "warn");
-      return [];
-    }
-  }
+  // 语义锚点：旧的 group/tab 历史恢复链已退役；跨重启只按 URL restore anchor 找回旧 scope。
   static async findMatchingCurrentUrlScopes(e = {}) {
     const t = {
       currentUrl: __cpNormalizeSessionUrl(e?.currentUrl),
@@ -93085,6 +92983,7 @@ class LocalSessionRepository {
     };
     if (!t.currentUrl) {
       __cpPanelDebugLog("session.find_current_url_scopes_skipped", {
+        currentUrl: t.currentUrl,
         excludeScopeId: t.excludeScopeId,
         reason: "missing_current_url"
       }, "warn");
@@ -93103,28 +93002,30 @@ class LocalSessionRepository {
         if (o.length === 0) {
           continue;
         }
-        if (await this.isScopeClaimedByLiveGroup(e)) {
-          continue;
-        }
-        const a = await this.ensureRestoreAnchor(e, null, o);
-        if (!a?.currentUrl || a.currentUrl !== t.currentUrl) {
-          continue;
-        }
-        const l = o.reduce((e, t) => {
+        const a = o.reduce((e, t) => {
           if (!e) {
             return t;
           }
           return (Number(t.updatedAt) || 0) > (Number(e.updatedAt) || 0) ? t : e;
         }, null);
-        const c = String(l?.id || "").trim();
-        const u = s ? __cpNormalizeSessionSearchText(a.tabTitle) === s : false;
+        const l = await this.ensureRestoreAnchor(e, null, o);
+        const c = __cpNormalizeSessionUrl(l?.currentUrl || a?.currentUrl);
+        if (!c || c !== t.currentUrl) {
+          continue;
+        }
+        // 语义锚点：live scope 占用判断必须同时命中当前 URL，避免浏览器重启后复用旧 groupId/tabId 导致误跳过正确候选。
+        if (await this.isScopeClaimedByLiveContext(e, c)) {
+          continue;
+        }
+        const u = String(a?.id || "").trim();
+        const d = s ? __cpNormalizeSessionSearchText(l?.tabTitle || a?.tabTitle) === s : false;
         n.push({
           scopeId: e,
           updatedAt: o.reduce((e, t) => Math.max(e, Number(t.updatedAt) || 0), 0),
-          exactTitle: u,
-          latestSessionId: c,
-          anchorUrl: a.currentUrl,
-          anchorSessionId: a.sessionId
+          exactTitle: d,
+          latestSessionId: u,
+          anchorUrl: c,
+          anchorSessionId: l?.sessionId || ""
         });
       }
       const r = n.sort((e, t) => Number(t.exactTitle) - Number(e.exactTitle) || t.updatedAt - e.updatedAt);
@@ -93146,6 +93047,7 @@ class LocalSessionRepository {
         excludeScopeId: t.excludeScopeId,
         count: r.length,
         dedupedCount: i.length,
+        matchKind: r.length > 0 ? "url" : "none",
         candidates: r.map(e => ({
           scopeId: e.scopeId,
           exactTitle: e.exactTitle,
@@ -94231,6 +94133,14 @@ const QQ = ({
                 } : e)
               }));
             });
+          }).catch(() => {
+            r(e => ({
+              ...e,
+              steps: e.steps.map(e => e.timestamp === h.timestamp ? {
+                ...e,
+                isEnhancing: false
+              } : e)
+            }));
           });
         }
         setTimeout(() => {
@@ -94292,6 +94202,8 @@ const QQ = ({
           ...e,
           steps: [t, ...e.steps]
         }));
+      }).catch(() => {
+        m.current = -1;
       });
     }
     const a = e => {
@@ -94365,6 +94277,16 @@ const QQ = ({
             });
           }
         }
+      }).catch(() => {
+        r(e => ({
+          ...e,
+          isPaused: true
+        }));
+        l.forEach(e => {
+          chrome.tabs.sendMessage(e, {
+            type: "CANCEL_ELEMENT_SELECTOR"
+          }).catch(() => {});
+        });
       });
     };
     chrome.tabs.onActivated.addListener(a);
@@ -94593,6 +94515,8 @@ const QQ = ({
             x.current.delete(n);
           });
         }
+      }).catch(() => {
+        x.current.delete(n);
       });
     }
   }, ["status"], [h, e, s.isPaused, R]);
@@ -94617,6 +94541,8 @@ const QQ = ({
                 x.current.delete(n);
               });
             }
+          }).catch(() => {
+            x.current.delete(n);
           });
         }
       }, 150);
@@ -94835,6 +94761,7 @@ function o1() {
   const __cpSidepanelPageQueryKeyMode = "mode";
   const __cpSidepanelPageQueryModeWindow = "window";
   const __cpSidepanelPageQueryKeyTabId = __cpSidepanelMcpPermissionPopupQueryKeys.TAB_ID || "tabId";
+  const __cpSidepanelPageQueryKeyRestoreUrl = "restoreUrl";
   const __cpSidepanelPageQueryKeySkipPermissions = "skipPermissions";
   const __cpSidepanelPageQueryKeyMcpPermissionOnly = __cpSidepanelMcpPermissionPopupQueryKeys.PERMISSION_ONLY || "mcpPermissionOnly";
   const __cpSidepanelPageQueryKeyRequestId = __cpSidepanelMcpPermissionPopupQueryKeys.REQUEST_ID || "requestId";
@@ -95137,56 +95064,129 @@ function o1() {
         const {
           tabId: r
         } = __cpSidepanelMcpPermissionPopupParseSearch(window.location.search);
+        const __cpWindowMode = e.get(__cpSidepanelPageQueryKeyMode) === __cpSidepanelPageQueryModeWindow;
+        const __cpWindowRestoreUrl = String(e.get(__cpSidepanelPageQueryKeyRestoreUrl) || "").trim();
+        const __cpResetBootstrappedTabState = () => {
+          i(undefined);
+          l(undefined);
+          u(undefined);
+          h(undefined);
+          m(null);
+          T(__cpDefaultBlockedTabInfo);
+          b(false);
+        };
+        const __cpBootstrapFromTabId = async o => {
+          const e = await chrome.tabs.get(o);
+          i(o);
+          if (e.url) {
+            await gt.initialize();
+            const r = await gt.isInGroup(o);
+            const i = gt.isMainTab(o);
+            let a;
+            if (r && i) {
+              a = await gt.getGroupBlocklistStatus(o);
+              const {
+                isMainTabBlocked: e,
+                blockedTabs: t
+              } = await gt.getBlockedTabsInfo(o);
+              T({
+                isMainTabBlocked: e,
+                blockedTabs: t
+              });
+            } else {
+              a = await rn.getCategory(e.url);
+              T(__cpDefaultBlockedTabInfo);
+            }
+            m(a || null);
+            b(e.url.startsWith(C));
+            u(e.url);
+            h(e.title);
+            try {
+              const r = new URL(e.url);
+              l(r.hostname);
+              if ((await t.hasSiteWidePermissions(r.hostname)) && n === "ask") {
+                s("allow_for_site");
+              }
+            } catch (Ct) {
+              l(undefined);
+              if (n === "allow_for_site") {
+                s("ask");
+              }
+            }
+          }
+        };
+        // 语义锚点：detached window 启动时，旧 query tabId 失效后要回退到 restoreUrl/live targetTab，不能把历史 tabId 当持久身份。
+        const __cpResolveLiveTabByRestoreUrl = async () => {
+          if (!__cpWindowMode || !__cpWindowRestoreUrl) {
+            return null;
+          }
+          try {
+            const e = await chrome.tabs.query({});
+            const t = (Array.isArray(e) ? e : []).find(e => String(e?.url || "").trim() === __cpWindowRestoreUrl);
+            return Number.isFinite(Number(t?.id)) ? Number(t.id) : null;
+          } catch (e) {
+            return null;
+          }
+        };
+        const __cpResolveLiveWindowTargetTabId = async () => {
+          if (!__cpWindowMode) {
+            return null;
+          }
+          const e = await y(v.TARGET_TAB_ID);
+          if (!e) {
+            return null;
+          }
+          try {
+            await chrome.tabs.get(e);
+            return e;
+          } catch (t) {
+            return null;
+          }
+        };
         let o;
         if (r) {
           o = r;
-        } else if (e.get(__cpSidepanelPageQueryKeyMode) === __cpSidepanelPageQueryModeWindow) {
-          const e = await y(v.TARGET_TAB_ID);
+        } else if (__cpWindowMode && __cpWindowRestoreUrl) {
+          const e = await __cpResolveLiveTabByRestoreUrl();
+          if (e) {
+            o = e;
+          }
+        } else if (__cpWindowMode) {
+          const e = await __cpResolveLiveWindowTargetTabId();
           if (e) {
             o = e;
           }
         }
-        i(o);
-        if (o) {
-          try {
-            const e = await chrome.tabs.get(o);
-            if (e.url) {
-              await gt.initialize();
-              const r = await gt.isInGroup(o);
-              const i = gt.isMainTab(o);
-              let a;
-              if (r && i) {
-                a = await gt.getGroupBlocklistStatus(o);
-                const {
-                  isMainTabBlocked: e,
-                  blockedTabs: t
-                } = await gt.getBlockedTabsInfo(o);
-                T({
-                  isMainTabBlocked: e,
-                  blockedTabs: t
-                });
-              } else {
-                a = await rn.getCategory(e.url);
-                T(__cpDefaultBlockedTabInfo);
-              }
-              m(a || null);
-              b(e.url.startsWith(C));
-              u(e.url);
-              h(e.title);
+        if (!o) {
+          __cpResetBootstrappedTabState();
+          return;
+        }
+        try {
+          await __cpBootstrapFromTabId(o);
+        } catch (Ct) {
+          let __cpBootstrapError = Ct;
+          if (__cpWindowMode) {
+            const e = __cpWindowRestoreUrl ? await __cpResolveLiveTabByRestoreUrl() : null;
+            const t = e && e !== o ? e : await __cpResolveLiveWindowTargetTabId();
+            if (t && t !== o) {
               try {
-                const r = new URL(e.url);
-                l(r.hostname);
-                if ((await t.hasSiteWidePermissions(r.hostname)) && n === "ask") {
-                  s("allow_for_site");
-                }
-              } catch (Ct) {
-                l(undefined);
-                if (n === "allow_for_site") {
-                  s("ask");
-                }
+                await __cpBootstrapFromTabId(t);
+                return;
+              } catch (e) {
+                o = t;
+                __cpBootstrapError = e;
               }
             }
-          } catch (Ct) {}
+          }
+          __cpPanelDebugLog("session.bootstrap_tab_invalid", {
+            tabId: o,
+            restoreUrl: __cpWindowRestoreUrl,
+            message: __cpBootstrapError instanceof Error ? __cpBootstrapError.message : String(__cpBootstrapError || "")
+          }, "warn");
+          __cpResetBootstrappedTabState();
+          if (n === "allow_for_site") {
+            s("ask");
+          }
         }
       })();
     }, [C, n, t, s]);
@@ -96066,7 +96066,7 @@ function o1() {
         if (t?.url) {
           m.current.set(e, t.url);
         }
-      });
+      }).catch(() => {});
       const t = (e, t, n) => {
         if (t.status === "complete" && n.url) {
           if (!m.current.has(e)) {
@@ -96827,13 +96827,19 @@ function o1() {
   const [__cpDetachedWindowLock, __cpSetDetachedWindowLock] = a.useState(null);
   const [__cpCurrentWindowId, __cpSetCurrentWindowId] = a.useState(null);
   const __cpNormalizeScopeState = a.useCallback(e => {
-    const t = Number.isFinite(Number(e?.mainTabId)) ? Number(e.mainTabId) : null;
+    const t = e?.mainTabId;
+    const n = t === null || t === undefined || t === "" ? null : Number(t);
+    const s = Number.isFinite(n) && n > 0 ? n : null;
+    const r = e?.chromeGroupId;
+    const i = r === null || r === undefined || r === "" ? null : Number(r);
+    const o = Number.isFinite(i) ? i : null;
+    const l = __cpNormalizeSessionScopeId(e?.scopeId);
     return {
-      scopeId: __cpNormalizeSessionScopeId(e?.scopeId),
-      mainTabId: t,
-      chromeGroupId: Number.isFinite(Number(e?.chromeGroupId)) ? Number(e.chromeGroupId) : null,
+      scopeId: l,
+      mainTabId: s,
+      chromeGroupId: o,
       isSecondaryTab: e?.isSecondaryTab === true,
-      ready: e?.ready === true && !!t && !!__cpNormalizeSessionScopeId(e?.scopeId)
+      ready: e?.ready === true && s !== null && !!l
     };
   }, []);
   a.useEffect(() => {
@@ -96925,12 +96931,13 @@ function o1() {
       }, "warn");
       return __cpNormalizeScopeState({});
     }
-    let e = Number.isFinite(Number(Se && je ? je : ce)) ? Number(Se && je ? je : ce) : null;
-    let t = Number.isFinite(Number(Se && je ? je : ce)) && je !== null && je !== ce;
+    let e = null;
+    let t = false;
     let s = null;
     try {
       await gt.initialize();
       let n = await chrome.tabs.get(ce);
+      e = Number.isFinite(Number(ce)) ? Number(ce) : null;
       if (n.groupId === chrome.tabGroups.TAB_GROUP_ID_NONE) {
         try {
           await gt.createGroup(ce);
@@ -97580,63 +97587,8 @@ function o1() {
         if (__cpShouldAbortHydrationRun()) {
           return;
         }
-        // 语义锚点：hydrate 迁移策略 1，按旧 chromeGroup scope 兜底迁移。
-        // 当前 scope 为空时，先按旧 chromeGroup 找 legacy scope，把历史会话整体搬到新 scope。
-        if (__cpRecentSessionsForScope.length === 0 && !__cpDraftForScope && !__cpActiveSessionRefForScope && Number.isFinite(Number(e.chromeGroupId)) && e.chromeGroupId !== chrome.tabGroups.TAB_GROUP_ID_NONE) {
-          __cpPanelDebugLog("session.hydrate_legacy_lookup", {
-            scopeId: e.scopeId,
-            chromeGroupId: e.chromeGroupId
-          });
-          const __cpLegacyScopeCandidates = await LocalSessionRepository.findMatchingLegacyScopes(e.chromeGroupId, e.scopeId);
-          if (__cpShouldAbortHydrationRun()) {
-            return;
-          }
-          if (__cpLegacyScopeCandidates.length > 0) {
-            __cpPanelDebugLog("session.hydrate_legacy_migrate", {
-              scopeId: e.scopeId,
-              chromeGroupId: e.chromeGroupId,
-              sourceScopeId: __cpLegacyScopeCandidates[0].scopeId,
-              candidateCount: __cpLegacyScopeCandidates.length
-            });
-            await LocalSessionRepository.migrateScope(__cpLegacyScopeCandidates[0].scopeId, e, {
-              transfer: true
-            });
-            if (__cpShouldAbortHydrationRun()) {
-              return;
-            }
-            [__cpRecentSessionsForScope, __cpDraftForScope, __cpActiveSessionRefForScope] = await Promise.all([LocalSessionRepository.readValidatedIndex(e.scopeId), LocalSessionRepository.readDraft(e.scopeId), LocalSessionRepository.readActiveSession(e.scopeId)]);
-            if (__cpShouldAbortHydrationRun()) {
-              return;
-            }
-          }
-        }
-        // 语义锚点：hydrate 迁移策略 2，按当前 scope 精确匹配 mainTab/group 迁移。
-        // legacy scope 没命中时，再按 mainTab/group 精确对账，查找能直接归并到当前 scope 的旧账本。
-        if (__cpRecentSessionsForScope.length === 0 && !__cpDraftForScope && !__cpActiveSessionRefForScope && (Number.isFinite(Number(e.chromeGroupId)) && e.chromeGroupId !== chrome.tabGroups.TAB_GROUP_ID_NONE || Number.isFinite(Number(e.mainTabId)) && e.mainTabId > 0)) {
-          __cpPanelDebugLog("session.hydrate_exact_scope_lookup", {
-            scopeId: e.scopeId,
-            chromeGroupId: e.chromeGroupId,
-            mainTabId: e.mainTabId
-          });
-          const __cpExactScopeMigration = await LocalSessionRepository.migrateExactScopes(e);
-          if (__cpShouldAbortHydrationRun()) {
-            return;
-          }
-          if (__cpExactScopeMigration.sourceScopeId) {
-            __cpPanelDebugLog("session.hydrate_exact_scope_migrate", {
-              scopeId: e.scopeId,
-              sourceScopeId: __cpExactScopeMigration.sourceScopeId,
-              migratedCount: __cpExactScopeMigration.migratedCount,
-              recentCount: __cpExactScopeMigration.recent.length
-            });
-            [__cpRecentSessionsForScope, __cpDraftForScope, __cpActiveSessionRefForScope] = await Promise.all([LocalSessionRepository.readValidatedIndex(e.scopeId), LocalSessionRepository.readDraft(e.scopeId), LocalSessionRepository.readActiveSession(e.scopeId)]);
-            if (__cpShouldAbortHydrationRun()) {
-              return;
-            }
-          }
-        }
-        // 语义锚点：hydrate 迁移策略 3，按当前 URL / 标题做近似匹配迁移。
-        // 以上都没命中时，最后再按当前页面 URL / 标题做近似恢复，兜底接回历史 scope。
+        // 语义锚点：hydrate 恢复只把 URL anchor 当作跨重启的持久身份。
+        // chromeGroupId/mainTabId 仍只服务当前运行期 live scope，不再参与历史 scope 的恢复匹配。
         if (__cpRecentSessionsForScope.length === 0 && !__cpDraftForScope && !__cpActiveSessionRefForScope) {
           const __cpCurrentTabContext = await __cpResolveSessionTabContext();
           if (__cpShouldAbortHydrationRun()) {
@@ -97644,6 +97596,7 @@ function o1() {
           }
           __cpPanelDebugLog("session.hydrate_current_url_lookup", {
             scopeId: e.scopeId,
+            currentDomain: __cpCurrentTabContext.currentDomain,
             currentUrl: __cpCurrentTabContext.currentUrl,
             tabTitle: __cpCurrentTabContext.tabTitle
           });
@@ -97659,6 +97612,7 @@ function o1() {
             __cpPanelDebugLog("session.hydrate_current_url_migrate", {
               scopeId: e.scopeId,
               sourceScopeId: __cpCurrentUrlScopeCandidates[0].scopeId,
+              currentDomain: __cpCurrentTabContext.currentDomain,
               currentUrl: __cpCurrentTabContext.currentUrl,
               tabTitle: __cpCurrentTabContext.tabTitle
             });
@@ -98127,6 +98081,7 @@ function o1() {
         type: "OPEN_GROUP_DETACHED_WINDOW",
         tabId: ce,
         mainTabId: __cpDetachedWindowMainTabId,
+        sessionId: __cpCurrentSessionIdRef.current || o.sessionId,
         groupId: Number.isFinite(Number(__cpScopeStateBeforeOpen?.chromeGroupId)) ? Number(__cpScopeStateBeforeOpen.chromeGroupId) : null
       });
       if (!__cpOpenDetachedWindowResponse?.success) {

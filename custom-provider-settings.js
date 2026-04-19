@@ -5540,6 +5540,28 @@
       }
     };
     chrome.storage.onChanged.addListener(handleStorageChange);
+    function syncSubviewVisibility() {
+      const providerActive = isProviderViewActive();
+      const workflowActive = isWorkflowViewActive();
+      const sessionActive = isSessionViewActive();
+      const promptActive = isPromptViewActive();
+      providerRoot.hidden = !providerActive;
+      workflowRoot.hidden = !workflowActive;
+      sessionRoot.hidden = !sessionActive;
+      promptRoot.hidden = !promptActive;
+      if (!providerActive && !promptActive) {
+        closeManualModelDialog();
+      }
+      if (!sessionActive && sessionState.viewMode === "record") {
+        closeSessionRecordDialog();
+      }
+      return {
+        providerActive,
+        workflowActive,
+        sessionActive,
+        promptActive
+      };
+    }
     async function syncMount() {
       const nextLocaleKey = getUiLocaleKey();
       if (nextLocaleKey !== localeKey) {
@@ -5551,10 +5573,12 @@
         scheduleUiRebuild();
         return;
       }
-      const providerActive = isProviderViewActive();
-      const workflowActive = isWorkflowViewActive();
-      const sessionActive = isSessionViewActive();
-      const promptActive = isPromptViewActive();
+      const {
+        providerActive,
+        workflowActive,
+        sessionActive,
+        promptActive
+      } = syncSubviewVisibility();
       const providerHost = findMountAnchor(PROVIDER_ANCHOR_ID);
       const sessionHost = findMountAnchor(SESSION_ANCHOR_ID);
       const promptHost = findMountAnchor(PROMPT_ANCHOR_ID);
@@ -5639,14 +5663,6 @@
       }
       if (debugMountRoot.parentNode !== debugHost) {
         debugHost.appendChild(debugMountRoot);
-      }
-      providerRoot.hidden = !providerActive;
-      workflowRoot.hidden = !workflowActive;
-      if (!providerActive && !promptActive) {
-        closeManualModelDialog();
-      }
-      if (!sessionActive && sessionState.viewMode === "record") {
-        closeSessionRecordDialog();
       }
       lastHost = providerActive || workflowActive ? providerHost : sessionActive ? sessionHost : promptActive ? promptHost : debugHost;
       const refreshTasks = [];
@@ -5735,6 +5751,7 @@
     });
     resumeObserver();
     const handleHashChange = function () {
+      syncSubviewVisibility();
       queueSyncMount("hashchange");
     };
     window.addEventListener("hashchange", handleHashChange);

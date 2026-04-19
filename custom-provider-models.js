@@ -21,7 +21,7 @@
   const QUICK_MODEL_SELECTION_SYNC_SIGNATURE_KEY = contract.QUICK_MODEL_SELECTION_SYNC_SIGNATURE_KEY || "customProviderSelectedModelQuickModeSyncSignature";
   const HTTP_PROVIDER_STORAGE_KEY = contract.HTTP_PROVIDER_STORAGE_KEY || "customProviderAllowHttp";
   const HTTP_PROVIDER_MIGRATED_KEY = contract.HTTP_PROVIDER_MIGRATED_KEY || "customProviderAllowHttpMigrated";
-  const HTTP_PROVIDER_DISABLED_MESSAGE = "HTTP Base URL 未启用。请前往 Options 打开“允许 HTTP Base URL”后再使用 http:// 地址。";
+  const HTTP_PROVIDER_DISABLED_MESSAGE = "HTTP 协议未启用。请前往 Options 打开“允许 HTTP 协议”后再使用 http:// 地址。";
   const FETCHED_MODELS_CACHE_LIMIT = 24;
   const HEALTH_CHECK_PROMPT = "Reply with OK only.";
   const HEALTH_CHECK_MAX_TOKENS = 64;

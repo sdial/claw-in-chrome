@@ -323,71 +323,86 @@ const K = ({
     return null;
   }
 };
-const cpGithubUpdateStrings = String(navigator.language || "").toLowerCase().startsWith("zh") ? {
-  title: "扩展更新",
-  subtitle: "你可以在这里检查新版本，并跳转到发布页下载最新版插件。",
-  currentVersion: "当前版本",
-  latestVersion: "最新版本",
-  lastCheckedAt: "最后检查",
-  notes: "更新说明",
-  latestReady: "已是最新版本",
-  updateAvailable: "发现新版本，建议尽快手动升级。",
-  neverChecked: "尚未检查更新",
-  notesFallback: "当前发布没有附带详细更新说明。",
-  autoCheckLabel: "自动检查更新",
-  autoCheckHelp: "开启后会在启动扩展时和每 24 小时自动检查 GitHub Release。",
-  autoCheckOn: "已开启",
-  autoCheckOff: "已关闭",
-  autoCheckSavedOn: "已开启自动检查更新。",
-  autoCheckSavedOff: "已关闭自动检查更新。",
-  viewRelease: "查看发布页",
-  downloadZip: "下载最新版本",
-  checkNow: "立即检查更新",
-  checking: "正在检查 GitHub Release...",
-  checkFailed: "检查更新失败：{message}",
-  checkSucceeded: "已刷新到最新发布信息。",
-  openReleaseFailed: "打开发布页失败：{message}",
-  openDownloadFailed: "打开下载页失败：{message}",
-  unknown: "未知"
-} : {
-  title: "Extension updates",
-  subtitle: "GitHub builds are updated manually. Check for new releases here and jump to the release page to download the latest ZIP.",
-  currentVersion: "Current version",
-  latestVersion: "Latest version",
-  lastCheckedAt: "Last checked",
-  notes: "Release notes",
-  latestReady: "You are on the latest version",
-  updateAvailable: "A newer version is available. Manual upgrade is recommended.",
-  neverChecked: "No update check yet",
-  notesFallback: "This release does not include detailed notes.",
-  autoCheckLabel: "Auto-check updates",
-  autoCheckHelp: "When enabled, the extension checks GitHub Releases on startup and once every 24 hours.",
-  autoCheckOn: "Enabled",
-  autoCheckOff: "Disabled",
-  autoCheckSavedOn: "Automatic update checks enabled.",
-  autoCheckSavedOff: "Automatic update checks disabled.",
-  viewRelease: "Open release",
-  downloadZip: "Download ZIP",
-  checkNow: "Check now",
-  checking: "Checking GitHub Release...",
-  checkFailed: "Update check failed: {message}",
-  checkSucceeded: "Release metadata refreshed.",
-  openReleaseFailed: "Failed to open release page: {message}",
-  openDownloadFailed: "Failed to open download page: {message}",
-  unknown: "Unknown"
+const cpGithubUpdateStrings = {
+  zh: {
+    title: "扩展更新",
+    subtitle: "你可以在这里检查新版本，并跳转到发布页下载最新版插件。",
+    currentVersion: "当前版本",
+    latestVersion: "最新版本",
+    lastCheckedAt: "最后检查",
+    notes: "更新说明",
+    latestReady: "已是最新版本",
+    updateAvailable: "发现新版本，建议尽快手动升级。",
+    neverChecked: "尚未检查更新",
+    notesFallback: "当前发布没有附带详细更新说明。",
+    autoCheckLabel: "自动检查更新",
+    autoCheckHelp: "开启后会在启动扩展时和每 24 小时自动检查 GitHub Release。",
+    autoCheckOn: "已开启",
+    autoCheckOff: "已关闭",
+    autoCheckSavedOn: "已开启自动检查更新。",
+    autoCheckSavedOff: "已关闭自动检查更新。",
+    viewRelease: "查看发布页",
+    downloadZip: "下载最新版本",
+    checkNow: "立即检查更新",
+    checking: "正在检查 GitHub Release...",
+    checkFailed: "检查更新失败：{message}",
+    checkSucceeded: "已刷新到最新发布信息。",
+    openReleaseFailed: "打开发布页失败：{message}",
+    openDownloadFailed: "打开下载页失败：{message}",
+    unknown: "未知"
+  },
+  en: {
+    title: "Extension updates",
+    subtitle: "GitHub builds are updated manually. Check for new releases here and jump to the release page to download the latest ZIP.",
+    currentVersion: "Current version",
+    latestVersion: "Latest version",
+    lastCheckedAt: "Last checked",
+    notes: "Release notes",
+    latestReady: "You are on the latest version",
+    updateAvailable: "A newer version is available. Manual upgrade is recommended.",
+    neverChecked: "No update check yet",
+    notesFallback: "This release does not include detailed notes.",
+    autoCheckLabel: "Auto-check updates",
+    autoCheckHelp: "When enabled, the extension checks GitHub Releases on startup and once every 24 hours.",
+    autoCheckOn: "Enabled",
+    autoCheckOff: "Disabled",
+    autoCheckSavedOn: "Automatic update checks enabled.",
+    autoCheckSavedOff: "Automatic update checks disabled.",
+    viewRelease: "Open release",
+    downloadZip: "Download ZIP",
+    checkNow: "Check now",
+    checking: "Checking GitHub Release...",
+    checkFailed: "Update check failed: {message}",
+    checkSucceeded: "Release metadata refreshed.",
+    openReleaseFailed: "Failed to open release page: {message}",
+    openDownloadFailed: "Failed to open download page: {message}",
+    unknown: "Unknown"
+  }
 };
 function cpGithubUpdateInterpolate(e, t) {
   return String(e || "").replace(/\{(\w+)\}/g, (e, a) => t && t[a] != null ? String(t[a]) : "");
 }
-const cpOptionsNavStrings = String(navigator.language || "").toLowerCase().startsWith("zh") ? {
-  provider: "模型供应商",
-  session: "会话管理",
-  prompt: "提示词修改"
-} : {
-  provider: "Model provider",
-  session: "Session management",
-  prompt: "Prompt overrides"
+function cpGetOptionsLocaleKey(e) {
+  return String(e || "").toLowerCase().startsWith("zh") ? "zh" : "en";
+}
+function cpGetGithubUpdateStrings(e) {
+  return cpGithubUpdateStrings[cpGetOptionsLocaleKey(e)];
+}
+const cpOptionsNavStrings = {
+  zh: {
+    provider: "模型供应商",
+    session: "会话管理",
+    prompt: "提示词修改"
+  },
+  en: {
+    provider: "Model provider",
+    session: "Session management",
+    prompt: "Prompt overrides"
+  }
 };
+function cpGetOptionsNavStrings(e) {
+  return cpOptionsNavStrings[cpGetOptionsLocaleKey(e)];
+}
 // ------------------------------
 // options.html hash 路由协议（页面内导航）
 //
@@ -469,8 +484,10 @@ function cpGithubSendRuntimeMessage(e) {
 }
 const __cpOptionsGithubRuntimeMessageBridge = cpGithubSendRuntimeMessage;
 const cpGithubUpdateSection = () => {
-  const e = globalThis.__CP_GITHUB_UPDATE_SHARED__;
-  if (!e || !globalThis.chrome?.runtime?.id) {
+  const shared = globalThis.__CP_GITHUB_UPDATE_SHARED__;
+  const intl = e();
+  const locale = intl?.locale || "en-US";
+  if (!shared || !globalThis.chrome?.runtime?.id) {
     return null;
   }
   const {
@@ -482,14 +499,14 @@ const cpGithubUpdateSection = () => {
     openReleasePage: d,
     openDownloadPage: c,
     createDefaultUpdateInfo: m
-  } = e;
+  } = shared;
   const __cpOptionsGithubUpdateStorageKeys = a;
   const __cpOptionsGithubUpdateMessageTypes = r;
   const __cpOptionsGithubUpdateInfoStorageKey = a.INFO;
   const __cpOptionsGithubUpdateAutoCheckStorageKey = a.AUTO_CHECK_ENABLED;
   const __cpOptionsGithubUpdateCheckNowAction = r.CHECK_NOW;
-  const h = cpGithubUpdateStrings;
-  const p = String(navigator.language || "").toLowerCase().startsWith("zh") ? "zh-CN" : "en-US";
+  const h = cpGetGithubUpdateStrings(locale);
+  const p = locale;
   const u = globalThis.chrome?.runtime?.getManifest?.().version || "";
   const [x, f] = s.useState(() => ({
     info: m(u),
@@ -2020,6 +2037,8 @@ function de({
   });
 }
 function ce() {
+  const intl = e();
+  const navStrings = cpGetOptionsNavStrings(intl?.locale || "en-US");
   const {
     isAuthenticated: a
   } = E();
@@ -2251,7 +2270,7 @@ function ce() {
                 href: __cpOptionsNavHrefOptionsProvider,
                 isActive: d === __cpOptionsSettingsTabTokenOptions && providerSubview === __cpOptionsProviderSubviewToken,
                 onClick: () => g(__cpOptionsProviderSubviewToken),
-                children: cpOptionsNavStrings.provider
+                children: navStrings.provider
               })
             }), n.jsx("li", {
               id: __cpOptionsSessionNavItemId,
@@ -2259,7 +2278,7 @@ function ce() {
                 href: __cpOptionsNavHrefOptionsSession,
                 isActive: d === __cpOptionsSettingsTabTokenOptions && providerSubview === __cpOptionsSessionSubviewToken,
                 onClick: () => g(__cpOptionsSessionSubviewToken),
-                children: cpOptionsNavStrings.session
+                children: navStrings.session
               })
             }), n.jsx("li", {
               id: __cpOptionsPromptNavItemId,
@@ -2267,7 +2286,7 @@ function ce() {
                 href: __cpOptionsNavHrefOptionsPrompt,
                 isActive: d === __cpOptionsSettingsTabTokenOptions && providerSubview === __cpOptionsPromptSubviewToken,
                 onClick: () => g(__cpOptionsPromptSubviewToken),
-                children: cpOptionsNavStrings.prompt
+                children: navStrings.prompt
               })
             }), i]
           })]

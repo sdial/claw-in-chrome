@@ -11,52 +11,74 @@
     openReleasePage
   } = shared;
 
-  const localeKey = String(navigator.language || "").toLowerCase().startsWith("zh") ? "zh" : "en";
-  const strings = localeKey === "zh" ? {
-    title: "扩展更新",
-    subtitle: "查看最新版本、更新说明，以及扩展的自动检查行为。",
-    notes: "更新说明",
-    notesFallback: "当前发布没有附带详细更新说明。",
-    autoCheckLabel: "自动检查更新",
-    autoCheckHelp: "开启后会在启动扩展时和每 24 小时自动检查 GitHub Release。",
-    autoCheckOn: "已开启",
-    autoCheckOff: "已关闭",
-    enableAutoCheck: "开启自动检查",
-    disableAutoCheck: "关闭自动检查",
-    viewFullNotes: "查看完整更新说明",
-    notesDialogTitle: "完整更新说明",
-    viewRelease: "查看发布页",
-    close: "关闭",
-    unknown: "未知",
-    httpCardTitle: "HTTP Base URL",
-    httpCardSubtitle: "允许自定义供应商使用非加密 HTTP 接口。默认关闭，仅建议在可信内网或开发环境中启用。",
-    httpToggleLabel: "允许 HTTP Base URL",
-    httpToggleHelp: "关闭时，保存配置、获取模型、健康检测和运行时请求都会拒绝 http:// 地址。",
-    httpToggleOn: "已开启",
-    httpToggleOff: "已关闭"
-  } : {
-    title: "Extension updates",
-    subtitle: "Review the latest version, release notes, and automatic update checks.",
-    notes: "Release notes",
-    notesFallback: "This release does not include detailed notes.",
-    autoCheckLabel: "Auto-check updates",
-    autoCheckHelp: "When enabled, the extension checks GitHub Releases on startup and once every 24 hours.",
-    autoCheckOn: "Enabled",
-    autoCheckOff: "Disabled",
-    enableAutoCheck: "Enable auto-check",
-    disableAutoCheck: "Disable auto-check",
-    viewFullNotes: "View full release notes",
-    notesDialogTitle: "Full release notes",
-    viewRelease: "Open release",
-    close: "Close",
-    unknown: "Unknown",
-    httpCardTitle: "HTTP Base URL",
-    httpCardSubtitle: "Allow custom providers to use unencrypted HTTP endpoints. Off by default and only recommended on trusted local networks or in development.",
-    httpToggleLabel: "Allow HTTP Base URL",
-    httpToggleHelp: "When disabled, saving profiles, fetching models, health checks, and runtime requests will all reject http:// addresses.",
-    httpToggleOn: "Enabled",
-    httpToggleOff: "Disabled"
+  const STRINGS = {
+    zh: {
+      title: "扩展更新",
+      subtitle: "查看最新版本、更新说明，以及扩展的自动检查行为。",
+      notes: "更新说明",
+      notesFallback: "当前发布没有附带详细更新说明。",
+      autoCheckLabel: "自动检查更新",
+      autoCheckHelp: "开启后会在启动扩展时和每 24 小时自动检查 GitHub Release。",
+      autoCheckOn: "已开启",
+      autoCheckOff: "已关闭",
+      enableAutoCheck: "开启自动检查",
+      disableAutoCheck: "关闭自动检查",
+      viewFullNotes: "查看完整更新说明",
+      notesDialogTitle: "完整更新说明",
+      viewRelease: "查看发布页",
+      close: "关闭",
+      unknown: "未知",
+      httpCardTitle: "HTTP 协议",
+      httpCardSubtitle: "允许自定义供应商使用非加密 HTTP 协议。默认关闭，仅建议在可信内网或开发环境中启用。",
+      httpToggleLabel: "允许 HTTP 协议",
+      httpToggleHelp: "关闭时，保存配置、获取模型、健康检测和运行时请求都会拒绝 http:// 地址。",
+      httpToggleOn: "已开启",
+      httpToggleOff: "已关闭"
+    },
+    en: {
+      title: "Extension updates",
+      subtitle: "Review the latest version, release notes, and automatic update checks.",
+      notes: "Release notes",
+      notesFallback: "This release does not include detailed notes.",
+      autoCheckLabel: "Auto-check updates",
+      autoCheckHelp: "When enabled, the extension checks GitHub Releases on startup and once every 24 hours.",
+      autoCheckOn: "Enabled",
+      autoCheckOff: "Disabled",
+      enableAutoCheck: "Enable auto-check",
+      disableAutoCheck: "Disable auto-check",
+      viewFullNotes: "View full release notes",
+      notesDialogTitle: "Full release notes",
+      viewRelease: "Open release",
+      close: "Close",
+      unknown: "Unknown",
+      httpCardTitle: "HTTP Protocol",
+      httpCardSubtitle: "Allow custom providers to use unencrypted HTTP endpoints. Disabled by default and only recommended on trusted local networks or in development.",
+      httpToggleLabel: "Allow HTTP Protocol",
+      httpToggleHelp: "When disabled, saving profiles, fetching models, health checks, and runtime requests will all reject http:// addresses.",
+      httpToggleOn: "Enabled",
+      httpToggleOff: "Disabled"
+    }
   };
+  function getOptionsLocaleKey() {
+    const pageText = String(document.body?.innerText || document.body?.textContent || "");
+    if (pageText.includes("Claw in Chrome 设置") || pageText.includes("权限") || pageText.includes("快捷方式") || pageText.includes("选项") || pageText.includes("扩展更新") || pageText.includes("自动检查更新")) {
+      return "zh";
+    }
+    if (/\bPermissions\b|\bShortcuts\b|\bOptions\b|\bExtension updates\b|\bAuto-check updates\b/i.test(pageText)) {
+      return "en";
+    }
+    const htmlLang = String(document.documentElement.lang || "").toLowerCase();
+    if (htmlLang.startsWith("zh")) {
+      return "zh";
+    }
+    if (htmlLang.startsWith("en")) {
+      return "en";
+    }
+    return String(navigator.language || "").toLowerCase().startsWith("zh") ? "zh" : "en";
+  }
+  function getStrings() {
+    return STRINGS[getOptionsLocaleKey()];
+  }
 
   const STYLE_ID = "cp-options-update-enhancer-style";
   const MODAL_ROOT_ID = "cp-options-update-enhancer-modal-root";
@@ -557,6 +579,7 @@
   }
 
   function findUpdatePanel() {
+    const strings = getStrings();
     return Array.from(document.querySelectorAll("section")).find(function (section) {
       const heading = section.querySelector("h3");
       if (!heading) {
@@ -655,6 +678,7 @@
   }
 
   function openNotesModal() {
+    const strings = getStrings();
     if (!state?.info?.notes) {
       return;
     }
@@ -752,6 +776,7 @@
   }
 
   function enhanceNotes(panel) {
+    const strings = getStrings();
     const label = findExactTextNode(panel, ".cp-page-label", strings.notes);
     const field = label ? label.closest(".cp-page-field") : null;
     if (!field) {
@@ -794,6 +819,7 @@
   }
 
   function enhanceAutoCheck(panel) {
+    const strings = getStrings();
     const title = findExactTextNode(panel, ".cp-page-row-title", strings.autoCheckLabel);
     const row = title ? title.closest(".cp-page-row") : null;
     if (!row) {
@@ -842,6 +868,7 @@
     control.replaceChildren(wrap);
   }
   function renderHttpPanel(panel) {
+    const strings = getStrings();
     const anchor = ensureHttpPanelAnchor(panel);
     let httpPanel = document.getElementById(HTTP_PANEL_ID);
     const signature = (state?.httpEnabled ? "1" : "0") + ":" + (state?.httpTogglePending ? "1" : "0");
