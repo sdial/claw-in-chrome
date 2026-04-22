@@ -40,7 +40,7 @@ function main() {
 
   assert.match(
     source,
-    /const \{\s*providerActive,\s*workflowActive,\s*sessionActive,\s*promptActive\s*\} = syncSubviewVisibility\(\);/s,
+    /const \{\s*providerActive,\s*workflowActive,\s*sessionActive,\s*promptActive\s*\}\s*=\s*syncSubviewVisibility\(\);/s,
     "mount sync should reuse the same visibility computation instead of duplicating delayed state updates"
   );
 

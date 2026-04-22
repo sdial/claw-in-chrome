@@ -6,7 +6,7 @@ const r = /[\x2E\u3002\uFF0E\uFF61]/g;
 const c = {
   overflow: "Overflow: input needs wider integers to process",
   "not-basic": "Illegal input >= 0x80 (not a basic code point)",
-  "invalid-input": "Invalid input"
+  "invalid-input": "Invalid input",
 };
 const s = Math.floor;
 const i = String.fromCharCode;
@@ -20,14 +20,14 @@ function l(o, t) {
     e = n[0] + "@";
     o = n[1];
   }
-  const c = function (o, t) {
+  const c = (function (o, t) {
     const n = [];
     let e = o.length;
     while (e--) {
       n[e] = t(o[e]);
     }
     return n;
-  }((o = o.replace(r, ".")).split("."), t).join(".");
+  })((o = o.replace(r, ".")).split("."), t).join(".");
   return e + c;
 }
 function f(o) {
@@ -50,7 +50,7 @@ function f(o) {
   }
   return t;
 }
-const d = o => String.fromCodePoint(...o);
+const d = (o) => String.fromCodePoint(...o);
 const a = function (o) {
   if (o >= 48 && o < 58) {
     return o - 48 + 26;
@@ -72,7 +72,7 @@ const h = function (o, n, e) {
   for (; o > 455; r += t) {
     o = s(o / 35);
   }
-  return s(r + o * 36 / (o + 38));
+  return s(r + (o * 36) / (o + 38));
 };
 const g = function (n) {
   const e = [];
@@ -90,9 +90,9 @@ const g = function (n) {
     }
     e.push(n.charCodeAt(o));
   }
-  for (let d = f > 0 ? f + 1 : 0; d < r;) {
+  for (let d = f > 0 ? f + 1 : 0; d < r; ) {
     const f = c;
-    for (let e = 1, i = t;; i += t) {
+    for (let e = 1, i = t; ; i += t) {
       if (d >= r) {
         u("invalid-input");
       }
@@ -138,7 +138,7 @@ const v = function (n) {
   }
   const a = e.length;
   let g = a;
-  for (a && e.push("-"); g < r;) {
+  for (a && e.push("-"); g < r; ) {
     let r = o;
     for (const o of n) {
       if (o >= c && o < r) {
@@ -157,14 +157,14 @@ const v = function (n) {
       }
       if (v === c) {
         let o = l;
-        for (let n = t;; n += t) {
+        for (let n = t; ; n += t) {
           const r = n <= d ? 1 : n >= d + 26 ? 26 : n - d;
           if (o < r) {
             break;
           }
           const c = o - r;
           const u = t - r;
-          e.push(i(p(r + c % u, 0)));
+          e.push(i(p(r + (c % u), 0)));
           o = s(c / u);
         }
         e.push(i(p(o, 0)));
@@ -200,23 +200,29 @@ const b = {
   version: "2.3.1",
   ucs2: {
     decode: f,
-    encode: d
+    encode: d,
   },
   decode: g,
   encode: v,
   toASCII: w,
-  toUnicode: C
-};
-const x = Object.freeze(Object.defineProperty({
-  __proto__: null,
-  decode: g,
-  default: b,
-  encode: v,
-  toASCII: w,
   toUnicode: C,
-  ucs2decode: f,
-  ucs2encode: d
-}, Symbol.toStringTag, {
-  value: "Module"
-}));
+};
+const x = Object.freeze(
+  Object.defineProperty(
+    {
+      __proto__: null,
+      decode: g,
+      default: b,
+      encode: v,
+      toASCII: w,
+      toUnicode: C,
+      ucs2decode: f,
+      ucs2encode: d,
+    },
+    Symbol.toStringTag,
+    {
+      value: "Module",
+    },
+  ),
+);
 export { x as p, C as t };

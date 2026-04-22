@@ -11,77 +11,56 @@
     summarizeNotes,
     detectUiLocaleKey,
     getUiLocaleTag,
+    cloneLocaleValue,
+    normalizeUiLocaleTag,
+    resolveCustomI18nSection,
     readStoredState,
     openReleasePage,
-    openDownloadPage
+    openDownloadPage,
   } = shared;
 
   const ROOT_ID = "cp-github-update-options-root";
   const ANCHOR_ID = "cp-github-update-options-anchor";
   const STYLE_ID = "cp-github-update-options-style";
-  const STRINGS = {
-    zh: {
-      title: "扩展更新",
-      subtitle: "你可以在这里检查新版本，并跳转到发布页下载最新版插件。",
-      currentVersion: "当前版本",
-      latestVersion: "最新版本",
-      lastCheckedAt: "最后检查",
-      notes: "更新说明",
-      latestReady: "已是最新版本",
-      updateAvailable: "发现新版本，建议尽快手动升级。",
-      neverChecked: "尚未检查更新",
-      notesFallback: "当前发布没有附带详细更新说明。",
-      autoCheckLabel: "自动检查更新",
-      autoCheckHelp: "开启后会在启动扩展时和每 24 小时自动检查 GitHub Release。",
-      autoCheckOn: "已开启",
-      autoCheckOff: "已关闭",
-      autoCheckSavedOn: "已开启自动检查更新。",
-      autoCheckSavedOff: "已关闭自动检查更新。",
-      viewRelease: "查看发布页",
-      downloadZip: "下载最新版本",
-      checkNow: "立即检查更新",
-      checking: "正在检查 GitHub Release...",
-      checkFailed: "检查更新失败：{message}",
-      checkSucceeded: "已刷新到最新发布信息。",
-      openReleaseFailed: "打开发布页失败：{message}",
-      openDownloadFailed: "打开下载页失败：{message}",
-      unknown: "未知"
-    },
-    en: {
-      title: "Extension updates",
-      subtitle: "GitHub builds are updated manually. Check for new releases here and jump to the release page to download the latest ZIP.",
-      currentVersion: "Current version",
-      latestVersion: "Latest version",
-      lastCheckedAt: "Last checked",
-      notes: "Release notes",
-      latestReady: "You are on the latest version",
-      updateAvailable: "A newer version is available. Manual upgrade is recommended.",
-      neverChecked: "No update check yet",
-      notesFallback: "This release does not include detailed notes.",
-      autoCheckLabel: "Auto-check updates",
-      autoCheckHelp: "When enabled, the extension checks GitHub Releases on startup and once every 24 hours.",
-      autoCheckOn: "Enabled",
-      autoCheckOff: "Disabled",
-      autoCheckSavedOn: "Automatic update checks enabled.",
-      autoCheckSavedOff: "Automatic update checks disabled.",
-      viewRelease: "Open release",
-      downloadZip: "Download ZIP",
-      checkNow: "Check now",
-      checking: "Checking GitHub Release...",
-      checkFailed: "Update check failed: {message}",
-      checkSucceeded: "Release metadata refreshed.",
-      openReleaseFailed: "Failed to open release page: {message}",
-      openDownloadFailed: "Failed to open download page: {message}",
-      unknown: "Unknown"
-    }
+  const DEFAULT_STRINGS = {
+    title: "Extension updates",
+    subtitle:
+      "GitHub builds are updated manually. Check for new releases here and jump to the release page to download the latest ZIP.",
+    currentVersion: "Current version",
+    latestVersion: "Latest version",
+    lastCheckedAt: "Last checked",
+    notes: "Release notes",
+    latestReady: "You are on the latest version",
+    updateAvailable:
+      "A newer version is available. Manual upgrade is recommended.",
+    neverChecked: "No update check yet",
+    notesFallback: "This release does not include detailed notes.",
+    autoCheckLabel: "Auto-check updates",
+    autoCheckHelp:
+      "When enabled, the extension checks GitHub Releases on startup and once every 24 hours.",
+    autoCheckOn: "Enabled",
+    autoCheckOff: "Disabled",
+    autoCheckSavedOn: "Automatic update checks enabled.",
+    autoCheckSavedOff: "Automatic update checks disabled.",
+    viewRelease: "Open release",
+    downloadZip: "Download ZIP",
+    checkNow: "Check now",
+    checking: "Checking GitHub Release...",
+    checkFailed: "Update check failed: {message}",
+    checkSucceeded: "Release metadata refreshed.",
+    openReleaseFailed: "Failed to open release page: {message}",
+    openDownloadFailed: "Failed to open download page: {message}",
+    unknown: "Unknown",
   };
-  const PRIMARY_BUTTON_CLASS = "px-6 py-3 bg-brand-100 text-oncolor-100 rounded-xl hover:bg-brand-100/90 transition-all font-large disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2";
-  const SECONDARY_BUTTON_CLASS = "px-6 py-3 bg-bg-100 text-text-200 border border-border-300 rounded-xl hover:bg-bg-200 hover:text-text-100 transition-all font-large disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2";
+  const PRIMARY_BUTTON_CLASS =
+    "px-6 py-3 bg-brand-100 text-oncolor-100 rounded-xl hover:bg-brand-100/90 transition-all font-large disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2";
+  const SECONDARY_BUTTON_CLASS =
+    "px-6 py-3 bg-bg-100 text-text-200 border border-border-300 rounded-xl hover:bg-bg-200 hover:text-text-100 transition-all font-large disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2";
   const ACTIONS = {
     DOWNLOAD: "download",
     RELEASE: "release",
     CHECK_NOW: "check_now",
-    TOGGLE_AUTO_CHECK: "toggle_auto_check"
+    TOGGLE_AUTO_CHECK: "toggle_auto_check",
   };
   let root = null;
   let host = null;
@@ -91,19 +70,38 @@
   let statusText = "";
   let statusTone = "";
   let lastRenderSignature = "";
-  const strings = new Proxy({}, {
-    get(_target, key) {
-      return getStrings()[key];
-    }
-  });
+  let currentLocaleTag = "";
+  let currentStrings = DEFAULT_STRINGS;
+  const strings = new Proxy(
+    {},
+    {
+      get(_target, key) {
+        return getStrings()[key];
+      },
+    },
+  );
 
   function getLocaleOptions() {
     return {
       document,
       navigatorLanguage: navigator.language,
       ignoredSelectors: ["#" + ROOT_ID],
-      zhPageHints: ["Claw in Chrome 设置", "Claude in Chrome 设置", "权限", "快捷方式", "选项", "扩展更新", "自动检查更新"],
-      enPagePatterns: [/\bPermissions\b/i, /\bShortcuts\b/i, /\bOptions\b/i, /\bExtension updates\b/i, /\bAuto-check updates\b/i]
+      zhPageHints: [
+        "Claw in Chrome 设置",
+        "Claude in Chrome 设置",
+        "权限",
+        "快捷方式",
+        "选项",
+        "扩展更新",
+        "自动检查更新",
+      ],
+      enPagePatterns: [
+        /\bPermissions\b/i,
+        /\bShortcuts\b/i,
+        /\bOptions\b/i,
+        /\bExtension updates\b/i,
+        /\bAuto-check updates\b/i,
+      ],
     };
   }
 
@@ -115,8 +113,35 @@
     return getUiLocaleTag(getLocaleOptions());
   }
 
+  function cloneStrings(value) {
+    return typeof cloneLocaleValue === "function"
+      ? cloneLocaleValue(value)
+      : JSON.parse(JSON.stringify(value));
+  }
+
+  async function ensureStrings(localeTag) {
+    const nextLocaleTag =
+      (typeof normalizeUiLocaleTag === "function"
+        ? normalizeUiLocaleTag(localeTag)
+        : String(localeTag || "").trim()) || "en-US";
+    if (nextLocaleTag === currentLocaleTag && currentStrings) {
+      return false;
+    }
+    if (typeof resolveCustomI18nSection === "function") {
+      currentStrings = await resolveCustomI18nSection(
+        "githubUpdateOptions",
+        nextLocaleTag,
+        DEFAULT_STRINGS,
+      );
+    } else {
+      currentStrings = cloneStrings(DEFAULT_STRINGS);
+    }
+    currentLocaleTag = nextLocaleTag;
+    return true;
+  }
+
   function getStrings() {
-    return STRINGS[getLocaleKey()];
+    return currentStrings;
   }
 
   function interpolate(template, values) {
@@ -211,7 +236,9 @@
     if (getActiveTab() !== "options") {
       return false;
     }
-    const subview = String(getHashQuery().get("provider") || "").trim().toLowerCase();
+    const subview = String(getHashQuery().get("provider") || "")
+      .trim()
+      .toLowerCase();
     return !subview;
   }
 
@@ -279,18 +306,20 @@
   async function setAutoCheckEnabled(enabled) {
     try {
       await chrome.storage.local.set({
-        [STORAGE_KEYS.AUTO_CHECK_ENABLED]: enabled
+        [STORAGE_KEYS.AUTO_CHECK_ENABLED]: enabled,
       });
       if (state) {
         state.autoCheckEnabled = enabled;
       }
       statusTone = "success";
-      statusText = enabled ? strings.autoCheckSavedOn : strings.autoCheckSavedOff;
+      statusText = enabled
+        ? strings.autoCheckSavedOn
+        : strings.autoCheckSavedOff;
       render();
     } catch (error) {
       statusTone = "error";
       statusText = interpolate(strings.checkFailed, {
-        message: String(error?.message || error || strings.unknown)
+        message: String(error?.message || error || strings.unknown),
       });
       render();
     }
@@ -303,18 +332,20 @@
           if (chrome.runtime.lastError) {
             resolve({
               ok: false,
-              error: chrome.runtime.lastError.message
+              error: chrome.runtime.lastError.message,
             });
             return;
           }
-          resolve(response || {
-            ok: true
-          });
+          resolve(
+            response || {
+              ok: true,
+            },
+          );
         });
       } catch (error) {
         resolve({
           ok: false,
-          error: String(error?.message || error || "")
+          error: String(error?.message || error || ""),
         });
       }
     });
@@ -325,12 +356,12 @@
     statusText = strings.checking;
     render();
     const response = await sendRuntimeMessage({
-      type: MESSAGE_TYPES.CHECK_NOW
+      type: MESSAGE_TYPES.CHECK_NOW,
     });
     if (!response?.ok) {
       statusTone = "error";
       statusText = interpolate(strings.checkFailed, {
-        message: response?.error || strings.unknown
+        message: response?.error || strings.unknown,
       });
       render();
       return;
@@ -345,7 +376,7 @@
     if (!opened) {
       statusTone = "error";
       statusText = interpolate(strings.openReleaseFailed, {
-        message: strings.unknown
+        message: strings.unknown,
       });
       render();
     }
@@ -356,7 +387,7 @@
     if (!opened) {
       statusTone = "error";
       statusText = interpolate(strings.openDownloadFailed, {
-        message: strings.unknown
+        message: strings.unknown,
       });
       render();
     }
@@ -394,7 +425,7 @@
       info.notes || "",
       state?.autoCheckEnabled ? "1" : "0",
       statusTone || "",
-      statusText || ""
+      statusText || "",
     ].join("||");
   }
 
@@ -415,12 +446,16 @@
       return;
     }
     const renderSignature = buildRenderSignature();
-    if (mount.childElementCount > 0 && renderSignature === lastRenderSignature) {
+    if (
+      mount.childElementCount > 0 &&
+      renderSignature === lastRenderSignature
+    ) {
       return;
     }
     const info = state.info;
     const panel = document.createElement("section");
-    panel.className = "cp-page-card cp-page-panel bg-bg-100 border border-border-300 rounded-xl px-6 pt-6 pb-6 md:px-8 md:pt-8 md:pb-8";
+    panel.className =
+      "cp-page-card cp-page-panel bg-bg-100 border border-border-300 rounded-xl px-6 pt-6 pb-6 md:px-8 md:pt-8 md:pb-8";
     panel.style.position = "relative";
     panel.style.zIndex = "20";
     panel.style.isolation = "isolate";
@@ -428,49 +463,80 @@
     const stack = document.createElement("div");
     stack.className = "cp-page-stack cp-guo-stack";
     const header = document.createElement("div");
-    header.appendChild(Object.assign(document.createElement("h3"), {
-      className: "cp-page-heading text-text-100 font-xl-bold",
-      textContent: strings.title
-    }));
-    header.appendChild(Object.assign(document.createElement("p"), {
-      className: "cp-page-subheading text-text-300 font-base",
-      textContent: strings.subtitle
-    }));
+    header.appendChild(
+      Object.assign(document.createElement("h3"), {
+        className: "cp-page-heading text-text-100 font-xl-bold",
+        textContent: strings.title,
+      }),
+    );
+    header.appendChild(
+      Object.assign(document.createElement("p"), {
+        className: "cp-page-subheading text-text-300 font-base",
+        textContent: strings.subtitle,
+      }),
+    );
     stack.appendChild(header);
 
     const summary = document.createElement("div");
     summary.className = "cp-page-meta";
-    summary.textContent = info.hasUpdate ? strings.updateAvailable : strings.latestReady;
+    summary.textContent = info.hasUpdate
+      ? strings.updateAvailable
+      : strings.latestReady;
     summary.dataset.tone = info.hasUpdate ? "ready" : "loading";
     stack.appendChild(summary);
 
     const grid = document.createElement("div");
     grid.className = "cp-guo-grid";
-    grid.appendChild(createStat(strings.currentVersion, info.currentVersion || strings.unknown));
-    grid.appendChild(createStat(strings.latestVersion, info.latestVersion || strings.latestReady));
-    grid.appendChild(createStat(strings.lastCheckedAt, info.lastCheckedAt ? formatTimestamp(info.lastCheckedAt, getLocaleTag()) : strings.neverChecked));
+    grid.appendChild(
+      createStat(
+        strings.currentVersion,
+        info.currentVersion || strings.unknown,
+      ),
+    );
+    grid.appendChild(
+      createStat(
+        strings.latestVersion,
+        info.latestVersion || strings.latestReady,
+      ),
+    );
+    grid.appendChild(
+      createStat(
+        strings.lastCheckedAt,
+        info.lastCheckedAt
+          ? formatTimestamp(info.lastCheckedAt, getLocaleTag())
+          : strings.neverChecked,
+      ),
+    );
     stack.appendChild(grid);
 
     const notesField = document.createElement("div");
     notesField.className = "cp-page-field";
-    notesField.appendChild(Object.assign(document.createElement("div"), {
-      className: "cp-page-label",
-      textContent: strings.notes
-    }));
-    notesField.appendChild(Object.assign(document.createElement("div"), {
-      className: "cp-guo-value cp-guo-notes",
-      textContent: info.notes ? summarizeNotes(info.notes, 600) : strings.notesFallback
-    }));
+    notesField.appendChild(
+      Object.assign(document.createElement("div"), {
+        className: "cp-page-label",
+        textContent: strings.notes,
+      }),
+    );
+    notesField.appendChild(
+      Object.assign(document.createElement("div"), {
+        className: "cp-guo-value cp-guo-notes",
+        textContent: info.notes
+          ? summarizeNotes(info.notes, 600)
+          : strings.notesFallback,
+      }),
+    );
     stack.appendChild(notesField);
 
     const autoCheckRow = document.createElement("div");
     autoCheckRow.className = "cp-page-row";
     const autoCheckCopy = document.createElement("div");
     autoCheckCopy.className = "cp-page-row-copy";
-    autoCheckCopy.appendChild(Object.assign(document.createElement("div"), {
-      className: "cp-page-row-title",
-      textContent: strings.autoCheckLabel
-    }));
+    autoCheckCopy.appendChild(
+      Object.assign(document.createElement("div"), {
+        className: "cp-page-row-title",
+        textContent: strings.autoCheckLabel,
+      }),
+    );
     const autoCheckHelp = document.createElement("p");
     autoCheckHelp.className = "cp-page-row-help";
     autoCheckHelp.textContent = strings.autoCheckHelp;
@@ -480,14 +546,19 @@
     const autoCheckMeta = document.createElement("div");
     autoCheckMeta.className = "cp-page-meta";
     autoCheckMeta.dataset.tone = state.autoCheckEnabled ? "ready" : "";
-    autoCheckMeta.textContent = state.autoCheckEnabled ? strings.autoCheckOn : strings.autoCheckOff;
+    autoCheckMeta.textContent = state.autoCheckEnabled
+      ? strings.autoCheckOn
+      : strings.autoCheckOff;
     const autoCheckToggle = document.createElement("button");
     autoCheckToggle.type = "button";
     autoCheckToggle.className = "cp-page-toggle";
     autoCheckToggle.dataset.enabled = state.autoCheckEnabled ? "true" : "false";
     autoCheckToggle.dataset.cpGuoAction = ACTIONS.TOGGLE_AUTO_CHECK;
     autoCheckToggle.setAttribute("role", "switch");
-    autoCheckToggle.setAttribute("aria-checked", state.autoCheckEnabled ? "true" : "false");
+    autoCheckToggle.setAttribute(
+      "aria-checked",
+      state.autoCheckEnabled ? "true" : "false",
+    );
     autoCheckToggle.setAttribute("aria-label", strings.autoCheckLabel);
     autoCheckToggle.title = strings.autoCheckLabel;
     autoCheckToggle.style.pointerEvents = "auto";
@@ -510,9 +581,19 @@
     actionRow.className = "cp-page-btn-row";
     actionRow.style.position = "relative";
     actionRow.style.zIndex = "21";
-    actionRow.appendChild(createButton(strings.downloadZip, PRIMARY_BUTTON_CLASS, ACTIONS.DOWNLOAD));
-    actionRow.appendChild(createButton(strings.viewRelease, SECONDARY_BUTTON_CLASS, ACTIONS.RELEASE));
-    actionRow.appendChild(createButton(strings.checkNow, SECONDARY_BUTTON_CLASS, ACTIONS.CHECK_NOW));
+    actionRow.appendChild(
+      createButton(strings.downloadZip, PRIMARY_BUTTON_CLASS, ACTIONS.DOWNLOAD),
+    );
+    actionRow.appendChild(
+      createButton(
+        strings.viewRelease,
+        SECONDARY_BUTTON_CLASS,
+        ACTIONS.RELEASE,
+      ),
+    );
+    actionRow.appendChild(
+      createButton(strings.checkNow, SECONDARY_BUTTON_CLASS, ACTIONS.CHECK_NOW),
+    );
     stack.appendChild(actionRow);
 
     panel.appendChild(stack);
@@ -522,6 +603,7 @@
 
   async function refreshState() {
     state = await readStoredState();
+    await ensureStrings(getLocaleTag());
     scheduleRender();
   }
 
@@ -530,12 +612,19 @@
       return;
     }
     renderScheduled = true;
-    const scheduler = typeof requestAnimationFrame === "function" ? requestAnimationFrame : function (callback) {
-      return setTimeout(callback, 16);
-    };
+    const scheduler =
+      typeof requestAnimationFrame === "function"
+        ? requestAnimationFrame
+        : function (callback) {
+            return setTimeout(callback, 16);
+          };
     scheduler(function () {
       renderScheduled = false;
-      render();
+      Promise.resolve(ensureStrings(getLocaleTag()))
+        .catch(function () {})
+        .then(function () {
+          render();
+        });
     });
   }
 
@@ -544,9 +633,12 @@
       return;
     }
     refreshScheduled = true;
-    const scheduler = typeof requestAnimationFrame === "function" ? requestAnimationFrame : function (callback) {
-      return setTimeout(callback, 16);
-    };
+    const scheduler =
+      typeof requestAnimationFrame === "function"
+        ? requestAnimationFrame
+        : function (callback) {
+            return setTimeout(callback, 16);
+          };
     scheduler(function () {
       refreshScheduled = false;
       refreshState().catch(function () {});
@@ -559,22 +651,27 @@
       if (areaName !== "local") {
         return;
       }
-      if (changes[STORAGE_KEYS.INFO] || changes[STORAGE_KEYS.AUTO_CHECK_ENABLED]) {
+      if (
+        changes[STORAGE_KEYS.INFO] ||
+        changes[STORAGE_KEYS.AUTO_CHECK_ENABLED]
+      ) {
         scheduleRefresh();
       }
     });
     window.addEventListener("hashchange", scheduleRender);
     const observer = new MutationObserver(function (mutations) {
       const nextRoot = root;
-      const isSelfMutation = !!nextRoot && mutations.every(function (mutation) {
-        const target = mutation.target;
-        if (target === nextRoot || nextRoot.contains(target)) {
-          return true;
-        }
-        return Array.from(mutation.addedNodes || []).every(function (node) {
-          return node === nextRoot || nextRoot.contains(node);
+      const isSelfMutation =
+        !!nextRoot &&
+        mutations.every(function (mutation) {
+          const target = mutation.target;
+          if (target === nextRoot || nextRoot.contains(target)) {
+            return true;
+          }
+          return Array.from(mutation.addedNodes || []).every(function (node) {
+            return node === nextRoot || nextRoot.contains(node);
+          });
         });
-      });
       if (isSelfMutation) {
         return;
       }
@@ -584,13 +681,13 @@
     });
     observer.observe(document.body, {
       childList: true,
-      subtree: true
+      subtree: true,
     });
   }
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", bootstrap, {
-      once: true
+      once: true,
     });
   } else {
     bootstrap();

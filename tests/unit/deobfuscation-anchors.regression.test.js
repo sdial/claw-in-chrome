@@ -242,7 +242,7 @@ async function testSidepanelAnchorsExist() {
   assertIncludes(source, "语义锚点：MAIN_TAB_ACK_REQUEST 只让主 tab 回 ACK；secondary tab 收到但不匹配时直接忽略。", "sidepanel bundle");
   assertIncludes(source, "const __cpSidepanelConsumeRuntimeInputBridgeMessage = a;", "sidepanel bundle");
   assertIncludes(source, "语义锚点：sidepanel 的输入桥 runtime listener；真正消费 STOP_AGENT / EXECUTE_TASK / POPULATE_INPUT_TEXT。", "sidepanel bundle");
-  assertIncludes(source, "语义锚点：STOP_AGENT 当前不按 targetTabId 过滤；收到消息就直接走 cancel + permission deny 收口。", "sidepanel bundle");
+  assertIncludes(source, "语义锚点：STOP_AGENT 先按 targetTabId 过滤；只有命中当前 tab 的 sidepanel 才会走 cancel + permission deny 收口。", "sidepanel bundle");
   assertIncludes(source, "语义锚点：EXECUTE_TASK 会先按 windowSessionId / targetTabId 过滤目标 sidepanel，再决定是否真正落 prompt。", "sidepanel bundle");
   assertIncludes(source, "语义锚点：EXECUTE_TASK 是“过滤后直接发送”分支，不灌草稿、不注入附件/模型。", "sidepanel bundle");
   assertIncludes(source, "语义锚点：scheduled task 只是给 prompt 加任务名前缀；真正发送仍复用普通 sendMessage 主链。", "sidepanel bundle");
@@ -539,7 +539,7 @@ async function testServiceWorkerBundleAnchorsExist() {
   assertIncludes(source, "options 引导桥：把待执行任务先写入 storage，再聚焦或打开 options#prompts。", "service-worker bundle");
   assertIncludes(source, "定时任务执行桥：由后台统一落埋点并把任务转交 sidepanel 独立窗口。", "service-worker bundle");
   assertIncludes(source, "agent / tab-group 协调链：Stop、主副 tab 切换、ACK 探测、静态提示条心跳都从这里汇总。", "service-worker bundle");
-  assertIncludes(source, "语义锚点：background 会给 STOP_AGENT 补 targetTabId，但当前 sidepanel consumer 不读取这个字段。", "service-worker bundle");
+  assertIncludes(source, "语义锚点：background 会给 STOP_AGENT 补 targetTabId，供 sidepanel consumer 过滤多面板广播。", "service-worker bundle");
   assertIncludes(source, "secondary -> main 聚焦桥：把副 tab 切回主 tab，并同步聚焦对应窗口。", "service-worker bundle");
   assertIncludes(source, "静态提示条心跳会遍历同组 tab，并缓存 3s ACK 结果以避免重复探测", "service-worker bundle");
   assertIncludes(source, "语义锚点：scheduled task 通过 windowSessionId 定向独立 sidepanel；当前 bundle 不生产 targetTabId。", "service-worker bundle");

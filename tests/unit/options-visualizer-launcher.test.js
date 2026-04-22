@@ -1,4 +1,5 @@
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
 const path = require("node:path");
 
 const {
@@ -8,6 +9,63 @@ const {
 } = require("../helpers/chrome-test-utils");
 
 const scriptPath = path.join(__dirname, "..", "..", "options-visualizer-launcher.js");
+const customZhPack = Function(
+  `"use strict"; return (${fs.readFileSync(
+    path.join(__dirname, "..", "..", "i18n", "custom", "zh-CN.js"),
+    "utf8",
+  )});`,
+)();
+
+function createI18nShared() {
+  return {
+    cloneLocaleValue(value) {
+      return JSON.parse(JSON.stringify(value));
+    },
+    normalizeUiLocaleTag(value) {
+      const locale = String(value || "").trim().toLowerCase();
+      if (!locale) {
+        return "";
+      }
+      if (locale.startsWith("zh")) {
+        return "zh-CN";
+      }
+      return "en-US";
+    },
+    getUiLocaleTag(options = {}) {
+      const explicitLocale = String(
+        options.document?.documentElement?.dataset?.cpUiLocale || "",
+      ).toLowerCase();
+      if (explicitLocale.startsWith("zh")) {
+        return "zh-CN";
+      }
+      const pageText = String(
+        options.document?.body?.innerText ||
+          options.document?.body?.textContent ||
+          "",
+      );
+      if (
+        Array.isArray(options.zhPageHints) &&
+        options.zhPageHints.some((hint) => hint && pageText.includes(String(hint)))
+      ) {
+        return "zh-CN";
+      }
+      const htmlLang = String(options.document?.documentElement?.lang || "").toLowerCase();
+      if (htmlLang.startsWith("zh")) {
+        return "zh-CN";
+      }
+      return "en-US";
+    },
+    async resolveCustomI18nSection(sectionName, localeTag, defaults) {
+      if (String(localeTag || "").toLowerCase() === "zh-cn") {
+        return {
+          ...JSON.parse(JSON.stringify(defaults)),
+          ...(customZhPack[sectionName] || {}),
+        };
+      }
+      return JSON.parse(JSON.stringify(defaults));
+    },
+  };
+}
 
 class FakeElement {
   constructor(tagName, ownerDocument) {
@@ -119,7 +177,10 @@ class FakeDocument {
     this.body.innerText = options.bodyText || "";
     this.body.textContent = options.bodyText || "";
     this.documentElement = {
-      lang: options.htmlLang || ""
+      lang: options.htmlLang || "",
+      dataset: {
+        cpUiLocale: options.explicitLocale || ""
+      }
     };
     this.listeners = new Map();
 
@@ -222,8 +283,15 @@ function createVisualizerHarness(options = {}) {
       const current = windowListeners.get(type) || [];
       current.push(listener);
       windowListeners.set(type, current);
+    },
+    dispatchEvent(event) {
+      const type = String(event?.type || "");
+      for (const listener of windowListeners.get(type) || []) {
+        listener(event);
+      }
     }
   };
+  document.ownerWindow = windowObject;
 
   chromeMock.chrome.tabs.create = (payload, callback) => {
     tabCreateCalls.push(payload);
@@ -244,6 +312,7 @@ function createVisualizerHarness(options = {}) {
       language: options.navigatorLanguage || "en-US"
     },
     URLSearchParams,
+    __CP_I18N_SHARED__: createI18nShared(),
     requestAnimationFrame(callback) {
       rafQueue.push(callback);
       return rafQueue.length;
@@ -259,6 +328,7 @@ function createVisualizerHarness(options = {}) {
   runScriptInSandbox(scriptPath, sandbox);
 
   async function flushRenders() {
+    await flushMicrotasks();
     let guard = 30;
     while (rafQueue.length > 0 && guard > 0) {
       guard -= 1;
@@ -278,6 +348,7 @@ function createVisualizerHarness(options = {}) {
     document,
     tabCreateCalls,
     windowOpenCalls,
+    windowObject,
     async dispatchHashChange(nextHash) {
       windowObject.location.hash = nextHash;
       for (const listener of windowListeners.get("hashchange") || []) {
@@ -331,6 +402,8 @@ async function testLauncherPassesChineseLocaleToVisualizer() {
 async function testLauncherUsesStoredPreferredLocaleForTargetUrl() {
   const harness = createVisualizerHarness({
     navigatorLanguage: "en-US",
+    bodyText: "Claw in Chrome 设置 扩展更新 选项",
+    updateTitle: "扩展更新",
     storageState: {
       preferred_locale: "zh-CN"
     }
@@ -339,6 +412,7 @@ async function testLauncherUsesStoredPreferredLocaleForTargetUrl() {
   await harness.flushRenders();
 
   const panel = harness.document.getElementById("cp-options-visualizer-panel");
+  assert.match(panel.innerHTML, /执行可视化/);
   const button = panel.querySelector("[data-cp-visualizer-launch]");
   button.onclick();
   await flushMicrotasks();
@@ -377,12 +451,42 @@ async function testLauncherRemovesPanelOutsideRootOptionsView() {
   assert.equal(harness.document.getElementById("cp-options-visualizer-anchor"), null);
 }
 
+async function testLauncherRerendersWhenExplicitUiLocaleArrivesLate() {
+  const harness = createVisualizerHarness({
+    navigatorLanguage: "en-US"
+  });
+
+  await harness.flushRenders();
+
+  const panel = harness.document.getElementById("cp-options-visualizer-panel");
+  assert.match(panel.innerHTML, /Execution visualizer/);
+
+  harness.document.documentElement.dataset.cpUiLocale = "zh-CN";
+  harness.document.documentElement.lang = "zh-CN";
+  harness.document.body.innerText = "Claw in Chrome 设置 扩展更新 选项";
+  harness.document.body.textContent = "Claw in Chrome 设置 扩展更新 选项";
+  harness.document.body.children[0]._heading.textContent = "扩展更新";
+  await harness.chromeMock.storageMock.area.set({
+    preferred_locale: "zh-CN"
+  });
+  harness.windowObject.dispatchEvent({
+    type: "cp:ui-locale-changed",
+    detail: {
+      locale: "zh-CN"
+    }
+  });
+  await harness.flushRenders();
+
+  assert.match(panel.innerHTML, /执行可视化/);
+}
+
 async function main() {
   await testLauncherRendersPanelAndOpensVisualizerTab();
   await testLauncherPassesChineseLocaleToVisualizer();
   await testLauncherUsesStoredPreferredLocaleForTargetUrl();
   await testLauncherShowsOpenErrorWhenTabAndWindowCreationFail();
   await testLauncherRemovesPanelOutsideRootOptionsView();
+  await testLauncherRerendersWhenExplicitUiLocaleArrivesLate();
   console.log("options visualizer launcher tests passed");
 }
 

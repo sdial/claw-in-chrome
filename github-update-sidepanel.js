@@ -9,74 +9,64 @@
     formatTimestamp,
     detectUiLocaleKey,
     getUiLocaleTag,
+    cloneLocaleValue,
+    normalizeUiLocaleTag,
+    resolveCustomI18nSection,
     readStoredState,
     openReleasePage,
     openDownloadPage,
     isBlockedByMinVersion,
     normalizeVersion,
-    renderMarkdownToHtml
+    renderMarkdownToHtml,
   } = shared;
 
   const ROOT_ID = "cp-github-update-sidepanel-root";
   const STYLE_ID = "cp-github-update-sidepanel-style";
   const BACKDROP_CLASS = "fixed inset-0 bg-always-black/50 z-50";
-  const WRAPPER_CLASS = "fixed inset-0 z-50 flex items-center justify-center pointer-events-none p-5 sm:p-6";
-  const STRINGS = {
-    zh: {
-      updateTitle: "发现新版本",
-      updateBody: "当前版本 {current}，最新版本 {latest}。下载新版本后，替换本地扩展目录，并在 chrome://extensions 中重新加载。",
-      currentVersion: "当前版本",
-      latestVersion: "最新版本",
-      publishedAt: "发布时间",
-      releaseNotes: "本次更新",
-      manualBadge: "手动升级",
-      requiredBadge: "必须更新",
-      viewRelease: "查看发布页",
-      downloadZip: "下载最新版本",
-      dismiss: "稍后提醒",
-      skipVersion: "跳过此版本",
-      close: "关闭",
-      blockedTitle: "需要手动升级扩展",
-      blockedBody: "当前版本 {current} 已不再受支持，请升级到 {min} 或更高版本后继续使用。",
-      blockedStep1: "下载最新 ZIP 包",
-      blockedStep2: "用新文件替换本地扩展目录",
-      blockedStep3: "打开 chrome://extensions 并点击“重新加载”",
-      notesFallback: "当前发布没有附带详细更新说明。",
-      unknown: "未知"
-    },
-    en: {
-      updateTitle: "New version available",
-      updateBody: "You are on {current}. Version {latest} is available. Download the new build, replace the local extension folder, then reload it from chrome://extensions.",
-      currentVersion: "Current version",
-      latestVersion: "Latest version",
-      publishedAt: "Published",
-      releaseNotes: "What changed",
-      manualBadge: "Manual update",
-      requiredBadge: "Update required",
-      viewRelease: "Open release",
-      downloadZip: "Download ZIP",
-      dismiss: "Later",
-      skipVersion: "Skip this version",
-      close: "Close",
-      blockedTitle: "Manual update required",
-      blockedBody: "Your current version ({current}) is no longer supported. Please update to {min} or later to keep using Claw.",
-      blockedStep1: "Download the latest ZIP",
-      blockedStep2: "Replace the local extension folder",
-      blockedStep3: "Open chrome://extensions and click Reload",
-      notesFallback: "This release did not include detailed notes.",
-      unknown: "Unknown"
-    }
+  const WRAPPER_CLASS =
+    "fixed inset-0 z-50 flex items-center justify-center pointer-events-none p-5 sm:p-6";
+  const DEFAULT_STRINGS = {
+    updateTitle: "New version available",
+    updateBody:
+      "You are on {current}. Version {latest} is available. Download the new build, replace the local extension folder, then reload it from chrome://extensions.",
+    currentVersion: "Current version",
+    latestVersion: "Latest version",
+    publishedAt: "Published",
+    releaseNotes: "What changed",
+    manualBadge: "Manual update",
+    requiredBadge: "Update required",
+    viewRelease: "Open release",
+    downloadZip: "Download ZIP",
+    dismiss: "Later",
+    skipVersion: "Skip this version",
+    close: "Close",
+    blockedTitle: "Manual update required",
+    blockedBody:
+      "Your current version ({current}) is no longer supported. Please update to {min} or later to keep using Claw.",
+    blockedStep1: "Download the latest ZIP",
+    blockedStep2: "Replace the local extension folder",
+    blockedStep3: "Open chrome://extensions and click Reload",
+    notesFallback: "This release did not include detailed notes.",
+    unknown: "Unknown",
   };
-  const CARD_CLASS = "relative w-full sm:max-w-[560px] pointer-events-auto bg-bg-000 border-[0.5px] border-border-300 rounded-[14px] overflow-hidden";
-  const CLOSE_BUTTON_CLASS = "absolute top-4 right-4 z-10 inline-flex items-center justify-center bg-bg-100 border border-border-300 rounded-full hover:bg-bg-200 transition-colors";
-  const PRIMARY_BUTTON_CLASS = "px-[14px] py-2 bg-brand-200 text-oncolor-100 rounded-[14px] hover:bg-brand-100 transition-colors font-ui font-medium text-[14px]";
-  const SECONDARY_BUTTON_CLASS = "px-[14px] py-2 bg-brand-200 text-oncolor-100 rounded-[14px] hover:bg-brand-100 transition-colors font-ui font-medium text-[14px]";
-  const OUTLINE_BUTTON_CLASS = "px-[14px] py-2 border border-border-300 text-text-200 rounded-[14px] hover:bg-bg-200 transition-colors font-ui font-medium text-[14px]";
-  const BADGE_CLASS = "px-2 py-1 text-xs font-base-bold bg-brand-200 text-oncolor-100 rounded-md";
-  const STEP_BADGE_CLASS = "inline-flex items-center justify-center rounded-md bg-bg-100 border border-border-300 px-2 text-xs font-base-bold text-brand-100";
+  const CARD_CLASS =
+    "relative w-full sm:max-w-[560px] pointer-events-auto bg-bg-000 border-[0.5px] border-border-300 rounded-[14px] overflow-hidden";
+  const CLOSE_BUTTON_CLASS =
+    "absolute top-4 right-4 z-10 inline-flex items-center justify-center bg-bg-100 border border-border-300 rounded-full hover:bg-bg-200 transition-colors";
+  const PRIMARY_BUTTON_CLASS =
+    "px-[14px] py-2 bg-brand-200 text-oncolor-100 rounded-[14px] hover:bg-brand-100 transition-colors font-ui font-medium text-[14px]";
+  const SECONDARY_BUTTON_CLASS =
+    "px-[14px] py-2 bg-brand-200 text-oncolor-100 rounded-[14px] hover:bg-brand-100 transition-colors font-ui font-medium text-[14px]";
+  const OUTLINE_BUTTON_CLASS =
+    "px-[14px] py-2 border border-border-300 text-text-200 rounded-[14px] hover:bg-bg-200 transition-colors font-ui font-medium text-[14px]";
+  const BADGE_CLASS =
+    "px-2 py-1 text-xs font-base-bold bg-brand-200 text-oncolor-100 rounded-md";
+  const STEP_BADGE_CLASS =
+    "inline-flex items-center justify-center rounded-md bg-bg-100 border border-border-300 px-2 text-xs font-base-bold text-brand-100";
   const BODY_TEXT_CLASS = "text-text-200 font-base mt-4";
   const META_GRID_CLASS = "grid grid-cols-3 gap-2";
-  const SECTION_CLASS = "w-full rounded-lg px-3 py-2 bg-bg-100 border border-border-300";
+  const SECTION_CLASS =
+    "w-full rounded-lg px-3 py-2 bg-bg-100 border border-border-300";
   const SECTION_LABEL_CLASS = "text-xs text-text-300 font-base-bold";
   const SECTION_VALUE_CLASS = "mt-1 text-sm text-text-100";
 
@@ -84,20 +74,41 @@
   let state = null;
   let refreshScheduled = false;
   let snoozedVersion = "";
-  let lastLocaleKey = "";
-  const strings = new Proxy({}, {
-    get(_target, key) {
-      return getStrings()[key];
-    }
-  });
+  let lastLocaleTag = "";
+  let currentStrings = DEFAULT_STRINGS;
+  const strings = new Proxy(
+    {},
+    {
+      get(_target, key) {
+        return getStrings()[key];
+      },
+    },
+  );
 
   function getLocaleOptions() {
     return {
       document,
       navigatorLanguage: navigator.language,
       ignoredSelectors: ["#" + ROOT_ID],
-      zhPageHints: ["请先配置自定义模型供应商", "配置你的模型供应商", "新建会话", "独立窗口", "会话管理", "提示词修改", "最近会话", "输入 / 查看命令", "无障碍可跳转执行"],
-      enPagePatterns: [/\bOpen your settings page\b/i, /\bNew session\b/i, /\bOpen in window\b/i, /\bChange language\b/i, /\bRecent sessions\b/i, /\bType \/ for commands\b/i]
+      zhPageHints: [
+        "请先配置自定义模型供应商",
+        "配置你的模型供应商",
+        "新建会话",
+        "独立窗口",
+        "会话管理",
+        "提示词修改",
+        "最近会话",
+        "输入 / 查看命令",
+        "无障碍可跳转执行",
+      ],
+      enPagePatterns: [
+        /\bOpen your settings page\b/i,
+        /\bNew session\b/i,
+        /\bOpen in window\b/i,
+        /\bChange language\b/i,
+        /\bRecent sessions\b/i,
+        /\bType \/ for commands\b/i,
+      ],
     };
   }
 
@@ -109,8 +120,35 @@
     return getUiLocaleTag(getLocaleOptions());
   }
 
+  function cloneStrings(value) {
+    return typeof cloneLocaleValue === "function"
+      ? cloneLocaleValue(value)
+      : JSON.parse(JSON.stringify(value));
+  }
+
+  async function ensureStrings(localeTag) {
+    const nextLocaleTag =
+      (typeof normalizeUiLocaleTag === "function"
+        ? normalizeUiLocaleTag(localeTag)
+        : String(localeTag || "").trim()) || "en-US";
+    if (nextLocaleTag === lastLocaleTag && currentStrings) {
+      return false;
+    }
+    if (typeof resolveCustomI18nSection === "function") {
+      currentStrings = await resolveCustomI18nSection(
+        "githubUpdateSidepanel",
+        nextLocaleTag,
+        DEFAULT_STRINGS,
+      );
+    } else {
+      currentStrings = cloneStrings(DEFAULT_STRINGS);
+    }
+    lastLocaleTag = nextLocaleTag;
+    return true;
+  }
+
   function getStrings() {
-    return STRINGS[getLocaleKey()];
+    return currentStrings;
   }
 
   function interpolate(template, values) {
@@ -257,8 +295,14 @@
   function createNotesSection(label, markdown, fallbackText) {
     const shell = createNode("div", SECTION_CLASS);
     shell.appendChild(createNode("div", SECTION_LABEL_CLASS, label));
-    const valueNode = createNode("div", SECTION_VALUE_CLASS + " cp-gus-md cp-gus-notes-scroll");
-    const renderedHtml = typeof renderMarkdownToHtml === "function" ? String(renderMarkdownToHtml(markdown || "") || "").trim() : "";
+    const valueNode = createNode(
+      "div",
+      SECTION_VALUE_CLASS + " cp-gus-md cp-gus-notes-scroll",
+    );
+    const renderedHtml =
+      typeof renderMarkdownToHtml === "function"
+        ? String(renderMarkdownToHtml(markdown || "") || "").trim()
+        : "";
     if (renderedHtml) {
       valueNode.innerHTML = renderedHtml;
     } else {
@@ -269,12 +313,17 @@
   }
 
   function createStep(index, text) {
-    const row = createNode("div", "w-full flex items-start gap-3 rounded-lg px-3 py-2 bg-bg-200");
+    const row = createNode(
+      "div",
+      "w-full flex items-start gap-3 rounded-lg px-3 py-2 bg-bg-200",
+    );
     const badge = createNode("div", STEP_BADGE_CLASS, String(index));
     badge.style.minWidth = "24px";
     badge.style.height = "24px";
     row.appendChild(badge);
-    row.appendChild(createNode("div", "min-w-0 flex-1 text-sm text-text-100", text));
+    row.appendChild(
+      createNode("div", "min-w-0 flex-1 text-sm text-text-100", text),
+    );
     return row;
   }
 
@@ -282,7 +331,10 @@
     const settings = options && typeof options === "object" ? options : {};
     const mount = ensureRoot();
     const backdrop = createNode("div", BACKDROP_CLASS);
-    if (typeof settings.onDismiss === "function" && settings.allowDismiss !== false) {
+    if (
+      typeof settings.onDismiss === "function" &&
+      settings.allowDismiss !== false
+    ) {
       backdrop.addEventListener("click", settings.onDismiss);
     }
 
@@ -290,8 +342,15 @@
     const card = createNode("section", CARD_CLASS);
     wrapper.appendChild(card);
 
-    if (typeof settings.onDismiss === "function" && settings.allowDismiss !== false) {
-      const closeButton = createButton("×", CLOSE_BUTTON_CLASS, settings.onDismiss);
+    if (
+      typeof settings.onDismiss === "function" &&
+      settings.allowDismiss !== false
+    ) {
+      const closeButton = createButton(
+        "×",
+        CLOSE_BUTTON_CLASS,
+        settings.onDismiss,
+      );
       closeButton.setAttribute("aria-label", strings.close);
       closeButton.style.width = "36px";
       closeButton.style.height = "36px";
@@ -306,7 +365,7 @@
     mount.appendChild(backdrop);
     mount.appendChild(wrapper);
     return {
-      card
+      card,
     };
   }
 
@@ -322,7 +381,7 @@
       return;
     }
     await chrome.storage.local.set({
-      [STORAGE_KEYS.DISMISSED_VERSION]: normalizedVersion
+      [STORAGE_KEYS.DISMISSED_VERSION]: normalizedVersion,
     });
     if (state) {
       state.dismissedVersion = normalizedVersion;
@@ -346,8 +405,17 @@
 
   function appendHeader(card, title, badge, bodyText) {
     const header = createNode("div", "px-6 pt-5 pb-4 sm:px-7");
-    const titleRow = createNode("div", "flex flex-wrap items-center gap-2 pr-10");
-    titleRow.appendChild(createNode("h2", "text-text-100 font-ui font-medium text-[20px] leading-[140%]", title));
+    const titleRow = createNode(
+      "div",
+      "flex flex-wrap items-center gap-2 pr-10",
+    );
+    titleRow.appendChild(
+      createNode(
+        "h2",
+        "text-text-100 font-ui font-medium text-[20px] leading-[140%]",
+        title,
+      ),
+    );
     if (badge) {
       titleRow.appendChild(createNode("span", BADGE_CLASS, badge));
     }
@@ -364,45 +432,78 @@
     };
     const chrome = createModalChrome({
       onDismiss: dismissHandler,
-      allowDismiss: true
+      allowDismiss: true,
     });
-    appendHeader(chrome.card, strings.updateTitle, formatVersion(info.latestVersion), "");
+    appendHeader(
+      chrome.card,
+      strings.updateTitle,
+      formatVersion(info.latestVersion),
+      "",
+    );
 
     const body = createNode("div", "px-6 pb-6 pt-1 sm:px-7");
     const sectionList = createNode("div", "space-y-1");
     const metaGrid = createNode("div", META_GRID_CLASS);
-    metaGrid.appendChild(createSection(strings.currentVersion, formatVersion(info.currentVersion)));
-    metaGrid.appendChild(createSection(strings.latestVersion, formatVersion(info.latestVersion)));
-    metaGrid.appendChild(createSection(strings.publishedAt, info.publishedAt ? formatDateTime(info.publishedAt) : strings.unknown));
+    metaGrid.appendChild(
+      createSection(strings.currentVersion, formatVersion(info.currentVersion)),
+    );
+    metaGrid.appendChild(
+      createSection(strings.latestVersion, formatVersion(info.latestVersion)),
+    );
+    metaGrid.appendChild(
+      createSection(
+        strings.publishedAt,
+        info.publishedAt ? formatDateTime(info.publishedAt) : strings.unknown,
+      ),
+    );
     sectionList.appendChild(metaGrid);
-    sectionList.appendChild(createNotesSection(strings.releaseNotes, info.notes, strings.notesFallback));
+    sectionList.appendChild(
+      createNotesSection(
+        strings.releaseNotes,
+        info.notes,
+        strings.notesFallback,
+      ),
+    );
     body.appendChild(sectionList);
 
     const footer = createNode("div", "mt-6 flex flex-wrap items-center gap-3");
-    footer.appendChild(createButton(strings.downloadZip, PRIMARY_BUTTON_CLASS, function () {
-      openDownloadPage(info);
-    }));
-    footer.appendChild(createButton(strings.viewRelease, SECONDARY_BUTTON_CLASS, function () {
-      openReleasePage(info);
-    }));
-    footer.appendChild(createButton(strings.skipVersion, OUTLINE_BUTTON_CLASS, function () {
-      skipVersion(info.latestVersion).catch(function () {
-        remindLater(info.latestVersion);
-      });
-    }));
-    footer.appendChild(createButton(strings.dismiss, OUTLINE_BUTTON_CLASS, dismissHandler));
+    footer.appendChild(
+      createButton(strings.downloadZip, PRIMARY_BUTTON_CLASS, function () {
+        openDownloadPage(info);
+      }),
+    );
+    footer.appendChild(
+      createButton(strings.viewRelease, SECONDARY_BUTTON_CLASS, function () {
+        openReleasePage(info);
+      }),
+    );
+    footer.appendChild(
+      createButton(strings.skipVersion, OUTLINE_BUTTON_CLASS, function () {
+        skipVersion(info.latestVersion).catch(function () {
+          remindLater(info.latestVersion);
+        });
+      }),
+    );
+    footer.appendChild(
+      createButton(strings.dismiss, OUTLINE_BUTTON_CLASS, dismissHandler),
+    );
     body.appendChild(footer);
     chrome.card.appendChild(body);
   }
 
   function createBlockedModal(info) {
     const chrome = createModalChrome({
-      allowDismiss: false
+      allowDismiss: false,
     });
-    appendHeader(chrome.card, strings.blockedTitle, strings.requiredBadge, interpolate(strings.blockedBody, {
-      current: formatVersion(info.currentVersion),
-      min: formatVersion(info.minSupportedVersion)
-    }));
+    appendHeader(
+      chrome.card,
+      strings.blockedTitle,
+      strings.requiredBadge,
+      interpolate(strings.blockedBody, {
+        current: formatVersion(info.currentVersion),
+        min: formatVersion(info.minSupportedVersion),
+      }),
+    );
 
     const body = createNode("div", "px-6 pb-6 pt-1 sm:px-7");
     const steps = createNode("div", "space-y-1");
@@ -411,19 +512,25 @@
     steps.appendChild(createStep(3, strings.blockedStep3));
     body.appendChild(steps);
 
-    const actions = createNode("div", "mt-6 flex flex-wrap items-center justify-end gap-3");
-    actions.appendChild(createButton(strings.viewRelease, SECONDARY_BUTTON_CLASS, function () {
-      openReleasePage(info);
-    }));
-    actions.appendChild(createButton(strings.downloadZip, PRIMARY_BUTTON_CLASS, function () {
-      openDownloadPage(info);
-    }));
+    const actions = createNode(
+      "div",
+      "mt-6 flex flex-wrap items-center justify-end gap-3",
+    );
+    actions.appendChild(
+      createButton(strings.viewRelease, SECONDARY_BUTTON_CLASS, function () {
+        openReleasePage(info);
+      }),
+    );
+    actions.appendChild(
+      createButton(strings.downloadZip, PRIMARY_BUTTON_CLASS, function () {
+        openDownloadPage(info);
+      }),
+    );
     body.appendChild(actions);
     chrome.card.appendChild(body);
   }
 
   function render() {
-    lastLocaleKey = getLocaleKey();
     const mount = ensureRoot();
     mount.textContent = "";
     if (!state) {
@@ -441,6 +548,7 @@
 
   async function refreshState() {
     state = await readStoredState();
+    await ensureStrings(getLocaleTag());
     render();
   }
 
@@ -449,9 +557,12 @@
       return;
     }
     refreshScheduled = true;
-    const scheduler = typeof requestAnimationFrame === "function" ? requestAnimationFrame : function (callback) {
-      return setTimeout(callback, 16);
-    };
+    const scheduler =
+      typeof requestAnimationFrame === "function"
+        ? requestAnimationFrame
+        : function (callback) {
+            return setTimeout(callback, 16);
+          };
     scheduler(function () {
       refreshScheduled = false;
       refreshState().catch(function () {});
@@ -465,43 +576,58 @@
       if (areaName !== "local") {
         return;
       }
-      if (changes[STORAGE_KEYS.INFO] || changes[STORAGE_KEYS.DISMISSED_VERSION]) {
+      if (
+        changes[STORAGE_KEYS.INFO] ||
+        changes[STORAGE_KEYS.DISMISSED_VERSION]
+      ) {
         scheduleRefresh();
       }
     });
     const observer = new MutationObserver(function (mutations) {
       const nextRoot = root;
-      const isSelfMutation = !!nextRoot && Array.isArray(mutations) && mutations.length > 0 && mutations.every(function (mutation) {
-        const target = mutation.target;
-        if (target === nextRoot || nextRoot.contains(target)) {
-          return true;
-        }
-        return Array.from(mutation.addedNodes || []).every(function (node) {
-          return node === nextRoot || nextRoot.contains(node);
+      const isSelfMutation =
+        !!nextRoot &&
+        Array.isArray(mutations) &&
+        mutations.length > 0 &&
+        mutations.every(function (mutation) {
+          const target = mutation.target;
+          if (target === nextRoot || nextRoot.contains(target)) {
+            return true;
+          }
+          return Array.from(mutation.addedNodes || []).every(function (node) {
+            return node === nextRoot || nextRoot.contains(node);
+          });
         });
-      });
       if (isSelfMutation) {
         return;
       }
       if (!root || !root.isConnected) {
         ensureRoot();
-        render();
+        Promise.resolve(ensureStrings(getLocaleTag()))
+          .catch(function () {})
+          .then(function () {
+            render();
+          });
         return;
       }
-      const nextLocaleKey = getLocaleKey();
-      if (nextLocaleKey !== lastLocaleKey) {
-        render();
+      const nextLocaleTag = getLocaleTag();
+      if (nextLocaleTag !== lastLocaleTag) {
+        Promise.resolve(ensureStrings(nextLocaleTag))
+          .catch(function () {})
+          .then(function () {
+            render();
+          });
       }
     });
     observer.observe(document.body, {
       childList: true,
-      subtree: true
+      subtree: true,
     });
   }
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", bootstrap, {
-      once: true
+      once: true,
     });
   } else {
     bootstrap();

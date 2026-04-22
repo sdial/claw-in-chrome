@@ -1,4 +1,27 @@
-import { ar as t, as as n, at as i, au as e, av as r, aw as o, ax as s, ay as a, az as u, aA as c, aB as l, aC as d, aD as h, aE as v, aF as f, aG as p, aH as g, aI as m, aJ as y, aK as w, aL as b, aM as z } from "./useStorageState-hbwNMVUA.js";
+import {
+  ar as t,
+  as as n,
+  at as i,
+  au as e,
+  av as r,
+  aw as o,
+  ax as s,
+  ay as a,
+  az as u,
+  aA as c,
+  aB as l,
+  aC as d,
+  aD as h,
+  aE as v,
+  aF as f,
+  aG as p,
+  aH as g,
+  aI as m,
+  aJ as y,
+  aK as w,
+  aL as b,
+  aM as z,
+} from "./useStorageState-hbwNMVUA.js";
 import { i as S } from "./is-plan-event-enabled-CTGFxau4.js";
 import "./index-BVS4T5_D.js";
 import "./index-5uYI7rOK.js";
@@ -30,29 +53,43 @@ function I(r, s, a, u) {
           d = `${l}/integrations/${c ?? t}/${a}/${c ?? t}.dynamic.js.gz`;
           n.label = 1;
         case 1:
-          n.trys.push([1, 3,, 4]);
+          n.trys.push([1, 3, , 4]);
           return [4, i(d)];
         case 2:
           n.sent();
           (function (t, n, i) {
             var e;
             try {
-              var s = (((e = window?.performance) === null || e === undefined ? undefined : e.getEntriesByName(t, "resource")) ?? [])[0];
+              var s = (((e = window?.performance) === null || e === undefined
+                ? undefined
+                : e.getEntriesByName(t, "resource")) ?? [])[0];
               if (s) {
-                n.stats.gauge("legacy_destination_time", Math.round(s.duration), o([i], s.duration < 100 ? ["cached"] : [], true));
+                n.stats.gauge(
+                  "legacy_destination_time",
+                  Math.round(s.duration),
+                  o([i], s.duration < 100 ? ["cached"] : [], true),
+                );
               }
             } catch (a) {}
           })(d, r, s);
           return [3, 4];
         case 3:
           h = n.sent();
-          r.stats.gauge("legacy_destination_time", -1, [`plugin:${s}`, "failed"]);
+          r.stats.gauge("legacy_destination_time", -1, [
+            `plugin:${s}`,
+            "failed",
+          ]);
           throw h;
         case 4:
           v = window[`${t}Deps`];
-          return [4, Promise.all(v.map(function (t) {
-            return i(l + t + ".gz");
-          }))];
+          return [
+            4,
+            Promise.all(
+              v.map(function (t) {
+                return i(l + t + ".gz");
+              }),
+            ),
+          ];
         case 5:
           n.sent();
           window[`${t}Loader`]();
@@ -72,30 +109,36 @@ function k(i, e) {
           if (a()) {
             return [2, e];
           } else {
-            return [4, y(function () {
-              return e.length > 0 && z();
-            }, function () {
-              return t(o, undefined, undefined, function () {
-                var t;
-                var o;
-                return n(this, function (n) {
-                  switch (n.label) {
-                    case 0:
-                      if (t = e.pop()) {
-                        return [4, w(t, i)];
-                      } else {
-                        return [2];
+            return [
+              4,
+              y(
+                function () {
+                  return e.length > 0 && z();
+                },
+                function () {
+                  return t(o, undefined, undefined, function () {
+                    var t;
+                    var o;
+                    return n(this, function (n) {
+                      switch (n.label) {
+                        case 0:
+                          if ((t = e.pop())) {
+                            return [4, w(t, i)];
+                          } else {
+                            return [2];
+                          }
+                        case 1:
+                          o = n.sent();
+                          if (!(o instanceof b)) {
+                            r.push(t);
+                          }
+                          return [2];
                       }
-                    case 1:
-                      o = n.sent();
-                      if (!(o instanceof b)) {
-                        r.push(t);
-                      }
-                      return [2];
-                  }
-                });
-              });
-            })];
+                    });
+                  });
+                },
+              ),
+            ];
           }
         case 1:
           s.sent();
@@ -107,7 +150,7 @@ function k(i, e) {
     });
   });
 }
-var N = function () {
+var N = (function () {
   function i(t, n, i, e = {}, r, o) {
     var s = this;
     this.options = {};
@@ -123,11 +166,16 @@ var N = function () {
     if (this.settings.type && this.settings.type === "browser") {
       delete this.settings.type;
     }
-    this.initializePromise.promise.then(function (t) {
-      return s._initialized = t;
-    }, function () {});
+    this.initializePromise.promise.then(
+      function (t) {
+        return (s._initialized = t);
+      },
+      function () {},
+    );
     this.options = r;
-    this.buffer = r.disableClientPersistence ? new g(4, []) : new m(4, `${i}:dest-${t}`);
+    this.buffer = r.disableClientPersistence
+      ? new g(4, [])
+      : new m(4, `${i}:dest-${t}`);
     this.scheduleFlush();
   }
   i.prototype.isLoaded = function () {
@@ -150,7 +198,10 @@ var N = function () {
           case 0:
             if (this._ready || this.onReady !== undefined) {
               return [2];
-            } else if ((r = this.integrationSource) === null || r === undefined) {
+            } else if (
+              (r = this.integrationSource) === null ||
+              r === undefined
+            ) {
               return [3, 1];
             } else {
               o = r;
@@ -163,14 +214,14 @@ var N = function () {
             n.label = 3;
           case 3:
             t = o;
-            this.integration = function (t, n, i) {
+            this.integration = (function (t, n, i) {
               var e;
               if ("Integration" in t) {
                 t({
                   user: function () {
                     return i.user();
                   },
-                  addIntegration: function () {}
+                  addIntegration: function () {},
                 });
                 e = t.Integration;
               } else {
@@ -179,7 +230,7 @@ var N = function () {
               var r = new e(n);
               r.analytics = i;
               return r;
-            }(t, this.settings, e);
+            })(t, this.settings, e);
             this.onReady = new Promise(function (t) {
               a.integration.once("ready", function () {
                 a._ready = true;
@@ -193,7 +244,7 @@ var N = function () {
               s(i, {
                 integrationName: this.name,
                 methodName: "initialize",
-                type: "classic"
+                type: "classic",
               });
               this.integration.initialize();
             } catch (u) {
@@ -201,7 +252,7 @@ var N = function () {
                 integrationName: this.name,
                 methodName: "initialize",
                 type: "classic",
-                didError: true
+                didError: true,
               });
               this.initializePromise.resolve(false);
               throw u;
@@ -212,7 +263,7 @@ var N = function () {
     });
   };
   i.prototype.unload = function (i, o) {
-    return function (i, o, s) {
+    return (function (i, o, s) {
       return t(this, undefined, undefined, function () {
         var t;
         var a;
@@ -226,7 +277,7 @@ var N = function () {
           return [2, r(c)];
         });
       });
-    }(this.name, this.version, this.options.obfuscate);
+    })(this.name, this.version, this.options.obfuscate);
   };
   i.prototype.addMiddleware = function () {
     var t;
@@ -237,7 +288,10 @@ var N = function () {
     this.middleware = (t = this.middleware).concat.apply(t, n);
   };
   i.prototype.shouldBuffer = function (t) {
-    return t.event.type !== "page" && (a() || this._ready !== true || this._initialized !== true);
+    return (
+      t.event.type !== "page" &&
+      (a() || this._ready !== true || this._initialized !== true)
+    );
   };
   i.prototype.send = function (i, e, r) {
     return t(this, undefined, undefined, function () {
@@ -260,24 +314,40 @@ var N = function () {
               if (t && d && this.name !== "Segment.io") {
                 h = t[d];
                 if (S(t, h)) {
-                  i.updateEvent("integrations", u(u({}, i.event.integrations), h == null ? undefined : h.integrations));
+                  i.updateEvent(
+                    "integrations",
+                    u(
+                      u({}, i.event.integrations),
+                      h == null ? undefined : h.integrations,
+                    ),
+                  );
                 } else {
-                  i.updateEvent("integrations", u(u({}, i.event.integrations), {
-                    All: false,
-                    "Segment.io": true
-                  }));
-                  i.cancel(new c({
-                    retry: false,
-                    reason: `Event ${d} disabled for integration ${this.name} in tracking plan`,
-                    type: "Dropped by plan"
-                  }));
+                  i.updateEvent(
+                    "integrations",
+                    u(u({}, i.event.integrations), {
+                      All: false,
+                      "Segment.io": true,
+                    }),
+                  );
+                  i.cancel(
+                    new c({
+                      retry: false,
+                      reason: `Event ${d} disabled for integration ${this.name} in tracking plan`,
+                      type: "Dropped by plan",
+                    }),
+                  );
                 }
-                if ((h == null ? undefined : h.enabled) && (h == null ? undefined : h.integrations[this.name]) === false) {
-                  i.cancel(new c({
-                    retry: false,
-                    reason: `Event ${d} disabled for integration ${this.name} in tracking plan`,
-                    type: "Dropped by plan"
-                  }));
+                if (
+                  (h == null ? undefined : h.enabled) &&
+                  (h == null ? undefined : h.integrations[this.name]) === false
+                ) {
+                  i.cancel(
+                    new c({
+                      retry: false,
+                      reason: `Event ${d} disabled for integration ${this.name} in tracking plan`,
+                      type: "Dropped by plan",
+                    }),
+                  );
                 }
               }
               return [4, l(this.name, i.event, this.middleware)];
@@ -287,16 +357,16 @@ var N = function () {
               return [2, i];
             }
             f = new e(v, {
-              traverse: !this.disableAutoISOConversion
+              traverse: !this.disableAutoISOConversion,
             });
             s(i, {
               integrationName: this.name,
               methodName: r,
-              type: "classic"
+              type: "classic",
             });
             n.label = 2;
           case 2:
-            n.trys.push([2, 5,, 6]);
+            n.trys.push([2, 5, , 6]);
             if (this.integration) {
               return [4, this.integration.invoke.call(this.integration, r, f)];
             } else {
@@ -313,7 +383,7 @@ var N = function () {
               integrationName: this.name,
               methodName: r,
               type: "classic",
-              didError: true
+              didError: true,
             });
             throw p;
           case 6:
@@ -397,7 +467,7 @@ var N = function () {
     }
   };
   return i;
-}();
+})();
 function j(t, n, i, e, r, s) {
   if (i === undefined) {
     i = {};
@@ -415,40 +485,74 @@ function j(t, n, i, e, r, s) {
   var d = n.integrations;
   var p = e.integrations;
   var g = v(n, e ?? {});
-  var m = s == null ? undefined : s.reduce(function (t, n) {
-    var i;
-    return u(u({}, t), ((i = {})[function (t) {
-      return ("Integration" in t ? t.Integration : t).prototype.name;
-    }(n)] = n, i));
-  }, {});
-  var y = new Set(o(o([], Object.keys(d).filter(function (t) {
-    return function (t, n) {
-      var i;
-      var e = n.type;
-      var r = n.bundlingStatus;
-      var o = n.versionSettings;
-      var s = r !== "unbundled" && (e === "browser" || ((i = o == null ? undefined : o.componentTypes) === null || i === undefined ? undefined : i.includes("browser")));
-      return !t.startsWith("Segment") && t !== "Iterable" && s;
-    }(t, d[t]);
-  }), true), Object.keys(m || {}).filter(function (t) {
-    return f(d[t]) || f(p == null ? undefined : p[t]);
-  }), true));
-  return Array.from(y).filter(function (t) {
-    return !function (t, n) {
-      var i = n.All === false && n[t] === undefined;
-      return n[t] === false || i;
-    }(t, i);
-  }).map(function (n) {
-    var i = function (t) {
-      return (t == null ? undefined : t.versionSettings)?.override ?? (t == null ? undefined : t.versionSettings)?.version ?? "latest";
-    }(d[n]);
-    var o = new N(n, i, t, g[n], e, m == null ? undefined : m[n]);
-    if (l.filter(function (t) {
-      return t.destinationName === n;
-    }).length > 0 && r) {
-      o.addMiddleware(r);
-    }
-    return o;
-  });
+  var m =
+    s == null
+      ? undefined
+      : s.reduce(function (t, n) {
+          var i;
+          return u(
+            u({}, t),
+            (((i = {})[
+              (function (t) {
+                return ("Integration" in t ? t.Integration : t).prototype.name;
+              })(n)
+            ] = n),
+            i),
+          );
+        }, {});
+  var y = new Set(
+    o(
+      o(
+        [],
+        Object.keys(d).filter(function (t) {
+          return (function (t, n) {
+            var i;
+            var e = n.type;
+            var r = n.bundlingStatus;
+            var o = n.versionSettings;
+            var s =
+              r !== "unbundled" &&
+              (e === "browser" ||
+                ((i = o == null ? undefined : o.componentTypes) === null ||
+                i === undefined
+                  ? undefined
+                  : i.includes("browser")));
+            return !t.startsWith("Segment") && t !== "Iterable" && s;
+          })(t, d[t]);
+        }),
+        true,
+      ),
+      Object.keys(m || {}).filter(function (t) {
+        return f(d[t]) || f(p == null ? undefined : p[t]);
+      }),
+      true,
+    ),
+  );
+  return Array.from(y)
+    .filter(function (t) {
+      return !(function (t, n) {
+        var i = n.All === false && n[t] === undefined;
+        return n[t] === false || i;
+      })(t, i);
+    })
+    .map(function (n) {
+      var i = (function (t) {
+        return (
+          (t == null ? undefined : t.versionSettings)?.override ??
+          (t == null ? undefined : t.versionSettings)?.version ??
+          "latest"
+        );
+      })(d[n]);
+      var o = new N(n, i, t, g[n], e, m == null ? undefined : m[n]);
+      if (
+        l.filter(function (t) {
+          return t.destinationName === n;
+        }).length > 0 &&
+        r
+      ) {
+        o.addMiddleware(r);
+      }
+      return o;
+    });
 }
 export { N as LegacyDestination, j as ajsDestinations };

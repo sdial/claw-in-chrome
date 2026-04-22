@@ -11,6 +11,6 @@ import "./github-update-worker-runtime.js";
     chrome: globalThis.chrome,
     console: globalThis.console,
     fetch: globalThis.fetch?.bind(globalThis),
-    shared
+    shared,
   });
 })();

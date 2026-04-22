@@ -1,4 +1,10 @@
-import { ar as e, as as t, aD as r, au as a, at as n } from "./useStorageState-hbwNMVUA.js";
+import {
+  ar as e,
+  as as t,
+  aD as r,
+  au as a,
+  at as n,
+} from "./useStorageState-hbwNMVUA.js";
 import "./index-BVS4T5_D.js";
 import "./index-5uYI7rOK.js";
 import "./PermissionManager-9s959502.js";
@@ -17,12 +23,14 @@ function i(i, s, o) {
           } else {
             u = a();
             l = s.enabledMiddleware ?? {};
-            d = Object.entries(l).filter(function (e) {
-              e[0];
-              return e[1];
-            }).map(function (e) {
-              return e[0];
-            });
+            d = Object.entries(l)
+              .filter(function (e) {
+                e[0];
+                return e[1];
+              })
+              .map(function (e) {
+                return e[0];
+              });
             m = d.map(function (r) {
               return e(f, undefined, undefined, function () {
                 var e;
@@ -40,7 +48,7 @@ function i(i, s, o) {
                       s = `${u}/middleware/${a}/latest/${a}.js.gz`;
                       t.label = 1;
                     case 1:
-                      t.trys.push([1, 3,, 4]);
+                      t.trys.push([1, 3, , 4]);
                       return [4, n(s)];
                     case 2:
                       t.sent();

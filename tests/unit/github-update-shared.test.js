@@ -1,4 +1,5 @@
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
 const path = require("node:path");
 
 const {
@@ -7,6 +8,10 @@ const {
 } = require("../helpers/chrome-test-utils");
 
 const sharedPath = path.join(__dirname, "..", "..", "github-update-shared.js");
+const customZhPackSource = fs.readFileSync(
+  path.join(__dirname, "..", "..", "i18n", "custom", "zh-CN.js"),
+  "utf8"
+);
 
 function createFixedDate(isoString) {
   const RealDate = Date;
@@ -88,8 +93,10 @@ function createSharedHarness(options = {}) {
   const sandbox = {
     console,
     Date: options.DateImpl || Date,
+    Function: options.FunctionImpl || Function,
     URL,
     chrome: chromeMock.chrome,
+    fetch: options.fetch,
     window: {
       open(url, target, features) {
         windowOpenCalls.push({
@@ -255,6 +262,67 @@ function testLocaleReadersIncludeAccessibleUiAttributes() {
   }), "zh");
 }
 
+function testExplicitDocumentLocaleTagWinsOverBrowserLanguage() {
+  const { shared } = createSharedHarness({});
+  const document = createLocaleProbeDocument({
+    lang: "en-US"
+  });
+  document.documentElement.dataset = {
+    cpUiLocale: "zh-CN"
+  };
+
+  assert.equal(
+    shared.getUiLocaleTag({
+      document,
+      navigatorLanguage: "en-US"
+    }),
+    "zh-CN"
+  );
+}
+
+function testTraditionalChineseLocaleHelpers() {
+  const { shared } = createSharedHarness({});
+
+  assert.equal(shared.normalizeUiLocaleTag("zh-TW"), "zh-TW");
+  assert.equal(shared.normalizeUiLocaleTag("zh-Hant-HK"), "zh-TW");
+  assert.equal(
+    JSON.stringify(shared.getCustomLocaleResolutionChain("zh-TW")),
+    JSON.stringify(["zh-CN", "zh-TW"])
+  );
+}
+
+async function testCustomI18nPackLoadsWithoutUnsafeEval() {
+  const { shared } = createSharedHarness({
+    fetch: async function () {
+      return {
+        ok: true,
+        async text() {
+          return customZhPackSource;
+        }
+      };
+    },
+    FunctionImpl() {
+      throw new Error("unsafe-eval is blocked by CSP");
+    }
+  });
+
+  const pack = await shared.loadCustomI18nPack("zh-CN");
+  assert.equal(pack?.customProvider?.providerName, "模型供应商");
+
+  const section = await shared.resolveCustomI18nSection("customProvider", "zh-CN", {
+    providerName: "Model provider",
+    newProfile: "New profile",
+    healthCheck: "Health check",
+    reasoningEffortLabel: "Reasoning effort",
+    fastModelLabel: "Fast model"
+  });
+  assert.equal(section.providerName, "模型供应商");
+  assert.equal(section.newProfile, "新增配置");
+  assert.equal(section.healthCheck, "健康检测");
+  assert.equal(section.reasoningEffortLabel, "思考深度");
+  assert.equal(section.fastModelLabel, "快速模型");
+}
+
 async function testReadStoredStateAndOpenPagesUseChromeTabs() {
   const { shared, tabCreateCalls } = createSharedHarness({
     manifestVersion: "3.0.0.0",
@@ -320,6 +388,9 @@ async function main() {
   testNormalizeStoredInfoUsesAliasesAndDefaults();
   testNormalizeLatestPayloadUsesFixedClockAndValidatesVersion();
   testLocaleReadersIncludeAccessibleUiAttributes();
+  testExplicitDocumentLocaleTagWinsOverBrowserLanguage();
+  testTraditionalChineseLocaleHelpers();
+  await testCustomI18nPackLoadsWithoutUnsafeEval();
   await testReadStoredStateAndOpenPagesUseChromeTabs();
   await testOpenUrlFallsBackToWindowOpen();
   console.log("github update shared tests passed");

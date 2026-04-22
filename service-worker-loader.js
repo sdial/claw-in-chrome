@@ -2,6 +2,7 @@ import "./claw-contract.js";
 import "./mcp-permission-popup-protocol.js";
 import "./custom-provider-models.js";
 import "./provider-format-adapter.js";
+import "./telemetry-disable.js";
 // 先加载发行版 bundle，保留原有 background 主桥。
 import "./assets/service-worker.ts-H0DVM1LS.js";
 import "./github-update-shared.js";

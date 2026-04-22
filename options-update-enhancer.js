@@ -8,81 +8,115 @@
   const {
     STORAGE_KEYS,
     detectUiLocaleKey,
+    getUiLocaleTag,
+    cloneLocaleValue,
+    normalizeUiLocaleTag,
+    resolveCustomI18nSection,
     readStoredState,
-    openReleasePage
+    openReleasePage,
   } = shared;
 
-  const STRINGS = {
-    zh: {
-      title: "扩展更新",
-      subtitle: "查看最新版本、更新说明，以及扩展的自动检查行为。",
-      notes: "更新说明",
-      notesFallback: "当前发布没有附带详细更新说明。",
-      autoCheckLabel: "自动检查更新",
-      autoCheckHelp: "开启后会在启动扩展时和每 24 小时自动检查 GitHub Release。",
-      autoCheckOn: "已开启",
-      autoCheckOff: "已关闭",
-      enableAutoCheck: "开启自动检查",
-      disableAutoCheck: "关闭自动检查",
-      viewFullNotes: "查看完整更新说明",
-      notesDialogTitle: "完整更新说明",
-      viewRelease: "查看发布页",
-      close: "关闭",
-      unknown: "未知",
-      httpCardTitle: "HTTP 协议",
-      httpCardSubtitle: "允许自定义供应商使用非加密 HTTP 协议。默认开启，建议仅在可信内网或开发环境中使用。",
-      httpToggleLabel: "允许 HTTP 协议",
-      httpToggleHelp: "关闭时，保存配置、获取模型、健康检测和运行时请求都会拒绝 http:// 地址。",
-      httpToggleOn: "已开启",
-      httpToggleOff: "已关闭"
-    },
-    en: {
-      title: "Extension updates",
-      subtitle: "Review the latest version, release notes, and automatic update checks.",
-      notes: "Release notes",
-      notesFallback: "This release does not include detailed notes.",
-      autoCheckLabel: "Auto-check updates",
-      autoCheckHelp: "When enabled, the extension checks GitHub Releases on startup and once every 24 hours.",
-      autoCheckOn: "Enabled",
-      autoCheckOff: "Disabled",
-      enableAutoCheck: "Enable auto-check",
-      disableAutoCheck: "Disable auto-check",
-      viewFullNotes: "View full release notes",
-      notesDialogTitle: "Full release notes",
-      viewRelease: "Open release",
-      close: "Close",
-      unknown: "Unknown",
-      httpCardTitle: "HTTP Protocol",
-      httpCardSubtitle: "Allow custom providers to use unencrypted HTTP endpoints. Enabled by default, and best used only on trusted local networks or in development.",
-      httpToggleLabel: "Allow HTTP Protocol",
-      httpToggleHelp: "When disabled, saving profiles, fetching models, health checks, and runtime requests will all reject http:// addresses.",
-      httpToggleOn: "Enabled",
-      httpToggleOff: "Disabled"
-    }
+  const DEFAULT_STRINGS = {
+    title: "Extension updates",
+    subtitle:
+      "Review the latest version, release notes, and automatic update checks.",
+    notes: "Release notes",
+    notesFallback: "This release does not include detailed notes.",
+    autoCheckLabel: "Auto-check updates",
+    autoCheckHelp:
+      "When enabled, the extension checks GitHub Releases on startup and once every 24 hours.",
+    autoCheckOn: "Enabled",
+    autoCheckOff: "Disabled",
+    enableAutoCheck: "Enable auto-check",
+    disableAutoCheck: "Disable auto-check",
+    viewFullNotes: "View full release notes",
+    notesDialogTitle: "Full release notes",
+    viewRelease: "Open release",
+    close: "Close",
+    unknown: "Unknown",
+    httpCardTitle: "HTTP Protocol",
+    httpCardSubtitle:
+      "Allow custom providers to use unencrypted HTTP endpoints. Enabled by default, and best used only on trusted local networks or in development.",
+    httpToggleLabel: "Allow HTTP Protocol",
+    httpToggleHelp:
+      "When disabled, saving profiles, fetching models, health checks, and runtime requests will all reject http:// addresses.",
+    httpToggleOn: "Enabled",
+    httpToggleOff: "Disabled",
   };
   function getOptionsLocaleOptions() {
     return {
       document,
       navigatorLanguage: navigator.language,
-      ignoredSelectors: ["#" + MODAL_ROOT_ID, "#" + HTTP_PANEL_ID, "#" + HTTP_ANCHOR_ID],
-      zhPageHints: ["Claw in Chrome 设置", "Claude in Chrome 设置", "权限", "快捷方式", "选项", "扩展更新", "自动检查更新"],
-      enPagePatterns: [/\bPermissions\b/i, /\bShortcuts\b/i, /\bOptions\b/i, /\bExtension updates\b/i, /\bAuto-check updates\b/i]
+      ignoredSelectors: [
+        "#" + MODAL_ROOT_ID,
+        "#" + HTTP_PANEL_ID,
+        "#" + HTTP_ANCHOR_ID,
+      ],
+      zhPageHints: [
+        "Claw in Chrome 设置",
+        "Claude in Chrome 设置",
+        "权限",
+        "快捷方式",
+        "选项",
+        "扩展更新",
+        "自动检查更新",
+      ],
+      enPagePatterns: [
+        /\bPermissions\b/i,
+        /\bShortcuts\b/i,
+        /\bOptions\b/i,
+        /\bExtension updates\b/i,
+        /\bAuto-check updates\b/i,
+      ],
     };
   }
   function getOptionsLocaleKey() {
     return detectUiLocaleKey(getOptionsLocaleOptions());
   }
+
+  function getOptionsLocaleTag() {
+    return getUiLocaleTag(getOptionsLocaleOptions());
+  }
+
+  let currentStrings = DEFAULT_STRINGS;
+
+  function cloneStrings(value) {
+    return typeof cloneLocaleValue === "function"
+      ? cloneLocaleValue(value)
+      : JSON.parse(JSON.stringify(value));
+  }
+
+  async function ensureStrings(localeTag) {
+    const nextLocaleTag =
+      (typeof normalizeUiLocaleTag === "function"
+        ? normalizeUiLocaleTag(localeTag)
+        : String(localeTag || "").trim()) || "en-US";
+    if (typeof resolveCustomI18nSection === "function") {
+      currentStrings = await resolveCustomI18nSection(
+        "optionsUpdateEnhancer",
+        nextLocaleTag,
+        DEFAULT_STRINGS,
+      );
+      return;
+    }
+    currentStrings = cloneStrings(DEFAULT_STRINGS);
+  }
+
   function getStrings() {
-    return STRINGS[getOptionsLocaleKey()];
+    return currentStrings;
   }
 
   const STYLE_ID = "cp-options-update-enhancer-style";
   const MODAL_ROOT_ID = "cp-options-update-enhancer-modal-root";
   const HTTP_PANEL_ID = "cp-options-http-provider-panel";
   const HTTP_ANCHOR_ID = "cp-options-http-provider-anchor";
-  const HTTP_PROVIDER_STORAGE_KEY = providerContract.HTTP_PROVIDER_STORAGE_KEY || "customProviderAllowHttp";
-  const HTTP_PROVIDER_MIGRATED_KEY = providerContract.HTTP_PROVIDER_MIGRATED_KEY || "customProviderAllowHttpMigrated";
-  const SECONDARY_BUTTON_CLASS = "px-6 py-3 bg-bg-100 text-text-200 border border-border-300 rounded-xl hover:bg-bg-200 hover:text-text-100 transition-all font-large disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2";
+  const HTTP_PROVIDER_STORAGE_KEY =
+    providerContract.HTTP_PROVIDER_STORAGE_KEY || "customProviderAllowHttp";
+  const HTTP_PROVIDER_MIGRATED_KEY =
+    providerContract.HTTP_PROVIDER_MIGRATED_KEY ||
+    "customProviderAllowHttpMigrated";
+  const SECONDARY_BUTTON_CLASS =
+    "px-6 py-3 bg-bg-100 text-text-200 border border-border-300 rounded-xl hover:bg-bg-200 hover:text-text-100 transition-all font-large disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2";
 
   let state = null;
   let refreshScheduled = false;
@@ -100,7 +134,7 @@
       if (char === ">") {
         return "&gt;";
       }
-      if (char === "\"") {
+      if (char === '"') {
         return "&quot;";
       }
       return "&#39;";
@@ -108,14 +142,20 @@
   }
 
   function sanitizeUrl(value) {
-    const raw = String(value || "").trim().replace(/^<|>$/g, "");
+    const raw = String(value || "")
+      .trim()
+      .replace(/^<|>$/g, "");
     if (!raw) {
       return "";
     }
     try {
       const parsed = new URL(raw);
       const protocol = String(parsed.protocol || "").toLowerCase();
-      if (protocol === "http:" || protocol === "https:" || protocol === "mailto:") {
+      if (
+        protocol === "http:" ||
+        protocol === "https:" ||
+        protocol === "mailto:"
+      ) {
         return parsed.href;
       }
     } catch (error) {
@@ -136,14 +176,21 @@
     text = text.replace(/`([^`\n]+)`/g, function (_, code) {
       return reserve("<code>" + escapeHtml(code) + "</code>");
     });
-    text = text.replace(/\[([^\]\n]+)\]\(([^)\n]+)\)/g, function (_, label, href) {
-      const safeHref = sanitizeUrl(String(href || "").split(/\s+/)[0]);
-      return reserve(
-        safeHref
-          ? '<a href="' + escapeHtml(safeHref) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(label) + "</a>"
-          : escapeHtml(label)
-      );
-    });
+    text = text.replace(
+      /\[([^\]\n]+)\]\(([^)\n]+)\)/g,
+      function (_, label, href) {
+        const safeHref = sanitizeUrl(String(href || "").split(/\s+/)[0]);
+        return reserve(
+          safeHref
+            ? '<a href="' +
+                escapeHtml(safeHref) +
+                '" target="_blank" rel="noopener noreferrer">' +
+                escapeHtml(label) +
+                "</a>"
+            : escapeHtml(label),
+        );
+      },
+    );
     text = escapeHtml(text);
     text = text.replace(/\*\*\*([^*]+)\*\*\*/g, "<strong><em>$1</em></strong>");
     text = text.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
@@ -163,7 +210,9 @@
   }
 
   function renderMarkdownToHtml(markdown) {
-    const normalized = String(markdown || "").replace(/\r\n/g, "\n").trim();
+    const normalized = String(markdown || "")
+      .replace(/\r\n/g, "\n")
+      .trim();
     if (!normalized) {
       return "";
     }
@@ -181,14 +230,14 @@
       if (unordered) {
         return {
           ordered: false,
-          content: unordered[1]
+          content: unordered[1],
         };
       }
       const ordered = line.match(/^\d+\.\s+(.+)$/);
       if (ordered) {
         return {
           ordered: true,
-          content: ordered[1]
+          content: ordered[1],
         };
       }
       return null;
@@ -213,15 +262,31 @@
         if (index < lines.length) {
           index += 1;
         }
-        const languageClass = language ? ' class="language-' + escapeHtml(language) + '"' : "";
-        blocks.push("<pre><code" + languageClass + ">" + escapeHtml(codeLines.join("\n")) + "</code></pre>");
+        const languageClass = language
+          ? ' class="language-' + escapeHtml(language) + '"'
+          : "";
+        blocks.push(
+          "<pre><code" +
+            languageClass +
+            ">" +
+            escapeHtml(codeLines.join("\n")) +
+            "</code></pre>",
+        );
         continue;
       }
 
       const headingMatch = line.match(/^(#{1,6})\s+(.+)$/);
       if (headingMatch) {
         const level = headingMatch[1].length;
-        blocks.push("<h" + level + ">" + renderInlineMarkdown(headingMatch[2]) + "</h" + level + ">");
+        blocks.push(
+          "<h" +
+            level +
+            ">" +
+            renderInlineMarkdown(headingMatch[2]) +
+            "</h" +
+            level +
+            ">",
+        );
         index += 1;
         continue;
       }
@@ -232,7 +297,11 @@
           quotedLines.push(lines[index].trimStart().replace(/^>\s?/, ""));
           index += 1;
         }
-        blocks.push("<blockquote>" + renderMarkdownToHtml(quotedLines.join("\n")) + "</blockquote>");
+        blocks.push(
+          "<blockquote>" +
+            renderMarkdownToHtml(quotedLines.join("\n")) +
+            "</blockquote>",
+        );
         continue;
       }
 
@@ -267,9 +336,25 @@
         if (currentItem) {
           items.push(currentItem);
         }
-        blocks.push("<" + tagName + ">" + items.map(function (item) {
-          return "<li>" + stripSingleParagraph(renderMarkdownToHtml(item) || renderInlineMarkdown(item)) + "</li>";
-        }).join("") + "</" + tagName + ">");
+        blocks.push(
+          "<" +
+            tagName +
+            ">" +
+            items
+              .map(function (item) {
+                return (
+                  "<li>" +
+                  stripSingleParagraph(
+                    renderMarkdownToHtml(item) || renderInlineMarkdown(item),
+                  ) +
+                  "</li>"
+                );
+              })
+              .join("") +
+            "</" +
+            tagName +
+            ">",
+        );
         continue;
       }
 
@@ -277,13 +362,21 @@
       index += 1;
       while (index < lines.length) {
         const nextLine = lines[index];
-        if (isBlank(nextLine) || /^```/.test(nextLine.trim()) || /^(#{1,6})\s+/.test(nextLine.trim()) || /^>\s?/.test(nextLine.trim()) || getListMeta(nextLine.trim())) {
+        if (
+          isBlank(nextLine) ||
+          /^```/.test(nextLine.trim()) ||
+          /^(#{1,6})\s+/.test(nextLine.trim()) ||
+          /^>\s?/.test(nextLine.trim()) ||
+          getListMeta(nextLine.trim())
+        ) {
           break;
         }
         paragraphLines.push(nextLine.trimEnd());
         index += 1;
       }
-      blocks.push("<p>" + renderInlineMarkdown(paragraphLines.join("\n")) + "</p>");
+      blocks.push(
+        "<p>" + renderInlineMarkdown(paragraphLines.join("\n")) + "</p>",
+      );
     }
 
     return blocks.join("");
@@ -570,30 +663,42 @@
     if (getActiveTab() !== "options") {
       return false;
     }
-    const subview = String(getHashQuery().get("provider") || "").trim().toLowerCase();
+    const subview = String(getHashQuery().get("provider") || "")
+      .trim()
+      .toLowerCase();
     return !subview;
   }
 
   function findUpdatePanel() {
     const strings = getStrings();
-    return Array.from(document.querySelectorAll("section")).find(function (section) {
-      const heading = section.querySelector("h3");
-      if (!heading) {
-        return false;
-      }
-      const title = String(heading.textContent || "").trim();
-      return title === strings.title && String(section.textContent || "").includes(strings.autoCheckLabel);
-    }) || null;
+    return (
+      Array.from(document.querySelectorAll("section")).find(function (section) {
+        const heading = section.querySelector("h3");
+        if (!heading) {
+          return false;
+        }
+        const title = String(heading.textContent || "").trim();
+        return (
+          title === strings.title &&
+          String(section.textContent || "").includes(strings.autoCheckLabel)
+        );
+      }) || null
+    );
   }
 
   function findExactTextNode(container, selector, expectedText) {
-    return Array.from(container.querySelectorAll(selector)).find(function (node) {
-      return String(node.textContent || "").trim() === expectedText;
-    }) || null;
+    return (
+      Array.from(container.querySelectorAll(selector)).find(function (node) {
+        return String(node.textContent || "").trim() === expectedText;
+      }) || null
+    );
   }
   function getProviderHelpers() {
     const helpers = globalThis.CustomProviderModels;
-    return helpers && typeof helpers.readHttpProviderSupportEnabled === "function" ? helpers : null;
+    return helpers &&
+      typeof helpers.readHttpProviderSupportEnabled === "function"
+      ? helpers
+      : null;
   }
   async function readHttpProviderSupportEnabled() {
     const helpers = getProviderHelpers();
@@ -612,7 +717,7 @@
     try {
       await chrome.storage.local.set({
         [HTTP_PROVIDER_STORAGE_KEY]: nextEnabled,
-        [HTTP_PROVIDER_MIGRATED_KEY]: true
+        [HTTP_PROVIDER_MIGRATED_KEY]: true,
       });
       if (state) {
         state.httpEnabled = nextEnabled;
@@ -642,14 +747,27 @@
     document.getElementById(HTTP_ANCHOR_ID)?.remove();
   }
   function isEnhancerOwnedNode(node) {
-    const element = node instanceof Element ? node : node?.parentElement || null;
+    const element =
+      node instanceof Element ? node : node?.parentElement || null;
     if (!element) {
       return false;
     }
-    if (element.id === MODAL_ROOT_ID || element.id === HTTP_PANEL_ID || element.id === HTTP_ANCHOR_ID) {
+    if (
+      element.id === MODAL_ROOT_ID ||
+      element.id === HTTP_PANEL_ID ||
+      element.id === HTTP_ANCHOR_ID
+    ) {
       return true;
     }
-    return !!element.closest("#" + MODAL_ROOT_ID + ", #" + HTTP_PANEL_ID + ", #" + HTTP_ANCHOR_ID + ", [data-cp-update-enhancer-notes], [data-cp-update-enhancer-toggle]");
+    return !!element.closest(
+      "#" +
+        MODAL_ROOT_ID +
+        ", #" +
+        HTTP_PANEL_ID +
+        ", #" +
+        HTTP_ANCHOR_ID +
+        ", [data-cp-update-enhancer-notes], [data-cp-update-enhancer-toggle]",
+    );
   }
 
   function ensureModalRoot() {
@@ -703,7 +821,9 @@
     title.textContent = strings.notesDialogTitle;
     const version = document.createElement("div");
     version.className = "cp-update-enhancer-version";
-    version.textContent = state.info.latestVersion ? "v" + state.info.latestVersion : strings.unknown;
+    version.textContent = state.info.latestVersion
+      ? "v" + state.info.latestVersion
+      : strings.unknown;
     titleWrap.appendChild(title);
     titleWrap.appendChild(version);
     header.appendChild(titleWrap);
@@ -720,7 +840,9 @@
     body.className = "cp-update-enhancer-body";
     const content = document.createElement("div");
     content.className = "cp-update-enhancer-md";
-    content.innerHTML = renderMarkdownToHtml(state.info.notes) || "<p>" + escapeHtml(strings.notesFallback) + "</p>";
+    content.innerHTML =
+      renderMarkdownToHtml(state.info.notes) ||
+      "<p>" + escapeHtml(strings.notesFallback) + "</p>";
     body.appendChild(content);
 
     const footer = document.createElement("div");
@@ -762,7 +884,7 @@
       scheduleEnhance();
     }
     await chrome.storage.local.set({
-      [STORAGE_KEYS.AUTO_CHECK_ENABLED]: enabled
+      [STORAGE_KEYS.AUTO_CHECK_ENABLED]: enabled,
     });
     if (state) {
       state.autoCheckEnabled = enabled;
@@ -778,7 +900,8 @@
     if (!field) {
       return;
     }
-    const signature = (state?.info?.notes || "") + "||" + (state?.info?.latestVersion || "");
+    const signature =
+      (state?.info?.notes || "") + "||" + (state?.info?.latestVersion || "");
     const current = field.querySelector("[data-cp-update-enhancer-notes]");
     if (current && current.dataset.cpUpdateEnhancerNotes === signature) {
       return;
@@ -793,7 +916,9 @@
 
     const preview = document.createElement("div");
     preview.className = "cp-update-enhancer-md cp-update-enhancer-preview";
-    preview.innerHTML = state?.info?.notes ? renderMarkdownToHtml(state.info.notes) : "<p>" + escapeHtml(strings.notesFallback) + "</p>";
+    preview.innerHTML = state?.info?.notes
+      ? renderMarkdownToHtml(state.info.notes)
+      : "<p>" + escapeHtml(strings.notesFallback) + "</p>";
     shell.appendChild(preview);
 
     if (state?.info?.notes) {
@@ -810,13 +935,18 @@
 
     content.replaceWith(shell);
     requestAnimationFrame(function () {
-      preview.dataset.overflow = preview.scrollHeight > preview.clientHeight + 4 ? "true" : "false";
+      preview.dataset.overflow =
+        preview.scrollHeight > preview.clientHeight + 4 ? "true" : "false";
     });
   }
 
   function enhanceAutoCheck(panel) {
     const strings = getStrings();
-    const title = findExactTextNode(panel, ".cp-page-row-title", strings.autoCheckLabel);
+    const title = findExactTextNode(
+      panel,
+      ".cp-page-row-title",
+      strings.autoCheckLabel,
+    );
     const row = title ? title.closest(".cp-page-row") : null;
     if (!row) {
       return;
@@ -828,7 +958,10 @@
       return;
     }
 
-    const signature = (state?.autoCheckEnabled ? "1" : "0") + ":" + (state?.autoCheckPending ? "1" : "0");
+    const signature =
+      (state?.autoCheckEnabled ? "1" : "0") +
+      ":" +
+      (state?.autoCheckPending ? "1" : "0");
     const current = control.querySelector("[data-cp-update-enhancer-toggle]");
     if (current && current.dataset.cpUpdateEnhancerToggle === signature) {
       return;
@@ -845,7 +978,10 @@
     toggle.style.pointerEvents = "auto";
     toggle.disabled = !!state?.autoCheckPending;
     toggle.setAttribute("role", "switch");
-    toggle.setAttribute("aria-checked", state?.autoCheckEnabled ? "true" : "false");
+    toggle.setAttribute(
+      "aria-checked",
+      state?.autoCheckEnabled ? "true" : "false",
+    );
     toggle.setAttribute("aria-label", strings.autoCheckLabel);
     toggle.title = strings.autoCheckLabel;
     toggle.addEventListener("click", function () {
@@ -867,17 +1003,24 @@
     const strings = getStrings();
     const anchor = ensureHttpPanelAnchor(panel);
     let httpPanel = document.getElementById(HTTP_PANEL_ID);
-    const signature = (state?.httpEnabled ? "1" : "0") + ":" + (state?.httpTogglePending ? "1" : "0");
+    const signature =
+      (state?.httpEnabled ? "1" : "0") +
+      ":" +
+      (state?.httpTogglePending ? "1" : "0");
     if (!httpPanel) {
       httpPanel = document.createElement("section");
       httpPanel.id = HTTP_PANEL_ID;
-      httpPanel.className = "cp-page-card cp-page-panel bg-bg-100 border border-border-300 rounded-xl px-6 pt-6 pb-6 md:px-8 md:pt-8 md:pb-8";
+      httpPanel.className =
+        "cp-page-card cp-page-panel bg-bg-100 border border-border-300 rounded-xl px-6 pt-6 pb-6 md:px-8 md:pt-8 md:pb-8";
     }
     httpPanel.style.marginTop = "24px";
     httpPanel.style.pointerEvents = "auto";
     httpPanel.style.position = "relative";
     httpPanel.style.zIndex = "1";
-    if (httpPanel.dataset.cpHttpPanelSignature === signature && anchor.nextElementSibling === httpPanel) {
+    if (
+      httpPanel.dataset.cpHttpPanelSignature === signature &&
+      anchor.nextElementSibling === httpPanel
+    ) {
       return;
     }
     const shell = document.createElement("div");
@@ -961,12 +1104,16 @@
   }
 
   async function refreshState() {
-    const [updateState, httpEnabled] = await Promise.all([readStoredState(), readHttpProviderSupportEnabled()]);
+    const [updateState, httpEnabled] = await Promise.all([
+      readStoredState(),
+      readHttpProviderSupportEnabled(),
+      ensureStrings(getOptionsLocaleTag()),
+    ]);
     state = {
       ...(updateState && typeof updateState === "object" ? updateState : {}),
       httpEnabled,
       autoCheckPending: !!state?.autoCheckPending,
-      httpTogglePending: !!state?.httpTogglePending
+      httpTogglePending: !!state?.httpTogglePending,
     };
     scheduleEnhance();
   }
@@ -976,12 +1123,19 @@
       return;
     }
     enhanceScheduled = true;
-    const scheduler = typeof requestAnimationFrame === "function" ? requestAnimationFrame : function (callback) {
-      return setTimeout(callback, 16);
-    };
+    const scheduler =
+      typeof requestAnimationFrame === "function"
+        ? requestAnimationFrame
+        : function (callback) {
+            return setTimeout(callback, 16);
+          };
     scheduler(function () {
       enhanceScheduled = false;
-      enhancePanel();
+      Promise.resolve(ensureStrings(getOptionsLocaleTag()))
+        .catch(function () {})
+        .then(function () {
+          enhancePanel();
+        });
     });
   }
 
@@ -990,9 +1144,12 @@
       return;
     }
     refreshScheduled = true;
-    const scheduler = typeof requestAnimationFrame === "function" ? requestAnimationFrame : function (callback) {
-      return setTimeout(callback, 16);
-    };
+    const scheduler =
+      typeof requestAnimationFrame === "function"
+        ? requestAnimationFrame
+        : function (callback) {
+            return setTimeout(callback, 16);
+          };
     scheduler(function () {
       refreshScheduled = false;
       refreshState().catch(function () {});
@@ -1005,7 +1162,11 @@
       if (areaName !== "local") {
         return;
       }
-      if (changes[STORAGE_KEYS.INFO] || changes[STORAGE_KEYS.AUTO_CHECK_ENABLED] || changes[HTTP_PROVIDER_STORAGE_KEY]) {
+      if (
+        changes[STORAGE_KEYS.INFO] ||
+        changes[STORAGE_KEYS.AUTO_CHECK_ENABLED] ||
+        changes[HTTP_PROVIDER_STORAGE_KEY]
+      ) {
         scheduleRefresh();
       }
     });
@@ -1014,14 +1175,17 @@
       scheduleEnhance();
     });
     const observer = new MutationObserver(function (mutations) {
-      const isSelfMutation = Array.isArray(mutations) && mutations.length > 0 && mutations.every(function (mutation) {
-        if (!isEnhancerOwnedNode(mutation.target)) {
-          return false;
-        }
-        return Array.from(mutation.addedNodes || []).every(function (node) {
-          return isEnhancerOwnedNode(node);
+      const isSelfMutation =
+        Array.isArray(mutations) &&
+        mutations.length > 0 &&
+        mutations.every(function (mutation) {
+          if (!isEnhancerOwnedNode(mutation.target)) {
+            return false;
+          }
+          return Array.from(mutation.addedNodes || []).every(function (node) {
+            return isEnhancerOwnedNode(node);
+          });
         });
-      });
       if (isSelfMutation) {
         return;
       }
@@ -1031,13 +1195,13 @@
     });
     observer.observe(document.body, {
       childList: true,
-      subtree: true
+      subtree: true,
     });
   }
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", bootstrap, {
-      once: true
+      once: true,
     });
   } else {
     bootstrap();

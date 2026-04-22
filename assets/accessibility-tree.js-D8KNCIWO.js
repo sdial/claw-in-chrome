@@ -23,33 +23,44 @@
         }
         var r = e.tagName.toLowerCase();
         var i = e.getAttribute("type");
-        return {
-          a: "link",
-          button: "button",
-          input: i === "submit" || i === "button" ? "button" : i === "checkbox" ? "checkbox" : i === "radio" ? "radio" : i === "file" ? "button" : "textbox",
-          select: "combobox",
-          textarea: "textbox",
-          h1: "heading",
-          h2: "heading",
-          h3: "heading",
-          h4: "heading",
-          h5: "heading",
-          h6: "heading",
-          img: "image",
-          nav: "navigation",
-          main: "main",
-          header: "banner",
-          footer: "contentinfo",
-          section: "region",
-          article: "article",
-          aside: "complementary",
-          form: "form",
-          table: "table",
-          ul: "list",
-          ol: "list",
-          li: "listitem",
-          label: "label"
-        }[r] || "generic";
+        return (
+          {
+            a: "link",
+            button: "button",
+            input:
+              i === "submit" || i === "button"
+                ? "button"
+                : i === "checkbox"
+                  ? "checkbox"
+                  : i === "radio"
+                    ? "radio"
+                    : i === "file"
+                      ? "button"
+                      : "textbox",
+            select: "combobox",
+            textarea: "textbox",
+            h1: "heading",
+            h2: "heading",
+            h3: "heading",
+            h4: "heading",
+            h5: "heading",
+            h6: "heading",
+            img: "image",
+            nav: "navigation",
+            main: "main",
+            header: "banner",
+            footer: "contentinfo",
+            section: "region",
+            article: "article",
+            aside: "complementary",
+            form: "form",
+            table: "table",
+            ul: "list",
+            ol: "list",
+            li: "listitem",
+            label: "label",
+          }[r] || "generic"
+        );
       };
       // 语义锚点：推断元素 role（包含 input[type] 特判）
       const __cpAccessibilityTreeInferRole = h;
@@ -57,7 +68,8 @@
         var t = e.tagName.toLowerCase();
         if (t === "select") {
           var r = e;
-          var i = r.querySelector("option[selected]") || r.options[r.selectedIndex];
+          var i =
+            r.querySelector("option[selected]") || r.options[r.selectedIndex];
           if (i && i.textContent) {
             return i.textContent.trim();
           }
@@ -79,7 +91,7 @@
           return l.trim();
         }
         if (e.id) {
-          var u = document.querySelector("label[for=\"" + e.id + "\"]");
+          var u = document.querySelector('label[for="' + e.id + '"]');
           if (u && u.textContent && u.textContent.trim()) {
             return u.textContent.trim();
           }
@@ -137,28 +149,70 @@
       const __cpAccessibilityTreeInferLabel = g;
       let m = function (e) {
         var t = window.getComputedStyle(e);
-        return t.display !== "none" && t.visibility !== "hidden" && t.opacity !== "0" && e.offsetWidth > 0 && e.offsetHeight > 0;
+        return (
+          t.display !== "none" &&
+          t.visibility !== "hidden" &&
+          t.opacity !== "0" &&
+          e.offsetWidth > 0 &&
+          e.offsetHeight > 0
+        );
       };
       // 语义锚点：元素可见性判断（display/visibility/opacity/尺寸）
       const __cpAccessibilityTreeIsVisible = m;
       let s = function (e) {
         var t = e.tagName.toLowerCase();
-        return ["a", "button", "input", "select", "textarea", "details", "summary"].includes(t) || e.getAttribute("onclick") !== null || e.getAttribute("tabindex") !== null || e.getAttribute("role") === "button" || e.getAttribute("role") === "link" || e.getAttribute("contenteditable") === "true";
+        return (
+          [
+            "a",
+            "button",
+            "input",
+            "select",
+            "textarea",
+            "details",
+            "summary",
+          ].includes(t) ||
+          e.getAttribute("onclick") !== null ||
+          e.getAttribute("tabindex") !== null ||
+          e.getAttribute("role") === "button" ||
+          e.getAttribute("role") === "link" ||
+          e.getAttribute("contenteditable") === "true"
+        );
       };
       // 语义锚点：元素交互性判断（tag/onclick/tabindex/role/contenteditable）
       const __cpAccessibilityTreeIsInteractive = s;
       let p = function (e) {
         var t = e.tagName.toLowerCase();
-        return ["h1", "h2", "h3", "h4", "h5", "h6", "nav", "main", "header", "footer", "section", "article", "aside"].includes(t) || e.getAttribute("role") !== null;
+        return (
+          [
+            "h1",
+            "h2",
+            "h3",
+            "h4",
+            "h5",
+            "h6",
+            "nav",
+            "main",
+            "header",
+            "footer",
+            "section",
+            "article",
+            "aside",
+          ].includes(t) || e.getAttribute("role") !== null
+        );
       };
       // 语义锚点：结构性元素判断（heading/landmark/role）
       const __cpAccessibilityTreeIsStructural = p;
       let w = function (e, t) {
         var r = e.tagName.toLowerCase();
-        if (["script", "style", "meta", "link", "title", "noscript"].includes(r)) {
+        if (
+          ["script", "style", "meta", "link", "title", "noscript"].includes(r)
+        ) {
           return false;
         }
-        if (t.filter !== __cpAccessibilityTreeFilterAll && e.getAttribute("aria-hidden") === "true") {
+        if (
+          t.filter !== __cpAccessibilityTreeFilterAll &&
+          e.getAttribute("aria-hidden") === "true"
+        ) {
           return false;
         }
         if (t.filter !== __cpAccessibilityTreeFilterAll && !m(e)) {
@@ -166,7 +220,12 @@
         }
         if (t.filter !== __cpAccessibilityTreeFilterAll && !t.refId) {
           var i = e.getBoundingClientRect();
-          if (!(i.top < window.innerHeight) || !(i.bottom > 0) || !(i.left < window.innerWidth) || !(i.right > 0)) {
+          if (
+            !(i.top < window.innerHeight) ||
+            !(i.bottom > 0) ||
+            !(i.left < window.innerWidth) ||
+            !(i.right > 0)
+          ) {
             return false;
           }
         }
@@ -190,7 +249,7 @@
       const __cpAccessibilityTreeShouldIncludeElement = w;
       let b = function (e, t, r) {
         if (!(t > a) && e && e.tagName) {
-          var i = w(e, r) || r.refId !== null && t === 0;
+          var i = w(e, r) || (r.refId !== null && t === 0);
           if (i) {
             var o = h(e);
             var l = g(e);
@@ -203,22 +262,29 @@
               }
             }
             if (!u) {
-              u = __cpAccessibilityTreeRefIdPrefix + ++window.__claudeRefCounter;
+              u =
+                __cpAccessibilityTreeRefIdPrefix + ++window.__claudeRefCounter;
               window.__claudeElementMap[u] = new WeakRef(e);
             }
             var c = " ".repeat(t) + o;
             if (l) {
-              c += " \"" + (l = l.replace(/\s+/g, " ").substring(0, 100)).replace(/"/g, "\\\"") + "\"";
+              c +=
+                ' "' +
+                (l = l.replace(/\s+/g, " ").substring(0, 100)).replace(
+                  /"/g,
+                  '\\"',
+                ) +
+                '"';
             }
             c += " [" + u + "]";
             if (e.getAttribute("href")) {
-              c += " href=\"" + e.getAttribute("href") + "\"";
+              c += ' href="' + e.getAttribute("href") + '"';
             }
             if (e.getAttribute("type")) {
-              c += " type=\"" + e.getAttribute("type") + "\"";
+              c += ' type="' + e.getAttribute("type") + '"';
             }
             if (e.getAttribute("placeholder")) {
-              c += " placeholder=\"" + e.getAttribute("placeholder") + "\"";
+              c += ' placeholder="' + e.getAttribute("placeholder") + '"';
             }
             n.push(c);
             if (e.tagName.toLowerCase() === "select") {
@@ -227,13 +293,19 @@
                 var p = " ".repeat(t + 1) + "option";
                 var v = s.textContent ? s.textContent.trim() : "";
                 if (v) {
-                  p += " \"" + (v = v.replace(/\s+/g, " ").substring(0, 100)).replace(/"/g, "\\\"") + "\"";
+                  p +=
+                    ' "' +
+                    (v = v.replace(/\s+/g, " ").substring(0, 100)).replace(
+                      /"/g,
+                      '\\"',
+                    ) +
+                    '"';
                 }
                 if (s.selected) {
                   p += " (selected)";
                 }
                 if (s.value && s.value !== v) {
-                  p += " value=\"" + s.value.replace(/"/g, "\\\"") + "\"";
+                  p += ' value="' + s.value.replace(/"/g, '\\"') + '"';
                 }
                 n.push(p);
               }
@@ -253,30 +325,36 @@
       var a = t ?? __cpAccessibilityTreeDefaultDepth;
       var o = {
         filter: e || __cpAccessibilityTreeFilterAll,
-        refId: i
+        refId: i,
       };
       // 语义锚点：ref_id 增量读取链：通过 WeakRef 账本定位旧节点；映射失效时返回指导性错误，让调用方重新 read_page 全量拉树。
       if (i) {
         var l = window.__claudeElementMap[i];
         if (!l) {
           return {
-            error: "Element with ref_id '" + i + "' not found. It may have been removed from the page. Use read_page without ref_id to get the current page state.",
+            error:
+              "Element with ref_id '" +
+              i +
+              "' not found. It may have been removed from the page. Use read_page without ref_id to get the current page state.",
             pageContent: "",
             viewport: {
               width: window.innerWidth,
-              height: window.innerHeight
-            }
+              height: window.innerHeight,
+            },
           };
         }
         var u = l.deref();
         if (!u) {
           return {
-            error: "Element with ref_id '" + i + "' no longer exists. It may have been removed from the page. Use read_page without ref_id to get the current page state.",
+            error:
+              "Element with ref_id '" +
+              i +
+              "' no longer exists. It may have been removed from the page. Use read_page without ref_id to get the current page state.",
             pageContent: "",
             viewport: {
               width: window.innerWidth,
-              height: window.innerHeight
-            }
+              height: window.innerHeight,
+            },
           };
         }
         b(u, 0, o);
@@ -292,25 +370,37 @@
       var c = n.join("\n");
       if (r != null && c.length > r) {
         // 语义锚点：序列化结果超限时不截断正文，而是返回收窄 depth / ref_id 的操作建议。
-        var f = "Output exceeds " + r + " character limit (" + c.length + " characters). ";
+        var f =
+          "Output exceeds " +
+          r +
+          " character limit (" +
+          c.length +
+          " characters). ";
         return {
-          error: f += i ? "The specified element has too much content. Try specifying a smaller depth parameter or focus on a more specific child element." : t !== undefined ? "Try specifying an even smaller depth parameter or use ref_id to focus on a specific element." : "Try specifying a depth parameter (e.g., depth: 5) or use ref_id to focus on a specific element from the page.",
+          error: (f += i
+            ? "The specified element has too much content. Try specifying a smaller depth parameter or focus on a more specific child element."
+            : t !== undefined
+              ? "Try specifying an even smaller depth parameter or use ref_id to focus on a specific element."
+              : "Try specifying a depth parameter (e.g., depth: 5) or use ref_id to focus on a specific element from the page."),
           pageContent: "",
           viewport: {
             width: window.innerWidth,
-            height: window.innerHeight
-          }
+            height: window.innerHeight,
+          },
         };
       }
       return {
         pageContent: c,
         viewport: {
           width: window.innerWidth,
-          height: window.innerHeight
-        }
+          height: window.innerHeight,
+        },
       };
     } catch (h) {
-      throw new Error("Error generating accessibility tree: " + (h.message || "Unknown error"));
+      throw new Error(
+        "Error generating accessibility tree: " +
+          (h.message || "Unknown error"),
+      );
     }
   };
   const __cpAccessibilityTreeGenerate = window.__generateAccessibilityTree;

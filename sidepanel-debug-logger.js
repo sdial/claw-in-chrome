@@ -8,8 +8,10 @@
   const providerContract = contract.customProvider || {};
   const permissionManagerContract = contract.permissionManager || {};
   const debugContract = contract.debug || {};
+  const uiContract = contract.ui || {};
   const STORAGE_KEY = debugContract.SIDEPANEL_LOGS_STORAGE_KEY || "sidepanelDebugLogs";
   const META_KEY = debugContract.SIDEPANEL_META_STORAGE_KEY || "sidepanelDebugMeta";
+  const DEBUG_MODE_STORAGE_KEY = uiContract.DEBUG_MODE_STORAGE_KEY || "debugMode";
   const MAX_ENTRIES = 500;
   const FLUSH_DELAY_MS = 150;
   const SESSION_ID = "sp-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
@@ -37,6 +39,7 @@
   let sequence = 0;
   let flushTimer = null;
   let isFlushing = false;
+  // 调试模式固定开启，不再受本地 debugMode 偏好关闭。
   let debugEnabled = true;
   const pendingEntries = [];
   function normalizeKey(key) {
@@ -223,7 +226,19 @@
     });
   }
   async function hydrateDebugMode() {
+    if (!chrome?.storage?.local) {
+      debugEnabled = true;
+      return debugEnabled;
+    }
+    const stored = await chrome.storage.local.get(DEBUG_MODE_STORAGE_KEY);
     debugEnabled = true;
+    if (stored[DEBUG_MODE_STORAGE_KEY] !== true) {
+      try {
+        await chrome.storage.local.set({
+          [DEBUG_MODE_STORAGE_KEY]: true
+        });
+      } catch {}
+    }
     return debugEnabled;
   }
   function scheduleFlush() {
@@ -323,280 +338,6 @@
       console.groupEnd();
     });
   }
-  const panelState = {
-    mounted: false,
-    open: false,
-    launcherVisible: false,
-    refreshTimer: null,
-    statusText: "",
-    elements: null,
-    mountRetryTimer: null
-  };
-  function showLauncher() {
-    if (!panelState.elements?.host) {
-      return;
-    }
-    panelState.launcherVisible = true;
-    panelState.elements.host.style.display = "flex";
-  }
-  function hideLauncher() {
-    if (!panelState.elements?.host) {
-      return;
-    }
-    panelState.launcherVisible = false;
-    panelState.elements.host.style.display = "none";
-  }
-  function stopPanelRefresh() {
-    if (panelState.refreshTimer) {
-      clearInterval(panelState.refreshTimer);
-      panelState.refreshTimer = null;
-    }
-  }
-  function schedulePanelMountRetry() {
-    if (panelState.mounted || panelState.mountRetryTimer) {
-      return;
-    }
-    panelState.mountRetryTimer = setTimeout(function () {
-      panelState.mountRetryTimer = null;
-      ensurePanelMounted();
-    }, 120);
-  }
-  function setPanelStatus(text) {
-    panelState.statusText = text || "";
-    if (panelState.elements?.status) {
-      panelState.elements.status.textContent = panelState.statusText;
-    }
-  }
-  async function renderPanelLogs() {
-    if (!panelState.elements) {
-      return;
-    }
-    try {
-      await flush();
-      const entries = await readLogs();
-      const visibleEntries = entries.slice(-80);
-      panelState.elements.textarea.value = JSON.stringify(visibleEntries, null, 2);
-      const lastEntry = visibleEntries.length ? visibleEntries[visibleEntries.length - 1] : null;
-      panelState.elements.meta.textContent = "共 " + entries.length + " 条，显示最近 " + visibleEntries.length + " 条" + (lastEntry ? "，最后更新时间 " + lastEntry.ts : "");
-      if (!panelState.statusText) {
-        setPanelStatus(lastEntry ? "最后事件: " + lastEntry.type : "当前还没有日志");
-      }
-    } catch (error) {
-      panelState.elements.textarea.value = JSON.stringify({
-        error: "failed_to_render_logs",
-        detail: normalizeError(error)
-      }, null, 2);
-      panelState.elements.meta.textContent = "日志读取失败";
-      setPanelStatus("读取失败");
-    }
-  }
-  function openPanel() {
-    if (!panelState.mounted) {
-      ensurePanelMounted();
-    }
-    if (!panelState.elements) {
-      return;
-    }
-    showLauncher();
-    panelState.open = true;
-    panelState.elements.panel.style.display = "flex";
-    panelState.elements.toggle.textContent = "收起日志";
-    panelState.elements.toggle.style.background = "#2f241a";
-    setPanelStatus("");
-    renderPanelLogs().catch(() => {});
-    stopPanelRefresh();
-    panelState.refreshTimer = setInterval(() => {
-      renderPanelLogs().catch(() => {});
-    }, 1200);
-  }
-  function closePanel() {
-    if (!panelState.elements) {
-      return;
-    }
-    panelState.open = false;
-    panelState.elements.panel.style.display = "none";
-    panelState.elements.toggle.textContent = "查看日志";
-    panelState.elements.toggle.style.background = "#171717";
-    stopPanelRefresh();
-    hideLauncher();
-  }
-  function togglePanel() {
-    if (panelState.open) {
-      closePanel();
-    } else {
-      openPanel();
-    }
-  }
-  function buildButton(label) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.textContent = label;
-    button.style.border = "1px solid #d7c8b4";
-    button.style.background = "#fffaf3";
-    button.style.color = "#2f241a";
-    button.style.borderRadius = "10px";
-    button.style.padding = "6px 10px";
-    button.style.fontSize = "12px";
-    button.style.lineHeight = "1";
-    button.style.cursor = "pointer";
-    return button;
-  }
-  function ensurePanelMounted() {
-    if (panelState.mounted) {
-      return;
-    }
-    if (!document.body) {
-      schedulePanelMountRetry();
-      return;
-    }
-    const host = document.createElement("div");
-    host.id = "sidepanel-debug-floating";
-    host.style.position = "fixed";
-    host.style.right = "12px";
-    host.style.bottom = "12px";
-    host.style.zIndex = "2147483647";
-    host.style.display = "none";
-    host.style.flexDirection = "column";
-    host.style.alignItems = "flex-end";
-    host.style.gap = "10px";
-    host.style.fontFamily = "\"SF Pro Text\",\"Segoe UI\",\"PingFang SC\",\"Microsoft YaHei\",sans-serif";
-    const panel = document.createElement("div");
-    panel.style.display = "none";
-    panel.style.width = "min(420px, calc(100vw - 24px))";
-    panel.style.height = "min(440px, calc(100vh - 80px))";
-    panel.style.background = "#f9f3ea";
-    panel.style.border = "1px solid #dccfbe";
-    panel.style.borderRadius = "16px";
-    panel.style.boxShadow = "0 18px 48px rgba(26, 20, 14, 0.2)";
-    panel.style.overflow = "hidden";
-    panel.style.display = "none";
-    panel.style.flexDirection = "column";
-    const header = document.createElement("div");
-    header.style.display = "flex";
-    header.style.alignItems = "center";
-    header.style.justifyContent = "space-between";
-    header.style.gap = "8px";
-    header.style.padding = "12px 14px";
-    header.style.background = "linear-gradient(180deg, rgba(255,250,243,0.98), rgba(245,235,221,0.98))";
-    header.style.borderBottom = "1px solid #e2d7c9";
-    const title = document.createElement("div");
-    title.textContent = "Sidepanel 调试日志";
-    title.style.fontSize = "13px";
-    title.style.fontWeight = "700";
-    title.style.color = "#2f241a";
-    const actions = document.createElement("div");
-    actions.style.display = "flex";
-    actions.style.flexWrap = "wrap";
-    actions.style.justifyContent = "flex-end";
-    actions.style.gap = "6px";
-    const refreshButton = buildButton("刷新");
-    const copyButton = buildButton("复制");
-    const clearButton = buildButton("清空");
-    const closeButton = buildButton("关闭");
-    const body = document.createElement("div");
-    body.style.display = "flex";
-    body.style.flexDirection = "column";
-    body.style.gap = "8px";
-    body.style.padding = "12px";
-    body.style.flex = "1";
-    body.style.minHeight = "0";
-    const meta = document.createElement("div");
-    meta.style.fontSize = "12px";
-    meta.style.color = "#6f6254";
-    meta.textContent = "准备读取日志...";
-    const textarea = document.createElement("textarea");
-    textarea.readOnly = true;
-    textarea.spellcheck = false;
-    textarea.wrap = "off";
-    textarea.style.flex = "1";
-    textarea.style.minHeight = "0";
-    textarea.style.resize = "none";
-    textarea.style.width = "100%";
-    textarea.style.boxSizing = "border-box";
-    textarea.style.border = "1px solid #d8cbb8";
-    textarea.style.borderRadius = "12px";
-    textarea.style.background = "#fffdf9";
-    textarea.style.color = "#2b241d";
-    textarea.style.font = "12px/1.45 \"Cascadia Code\",\"Consolas\",\"Courier New\",monospace";
-    textarea.style.padding = "10px";
-    const status = document.createElement("div");
-    status.style.fontSize = "12px";
-    status.style.color = "#8b5e3c";
-    status.textContent = "";
-    const toggle = document.createElement("button");
-    toggle.type = "button";
-    toggle.textContent = "查看日志";
-    toggle.style.border = "0";
-    toggle.style.borderRadius = "999px";
-    toggle.style.background = "#171717";
-    toggle.style.color = "#fff7ed";
-    toggle.style.padding = "10px 14px";
-    toggle.style.fontSize = "12px";
-    toggle.style.fontWeight = "700";
-    toggle.style.boxShadow = "0 10px 24px rgba(0, 0, 0, 0.22)";
-    toggle.style.cursor = "pointer";
-    actions.appendChild(refreshButton);
-    actions.appendChild(copyButton);
-    actions.appendChild(clearButton);
-    actions.appendChild(closeButton);
-    header.appendChild(title);
-    header.appendChild(actions);
-    body.appendChild(meta);
-    body.appendChild(textarea);
-    body.appendChild(status);
-    panel.appendChild(header);
-    panel.appendChild(body);
-    host.appendChild(panel);
-    host.appendChild(toggle);
-    document.body.appendChild(host);
-    panelState.elements = {
-      host,
-      panel,
-      toggle,
-      textarea,
-      status,
-      meta,
-      refreshButton,
-      copyButton,
-      clearButton,
-      closeButton
-    };
-    toggle.addEventListener("click", togglePanel);
-    closeButton.addEventListener("click", closePanel);
-    refreshButton.addEventListener("click", function () {
-      setPanelStatus("正在刷新...");
-      renderPanelLogs().then(() => {
-        setPanelStatus("已刷新");
-      }).catch(() => {
-        setPanelStatus("刷新失败");
-      });
-    });
-    copyButton.addEventListener("click", async function () {
-      try {
-        await navigator.clipboard.writeText(textarea.value || "");
-        setPanelStatus("日志已复制");
-      } catch (error) {
-        textarea.focus();
-        textarea.select();
-        setPanelStatus("复制失败，请手动 Ctrl+C");
-      }
-    });
-    clearButton.addEventListener("click", async function () {
-      try {
-        await clearLogs();
-        textarea.value = "";
-        meta.textContent = "日志已清空";
-        setPanelStatus("已清空");
-      } catch (error) {
-        setPanelStatus("清空失败");
-      }
-    });
-    panelState.mounted = true;
-    if (panelState.mountRetryTimer) {
-      clearTimeout(panelState.mountRetryTimer);
-      panelState.mountRetryTimer = null;
-    }
-  }
   globalThis.__CP_SIDEPANEL_DEBUG__ = {
     sessionId: SESSION_ID,
     log,
@@ -604,10 +345,7 @@
     read: readLogs,
     clear: clearLogs,
     snapshot,
-    dumpToConsole,
-    openPanel,
-    closePanel,
-    togglePanel
+    dumpToConsole
   };
   window.addEventListener("error", function (event) {
     log("window.error", {
@@ -637,6 +375,14 @@
     chrome.storage.onChanged.addListener(function (changes, areaName) {
       if (areaName !== "local") {
         return;
+      }
+      if (DEBUG_MODE_STORAGE_KEY in changes) {
+        debugEnabled = true;
+        if (changes[DEBUG_MODE_STORAGE_KEY].newValue !== true) {
+          chrome.storage.local.set({
+            [DEBUG_MODE_STORAGE_KEY]: true
+          }).catch(() => {});
+        }
       }
       const changedKeys = Object.keys(changes).filter(key => {
         return RELEVANT_STORAGE_KEYS.has(key) && key !== STORAGE_KEY && key !== META_KEY;

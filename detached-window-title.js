@@ -8,7 +8,10 @@
       return null;
     }
     const groupId = Number(params.get("groupId"));
-    if (!Number.isFinite(groupId) || groupId === chrome.tabGroups?.TAB_GROUP_ID_NONE) {
+    if (
+      !Number.isFinite(groupId) ||
+      groupId === chrome.tabGroups?.TAB_GROUP_ID_NONE
+    ) {
       return null;
     }
     return Math.trunc(groupId);
@@ -20,7 +23,9 @@
 
   function buildWindowTitle(groupTitle) {
     const normalizedGroupTitle = normalizeGroupTitle(groupTitle);
-    return normalizedGroupTitle ? `${DEFAULT_TITLE}${TITLE_SEPARATOR}${normalizedGroupTitle}` : DEFAULT_TITLE;
+    return normalizedGroupTitle
+      ? `${DEFAULT_TITLE}${TITLE_SEPARATOR}${normalizedGroupTitle}`
+      : DEFAULT_TITLE;
   }
 
   const groupId = parseDetachedWindowGroupId();
@@ -29,7 +34,7 @@
   }
 
   let lastAppliedTitle = "";
-  const applyWindowTitle = groupTitle => {
+  const applyWindowTitle = (groupTitle) => {
     const nextTitle = buildWindowTitle(groupTitle);
     if (nextTitle === lastAppliedTitle) {
       return;
@@ -51,14 +56,14 @@
     }
   };
 
-  const handleGroupUpdated = group => {
+  const handleGroupUpdated = (group) => {
     if (Number(group?.id) !== groupId) {
       return;
     }
     applyWindowTitle(group?.title);
   };
 
-  const handleGroupRemoved = group => {
+  const handleGroupRemoved = (group) => {
     if (Number(group?.id) !== groupId) {
       return;
     }
@@ -71,10 +76,14 @@
   chrome.tabGroups?.onUpdated?.addListener(handleGroupUpdated);
   chrome.tabGroups?.onRemoved?.addListener(handleGroupRemoved);
 
-  window.addEventListener("unload", function cleanupListeners() {
-    chrome.tabGroups?.onUpdated?.removeListener(handleGroupUpdated);
-    chrome.tabGroups?.onRemoved?.removeListener(handleGroupRemoved);
-  }, {
-    once: true
-  });
+  window.addEventListener(
+    "unload",
+    function cleanupListeners() {
+      chrome.tabGroups?.onUpdated?.removeListener(handleGroupUpdated);
+      chrome.tabGroups?.onRemoved?.removeListener(handleGroupRemoved);
+    },
+    {
+      once: true,
+    },
+  );
 })();

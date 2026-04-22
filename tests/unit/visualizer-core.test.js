@@ -566,6 +566,167 @@ function testFullSessionModeIncludesEarlierTurnsAndResetsStageBoundaries() {
   assert.equal(run.meta.currentStageId, "final");
 }
 
+function testTurnAnswerStartToolResultDoesNotRenderAsExecution() {
+  const snapshot = core.normalizeSessionSnapshot({
+    scopeId: "scope-turn-answer",
+    sessionId: "session-turn-answer",
+    messages: [{
+      role: "user",
+      content: [{
+        type: "text",
+        text: "你好"
+      }]
+    }, {
+      role: "assistant",
+      content: [{
+        type: "tool_use",
+        id: "turn-1",
+        name: "turn_answer_start",
+        input: {}
+      }]
+    }, {
+      role: "user",
+      content: [{
+        type: "tool_result",
+        tool_use_id: "turn-1",
+        content: [{
+          type: "text",
+          text: "Proceed with your response."
+        }]
+      }]
+    }, {
+      role: "assistant",
+      content: [{
+        type: "text",
+        text: "你好！有什么我可以帮你处理的吗？"
+      }]
+    }]
+  }, {
+    scopeId: "scope-turn-answer"
+  });
+
+  const run = core.buildVisualizerRun(snapshot, {
+    active: true,
+    source: "active"
+  });
+
+  assert.deepEqual(run.stages.map((stage) => stage.eventCount), [1, 0, 0, 1]);
+  assert.equal(run.events.some((event) => event.type === "tool_result"), false);
+  assert.equal(run.currentEvent?.type, "final_answer");
+  assert.equal(run.currentEvent?.text, "你好！有什么我可以帮你处理的吗？");
+  assert.equal(run.meta.currentStageId, "final");
+}
+
+function testSyntheticResultTextDoesNotBecomeUserInput() {
+  const snapshot = core.normalizeSessionSnapshot({
+    scopeId: "scope-synthetic-result",
+    sessionId: "session-synthetic-result",
+    messages: [{
+      role: "user",
+      content: [{
+        type: "text",
+        text: "帮我执行快捷命令"
+      }]
+    }, {
+      role: "user",
+      content: [{
+        type: "text",
+        text: "Done."
+      }],
+      _syntheticResult: true
+    }, {
+      role: "assistant",
+      content: [{
+        type: "tool_use",
+        id: "turn-1",
+        name: "turn_answer_start",
+        input: {}
+      }]
+    }, {
+      role: "assistant",
+      content: [{
+        type: "text",
+        text: "已完成。"
+      }]
+    }]
+  }, {
+    scopeId: "scope-synthetic-result"
+  });
+
+  const run = core.buildVisualizerRun(snapshot, {
+    active: true,
+    source: "active"
+  });
+
+  assert.equal(snapshot.messages[1].isSyntheticResult, true);
+  assert.deepEqual(run.stages.map((stage) => stage.eventCount), [1, 0, 0, 1]);
+  assert.equal(
+    run.events.some((event) => event.type === "user_text" && event.text === "Done."),
+    false
+  );
+  assert.equal(run.currentEvent?.type, "final_answer");
+  assert.equal(run.currentEvent?.text, "已完成。");
+  assert.equal(run.meta.currentStageId, "final");
+}
+
+function testCompactionMarkersDoNotBecomeVisibleConversationFlow() {
+  const snapshot = core.normalizeSessionSnapshot({
+    scopeId: "scope-compaction",
+    sessionId: "session-compaction",
+    messages: [{
+      role: "user",
+      content: [{
+        type: "text",
+        text: "原始请求"
+      }]
+    }, {
+      role: "assistant",
+      content: "This conversation has been summarized so we can keep going.",
+      isCompactionMessage: true
+    }, {
+      role: "user",
+      content: "这里是压缩后的对话摘要。",
+      isCompactSummary: true
+    }, {
+      role: "assistant",
+      content: [{
+        type: "tool_use",
+        id: "turn-1",
+        name: "turn_answer_start",
+        input: {}
+      }]
+    }, {
+      role: "assistant",
+      content: [{
+        type: "text",
+        text: "继续处理你的请求。"
+      }]
+    }]
+  }, {
+    scopeId: "scope-compaction"
+  });
+
+  const run = core.buildVisualizerRun(snapshot, {
+    active: true,
+    source: "active"
+  });
+
+  assert.equal(snapshot.messages[1].isCompactionMessage, true);
+  assert.equal(snapshot.messages[2].isCompactSummary, true);
+  assert.equal(snapshot.meta.title, "原始请求");
+  assert.equal(
+    run.events.some((event) => event.text === "这里是压缩后的对话摘要。"),
+    false
+  );
+  assert.equal(
+    run.events.some((event) => event.text === "This conversation has been summarized so we can keep going."),
+    false
+  );
+  assert.deepEqual(run.stages.map((stage) => stage.eventCount), [1, 0, 0, 1]);
+  assert.equal(run.currentEvent?.type, "final_answer");
+  assert.equal(run.currentEvent?.text, "继续处理你的请求。");
+}
+
 function testQueryOverrideSelectsExplicitSession() {
   const run = core.selectVisualizerRun(createStorageState(), {
     scopeId: "scope-history",
@@ -631,6 +792,9 @@ function main() {
   testModalCollapseOnlyTriggersForTallOrVeryLongContent();
   testFullModePreservesExactStructuredValues();
   testFullSessionModeIncludesEarlierTurnsAndResetsStageBoundaries();
+  testTurnAnswerStartToolResultDoesNotRenderAsExecution();
+  testSyntheticResultTextDoesNotBecomeUserInput();
+  testCompactionMarkersDoNotBecomeVisibleConversationFlow();
   testQueryOverrideSelectsExplicitSession();
   testMissingRequestedSessionFallsBackToSameScope();
   testSessionGroupsCollectEntriesByScope();

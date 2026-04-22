@@ -21,7 +21,7 @@
     }
     const byteArray = new Uint8Array(byteNumbers);
     const blob = new Blob([byteArray], {
-      type: "image/gif"
+      type: "image/gif",
     });
     const blobUrl = URL.createObjectURL(blob);
 

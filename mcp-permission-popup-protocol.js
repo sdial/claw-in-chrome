@@ -20,28 +20,42 @@
   const contractMessages = globalThis.__CP_CONTRACT__?.messages || {};
   const queryKeys = deepFreeze({
     TAB_ID: mcpBridgeContract.PERMISSION_POPUP_QUERY_KEYS?.TAB_ID || "tabId",
-    PERMISSION_ONLY: mcpBridgeContract.PERMISSION_POPUP_QUERY_KEYS?.PERMISSION_ONLY || "mcpPermissionOnly",
-    REQUEST_ID: mcpBridgeContract.PERMISSION_POPUP_QUERY_KEYS?.REQUEST_ID || "requestId"
+    PERMISSION_ONLY:
+      mcpBridgeContract.PERMISSION_POPUP_QUERY_KEYS?.PERMISSION_ONLY ||
+      "mcpPermissionOnly",
+    REQUEST_ID:
+      mcpBridgeContract.PERMISSION_POPUP_QUERY_KEYS?.REQUEST_ID || "requestId",
   });
   const storageFields = deepFreeze({
-    PROMPT: mcpBridgeContract.PERMISSION_PROMPT_STORAGE_FIELDS?.PROMPT || "prompt",
-    TAB_ID: mcpBridgeContract.PERMISSION_PROMPT_STORAGE_FIELDS?.TAB_ID || "tabId",
-    TIMESTAMP: mcpBridgeContract.PERMISSION_PROMPT_STORAGE_FIELDS?.TIMESTAMP || "timestamp"
+    PROMPT:
+      mcpBridgeContract.PERMISSION_PROMPT_STORAGE_FIELDS?.PROMPT || "prompt",
+    TAB_ID:
+      mcpBridgeContract.PERMISSION_PROMPT_STORAGE_FIELDS?.TAB_ID || "tabId",
+    TIMESTAMP:
+      mcpBridgeContract.PERMISSION_PROMPT_STORAGE_FIELDS?.TIMESTAMP ||
+      "timestamp",
   });
   const responseFields = deepFreeze({
-    REQUEST_ID: mcpBridgeContract.RUNTIME_MESSAGE_FIELDS?.REQUEST_ID || "requestId",
-    ALLOWED: mcpBridgeContract.RUNTIME_MESSAGE_FIELDS?.ALLOWED || "allowed"
+    REQUEST_ID:
+      mcpBridgeContract.RUNTIME_MESSAGE_FIELDS?.REQUEST_ID || "requestId",
+    ALLOWED: mcpBridgeContract.RUNTIME_MESSAGE_FIELDS?.ALLOWED || "allowed",
   });
   const popupWindow = deepFreeze({
     TYPE: "popup",
     WIDTH: 600,
     HEIGHT: 600,
-    FOCUSED: true
+    FOCUSED: true,
   });
-  const STORAGE_KEY_PREFIX = mcpBridgeContract.PERMISSION_PROMPT_STORAGE_KEY_PREFIX || "mcp_prompt_";
-  const RESPONSE_TIMEOUT_MS = Number.isFinite(Number(mcpBridgeContract.PERMISSION_POPUP_RESPONSE_TIMEOUT_MS)) ? Math.trunc(Number(mcpBridgeContract.PERMISSION_POPUP_RESPONSE_TIMEOUT_MS)) : 30000;
+  const STORAGE_KEY_PREFIX =
+    mcpBridgeContract.PERMISSION_PROMPT_STORAGE_KEY_PREFIX || "mcp_prompt_";
+  const RESPONSE_TIMEOUT_MS = Number.isFinite(
+    Number(mcpBridgeContract.PERMISSION_POPUP_RESPONSE_TIMEOUT_MS),
+  )
+    ? Math.trunc(Number(mcpBridgeContract.PERMISSION_POPUP_RESPONSE_TIMEOUT_MS))
+    : 30000;
   const WINDOW_CLOSE_DELAY_MS = 50;
-  const RESPONSE_MESSAGE_TYPE = contractMessages.MCP_PERMISSION_RESPONSE || "MCP_PERMISSION_RESPONSE";
+  const RESPONSE_MESSAGE_TYPE =
+    contractMessages.MCP_PERMISSION_RESPONSE || "MCP_PERMISSION_RESPONSE";
   const PAGE_PATH = "sidepanel.html";
 
   function normalizePositiveInteger(value) {
@@ -69,7 +83,7 @@
     return {
       tabId: normalizePositiveInteger(params.get(queryKeys.TAB_ID)),
       permissionOnly: params.get(queryKeys.PERMISSION_ONLY) === "true",
-      requestId
+      requestId,
     };
   }
 
@@ -86,13 +100,16 @@
     return {
       [storageFields.PROMPT]: prompt,
       [storageFields.TAB_ID]: normalizePositiveInteger(tabId),
-      [storageFields.TIMESTAMP]: Number(timestamp)
+      [storageFields.TIMESTAMP]: Number(timestamp),
     };
   }
 
   function getPromptStorageEntry(storageSnapshot, requestId) {
     const storageKey = buildPromptStorageKey(requestId);
-    const snapshot = storageSnapshot && typeof storageSnapshot === "object" ? storageSnapshot : {};
+    const snapshot =
+      storageSnapshot && typeof storageSnapshot === "object"
+        ? storageSnapshot
+        : {};
     return snapshot[storageKey] || null;
   }
 
@@ -100,7 +117,7 @@
     return {
       type: RESPONSE_MESSAGE_TYPE,
       [responseFields.REQUEST_ID]: normalizeRequestId(requestId),
-      [responseFields.ALLOWED]: allowed === true
+      [responseFields.ALLOWED]: allowed === true,
     };
   }
 
@@ -125,7 +142,7 @@
       type: popupWindow.TYPE,
       width: popupWindow.WIDTH,
       height: popupWindow.HEIGHT,
-      focused: popupWindow.FOCUSED
+      focused: popupWindow.FOCUSED,
     };
   }
 
@@ -148,6 +165,6 @@
     getPromptStorageEntry,
     buildResponseMessage,
     buildPopupUrl,
-    createPopupWindowOptions
+    createPopupWindowOptions,
   });
 })();

@@ -11,78 +11,78 @@
 
 简体中文 | [English](./README_EN.md)
 
-这是一个放在 Chrome 侧边栏里的助手扩展。解除了Claude in Chrome的登录限制和套餐限制,支持自定义模型供应商,并且支持编辑原插件不支持编辑的参数,让您的大模型在该插件中有更好的表现!
+把 Claw 放进 Chrome 侧边栏，让你在浏览网页时直接接入自己的模型供应商，并把浏览器内的部分操作能力交给 AI。
 
-## 简介
+<a href="#-快速开始"><b>🚀 快速开始</b></a> | <a href="#-功能亮点"><b>✨ 功能亮点</b></a> | <a href="#-项目结构"><b>🗂️ 项目结构</b></a>
 
-这个扩展主要功能：
+![侧边栏聊天界面](./docs/screenshots/03.png) 
+![流程可视化](./docs/screenshots/06.png)
 
-- 支持接入你自己的模型接口
-- 在侧边栏让ai操控你的浏览器帮你完成任务
+---
 
-![侧边栏聊天界面](./docs/screenshots/03.png)
+## ✨ 功能亮点
 
-## 1. 安装
+- **🧠 自定义模型供应商**
+  - 支持接入你自己的模型接口，按需配置 `Base URL`、`API Key`、`模型` 等关键参数。
+- **🧩 侧边栏内直接使用**
+  - 作为 Chrome 扩展运行，无需额外桌面客户端，打开侧边栏即可完成对话与任务辅助。
+- **🔗 可与 Claw in Chrome MCP 联动**
+  - 支持与 [`claw-in-chrome-mcp`](https://github.com/S-Trespassing/claw-in-chrome-mcp) 配合使用，扩展浏览器内的自动化与协同能力。
+- **⚙️ 更细粒度的参数控制**
+  - 可编辑原插件中不方便调整的供应商参数，方便适配自建网关、本地模型和第三方平台。
+- **🌍 多语言与界面增强**
+  - 仓库内置多语言资源、设置页增强与可视化相关模块，方便持续迭代与日常排查。
+
+## 💡 适用场景
+
+- 想在 Chrome 里直接调用自己的模型接口，而不是受限于默认提供方
+- 想保留侧边栏工作流，同时接入本地模型、代理网关或第三方平台
+- 想让 AI 在浏览网页时承担更多辅助操作与信息整理工作
+
+## 🚀 快速开始
+
+### 1. 安装扩展
 
 1. 打开 `chrome://extensions/`
-2. 开启右上角“开发者模式”
-3. 点击“加载已解压的扩展程序”
-4. 选择当前这个 `claw in chrome` 文件夹
-5. 把 `Claw` 固定到浏览器工具栏
+2. 开启右上角 **开发者模式**
+3. 点击 **加载已解压的扩展程序**
+4. 选择当前 `claw in chrome` 文件夹
+5. 将 `Claw` 固定到浏览器工具栏，并打开侧边栏
 
-## 2. 配置
+### 2. 配置模型供应商
 
-先打开扩展设置页，然后进入左侧的 `模型供应商`。
-
-新增一套配置后，主要填写这几项：
+打开扩展设置页，进入左侧 `模型供应商`。新增一套配置后，主要填写：
 
 - `供应商格式`
 - `Base URL`
 - `API Key`
-- `模型` 
+- `模型`
+
+保存并应用后，关闭并重新打开一次侧边栏即可生效。
+
+### 3. 推荐设置
+
+**推荐优先使用 `Anthropic` 协议格式。**
+
+在当前项目的目标场景下，这种格式通常更能发挥工具能力，也更容易对齐交互预期。
+
+## 🗂️ 项目结构
+
+- `assets/`：扩展资源与打包产物
+- `i18n/`：多语言文案
+- `tests/`：单元、集成与 E2E 测试
+- `scripts/`：发布辅助脚本
+- `docs/`：截图与补充说明
+
+## ⚖️ License
+
+**MIT** 
+
+---
+
+**⭐ 如果这个项目对你有帮助，欢迎点个 Star 支持一下。**
+
+##  Star 历史
 
 
-
-填完后点击 `保存并应用`，然后把侧边栏关掉再重新打开一次,之后就可以愉快使用啦~ 
-## 3. 推荐设置
-
-**推荐将“供应商格式”设置为 `Anthropic` 协议**。相比于其他协议格式，使用 Anthropic 协议进行调用能够最大程度发挥工具的潜力，模型在实际使用中的表现和响应效果会更好。
-
-![模型供应商配置页](./docs/screenshots/02.png)
-
-## 4. 测试
-
-首次执行：
-
-```bash
-npm install
-```
-
-常用命令：
-
-```bash
-npm run test:unit
-npm run test:integration
-npm run test:e2e
-npm test
-```
-
-说明：
-
-- `test:unit` 只跑纯逻辑回归
-- `test:integration` 跑 fake `chrome` 环境集成测试
-- `test:e2e` 默认启动 Playwright 自带 Chromium，加载当前扩展目录做冒烟验证
-- `npm test` 会按 `unit -> integration -> e2e` 全量执行
-
-如果你想强制使用本机 Chrome/Edge，也可以先设置环境变量 `CLAW_E2E_BROWSER_PATH`
-
-
-## Star 历史
-
-<a href="https://www.star-history.com/?repos=S-Trespassing%2Fclaw-in-chrome&type=date&legend=top-left">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=S-Trespassing/claw-in-chrome&type=date&theme=dark&legend=top-left" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=S-Trespassing/claw-in-chrome&type=date&legend=top-left" />
-   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=S-Trespassing/claw-in-chrome&type=date&legend=top-left" />
- </picture>
-</a>
+[![Star History Chart](https://api.star-history.com/svg?repos=S-Trespassing/claw-in-chrome&type=date&legend=top-left)](https://www.star-history.com/#S-Trespassing/claw-in-chrome&type=date&legend=top-left)

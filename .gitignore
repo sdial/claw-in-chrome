@@ -19,5 +19,8 @@ custom-build-badge.css
 /public/offscreen.html
 学习路线.md
 /build-release-import.bat
-/_local-release-import/
+/local-release-import/
 /不同版本
+知识.md
+AGENTS.md
+tmp.log

@@ -4,254 +4,141 @@
   if (!core || !root || !globalThis.chrome?.storage?.local) {
     return;
   }
-
-  const STRINGS = {
-    zh: {
-      htmlLang: "zh-CN",
-      pageTitle: "Claw 执行可视化",
-      pageEyebrow: "真实会话可视化",
-      pageHeading: "Claw in Chrome执行流可视化",
-      pageSubtitle: "通过执行流可视化的方式,更好的理解Claw in Chrome的工作原理",
-      liveRunning: "实时观察中",
-      liveCompleted: "最近一次本地会话",
-      liveEmpty: "暂无可视化会话",
-      lanes: {
-        assistant: "模型 / Assistant",
-        runtime: "Claw in Chrome",
-        tools: "浏览器工具 / Tools"
-      },
-      stageTitle: {
-        request: "请求",
-        planning: "规划 / 准备",
-        execution: "工具执行",
-        final: "最终答复"
-      },
-      source: {
-        active: "当前 activeSession",
-        recent: "最近一次本地会话"
-      },
-      status: {
-        running: "运行中",
-        completed: "已完成"
-      },
-      layout: {
-        sequenceTitle: "执行流舞台",
-        sequenceSubtitle: "点击任意节点查看真实详情。",
-        runtimeTitle: "运行面板",
-        runtimeSubtitle: "右侧用终端式摘要 + 步骤列表组织真实会话，不再把全部细节摊开。",
-        stepsTitle: "步骤轨道",
-        stepsHint: "点击任意节点查看详情。",
-        nodeListTitle: "步骤节点",
-        nodeListHint: "把流程节点移到左栏，便于纵向切换。",
-        loadedTitle: "当前加载对话",
-        loadedHint: "当前可视化正在使用的本地会话。",
-        detailButton: "查看详情",
-        prev: "上一步",
-        next: "下一步",
-        current: "当前步骤",
-        terminalSource: "真实会话",
-        emptyNodes: "当前会话里还没有足够的节点可展示。"
-      },
-      sessions: {
-        groupsTitle: "会话管理",
-        groupsHint: "切换到想要流程可视化的对话",
-        groupsEmpty: "暂无本地会话",
-        historyTitle: "组内会话",
-        historyHint: "点击某条会话记录，立即切换当前可视化。",
-        historyEmpty: "当前分组里还没有可加载的会话。",
-        backToGroups: "返回列表",
-        browserTitle: "加载会话",
-        browserHint: "按最近更新时间浏览本地会话，选择后立即切换当前真实执行流。",
-        browserOpen: "加载会话",
-        browserClose: "关闭",
-        browserCurrent: "当前会话",
-        groupSessions: "{count} 个会话",
-        messageCount: "{count} 条消息",
-        active: "运行中",
-        recent: "最近更新",
-        selected: "当前",
-        open: "查看"
-      },
-      badge: {
-        input: "INPUT",
-        request: "REQUEST",
-        assistant: "ASSISTANT",
-        toolCall: "TOOL_CALL",
-        toolResult: "TOOL_RESULT",
-        permission: "PERMISSION",
-        final: "FINAL"
-      },
-      node: {
-        userInput: "用户输入",
-        requestToModel: "发起模型请求",
-        assistantResponse: "模型返回响应",
-        toolCall: "模型请求工具",
-        toolResult: "工具返回结果",
-        permission: "等待授权",
-        final: "最终答复"
-      },
-      derivedRequestSummary: {
-        user_text: "携带用户请求发起首轮模型调用。",
-        tool_result: "携带上一轮工具结果进入下一轮模型调用。",
-        permission_required: "等待授权完成后，才会继续模型调用。",
-        default: "把当前上下文整理后再次发给模型。"
-      },
-      meta: {
-        source: "来源",
-        status: "状态",
-        model: "模型",
-        site: "站点",
-        updatedAt: "最近更新时间",
-        selectedStep: "当前选中步骤",
-        stage: "所属阶段"
-      },
-      modal: {
-        close: "关闭",
-        content: "内容",
-        summary: "摘要",
-        payload: "参数 / JSON",
-        result: "结果",
-        resultJson: "结果 / JSON",
-        screenshot: "截图",
-        note: "说明",
-        source: "来源",
-        tool: "工具",
-        stage: "阶段",
-        derived: "这是根据真实会话时序推导出的请求边界，用来表示 Claw 运行时把当前上下文再次发给模型；它不是额外写入 storage 的原始消息。"
-      },
-      summaryToggle: {
-        expand: "展开",
-        collapse: "收起"
-      },
-      emptyTitle: "还没有可以展示的执行会话",
-      emptyBody: "",
-      footerNote: "请先发起一次会话后再来此界面",
-      stepCounter: "{current}/{total}",
-      noSummary: "等待更多真实会话数据…"
+  const i18nShared =
+    globalThis.__CP_I18N_SHARED__ ||
+    globalThis.__CP_GITHUB_UPDATE_SHARED__ ||
+    {};
+  const DEFAULT_STRINGS = {
+    htmlLang: "en-US",
+    pageTitle: "Claw Visualizer",
+    pageEyebrow: "Real session visualizer",
+    pageHeading: "Real execution flow",
+    pageSubtitle:
+      "Map the current local session into the real flow between the model, the Claw runtime, and browser tools.",
+    liveRunning: "Live monitoring",
+    liveCompleted: "Most recent local session",
+    liveEmpty: "No visualized run yet",
+    lanes: {
+      assistant: "Model / Assistant",
+      runtime: "Claw in Chrome",
+      tools: "Browser Tools / Tools",
     },
-    en: {
-      htmlLang: "en",
-      pageTitle: "Claw Visualizer",
-      pageEyebrow: "Real session visualizer",
-      pageHeading: "Real execution flow",
-      pageSubtitle: "Map the current local session into the real flow between the model, the Claw runtime, and browser tools.",
-      liveRunning: "Live monitoring",
-      liveCompleted: "Most recent local session",
-      liveEmpty: "No visualized run yet",
-      lanes: {
-        assistant: "Model / Assistant",
-        runtime: "Claw in Chrome",
-        tools: "Browser Tools / Tools"
-      },
-      stageTitle: {
-        request: "Request",
-        planning: "Planning / Preparation",
-        execution: "Tool execution",
-        final: "Final answer"
-      },
-      source: {
-        active: "Current activeSession",
-        recent: "Most recent local session"
-      },
-      status: {
-        running: "Running",
-        completed: "Completed"
-      },
-      layout: {
-        sequenceTitle: "Execution stage",
-        sequenceSubtitle: "Click any node to inspect real details.",
-        runtimeTitle: "Runtime panel",
-        runtimeSubtitle: "The right side keeps a terminal-like summary and step list instead of expanding every detail inline.",
-        stepsTitle: "Step rail",
-        stepsHint: "Click any node to inspect details.",
-        nodeListTitle: "Step nodes",
-        nodeListHint: "Move the node rail into the sidebar for vertical browsing.",
-        loadedTitle: "Loaded conversation",
-        loadedHint: "The local conversation currently visualized here.",
-        detailButton: "View details",
-        prev: "Previous",
-        next: "Next",
-        current: "Current step",
-        terminalSource: "Real session",
-        emptyNodes: "There are not enough events in this session to render the sequence yet."
-      },
-      sessions: {
-        groupsTitle: "Sessions",
-        groupsHint: "Show local sessions in reverse chronological order and switch the current visualization directly.",
-        groupsEmpty: "No local sessions yet",
-        historyTitle: "Group history",
-        historyHint: "Click a saved session to switch the current visualization.",
-        historyEmpty: "There are no loadable sessions in this group yet.",
-        backToGroups: "Back to list",
-        browserTitle: "Load sessions",
-        browserHint: "Browse local sessions in reverse chronological order and switch the current flow immediately.",
-        browserOpen: "Load sessions",
-        browserClose: "Close",
-        browserCurrent: "Current run",
-        groupSessions: "{count} sessions",
-        messageCount: "{count} messages",
-        active: "Live",
-        recent: "Updated",
-        selected: "Current",
-        open: "Open"
-      },
-      badge: {
-        input: "INPUT",
-        request: "REQUEST",
-        assistant: "ASSISTANT",
-        toolCall: "TOOL_CALL",
-        toolResult: "TOOL_RESULT",
-        permission: "PERMISSION",
-        final: "FINAL"
-      },
-      node: {
-        userInput: "User input",
-        requestToModel: "Request model",
-        assistantResponse: "Assistant response",
-        toolCall: "Assistant requests tool",
-        toolResult: "Tool result",
-        permission: "Permission required",
-        final: "Final answer"
-      },
-      derivedRequestSummary: {
-        user_text: "Send the first model request with the user prompt attached.",
-        tool_result: "Send the next model request with the latest tool result attached.",
-        permission_required: "Model execution continues only after approval is resolved.",
-        default: "Bundle the current context and request the model again."
-      },
-      meta: {
-        source: "Source",
-        status: "Status",
-        model: "Model",
-        site: "Site",
-        updatedAt: "Updated",
-        selectedStep: "Selected step",
-        stage: "Stage"
-      },
-      modal: {
-        close: "Close",
-        content: "Content",
-        summary: "Summary",
-        payload: "Arguments / JSON",
-        result: "Result",
-        resultJson: "Result / JSON",
-        screenshot: "Screenshot",
-        note: "Notes",
-        source: "Source",
-        tool: "Tool",
-        stage: "Stage",
-        derived: "This request boundary is inferred from the real session timeline to show when Claw sends the accumulated context back to the model. It is not a separately stored raw message."
-      },
-      summaryToggle: {
-        expand: "Expand",
-        collapse: "Collapse"
-      },
-      emptyTitle: "No visualizable run yet",
-      emptyBody: "",
-      footerNote: "Please start a session before returning to this page.",
-      stepCounter: "{current}/{total}",
-      noSummary: "Waiting for more real session data…"
-    }
+    stageTitle: {
+      request: "Request",
+      planning: "Planning / Preparation",
+      execution: "Tool execution",
+      final: "Final answer",
+    },
+    source: {
+      active: "Current activeSession",
+      recent: "Most recent local session",
+    },
+    status: {
+      running: "Running",
+      completed: "Completed",
+    },
+    layout: {
+      sequenceTitle: "Execution stage",
+      sequenceSubtitle: "Click any node to inspect real details.",
+      runtimeTitle: "Runtime panel",
+      runtimeSubtitle:
+        "The right side keeps a terminal-like summary and step list instead of expanding every detail inline.",
+      stepsTitle: "Step rail",
+      stepsHint: "Click any node to inspect details.",
+      nodeListTitle: "Step nodes",
+      nodeListHint: "Move the node rail into the sidebar for vertical browsing.",
+      loadedTitle: "Loaded conversation",
+      loadedHint: "The local conversation currently visualized here.",
+      detailButton: "View details",
+      prev: "Previous",
+      next: "Next",
+      current: "Current step",
+      terminalSource: "Real session",
+      emptyNodes:
+        "There are not enough events in this session to render the sequence yet.",
+    },
+    sessions: {
+      groupsTitle: "Sessions",
+      groupsHint:
+        "Show local sessions in reverse chronological order and switch the current visualization directly.",
+      groupsEmpty: "No local sessions yet",
+      historyTitle: "Group history",
+      historyHint:
+        "Click a saved session to switch the current visualization.",
+      historyEmpty: "There are no loadable sessions in this group yet.",
+      backToGroups: "Back to list",
+      browserTitle: "Load sessions",
+      browserHint:
+        "Browse local sessions in reverse chronological order and switch the current flow immediately.",
+      browserOpen: "Load sessions",
+      browserClose: "Close",
+      browserCurrent: "Current run",
+      groupSessions: "{count} sessions",
+      messageCount: "{count} messages",
+      active: "Live",
+      recent: "Updated",
+      selected: "Current",
+      open: "Open",
+    },
+    badge: {
+      input: "INPUT",
+      request: "REQUEST",
+      assistant: "ASSISTANT",
+      toolCall: "TOOL_CALL",
+      toolResult: "TOOL_RESULT",
+      permission: "PERMISSION",
+      final: "FINAL",
+    },
+    node: {
+      userInput: "User input",
+      requestToModel: "Request model",
+      assistantResponse: "Assistant response",
+      toolCall: "Assistant requests tool",
+      toolResult: "Tool result",
+      permission: "Permission required",
+      final: "Final answer",
+    },
+    derivedRequestSummary: {
+      user_text: "Send the first model request with the user prompt attached.",
+      tool_result:
+        "Send the next model request with the latest tool result attached.",
+      permission_required:
+        "Model execution continues only after approval is resolved.",
+      default: "Bundle the current context and request the model again.",
+    },
+    meta: {
+      source: "Source",
+      status: "Status",
+      model: "Model",
+      site: "Site",
+      updatedAt: "Updated",
+      selectedStep: "Selected step",
+      stage: "Stage",
+    },
+    modal: {
+      close: "Close",
+      content: "Content",
+      summary: "Summary",
+      payload: "Arguments / JSON",
+      result: "Result",
+      resultJson: "Result / JSON",
+      screenshot: "Screenshot",
+      note: "Notes",
+      source: "Source",
+      tool: "Tool",
+      stage: "Stage",
+      derived:
+        "This request boundary is inferred from the real session timeline to show when Claw sends the accumulated context back to the model. It is not a separately stored raw message.",
+    },
+    summaryToggle: {
+      expand: "Expand",
+      collapse: "Collapse",
+    },
+    emptyTitle: "No visualizable run yet",
+    emptyBody: "",
+    footerNote: "Please start a session before returning to this page.",
+    stepCounter: "{current}/{total}",
+    noSummary: "Waiting for more real session data…",
   };
 
   const LANE_POSITIONS = {
@@ -263,13 +150,11 @@
   const PREFERRED_LOCALE_STORAGE_KEY = uiContract.PREFERRED_LOCALE_STORAGE_KEY || "preferred_locale";
 
   const initialQuery = core.parseVisualizerQuery(globalThis.location?.search || "");
-  const initialLocaleKey = getLocaleKey({
-    hintLocale: initialQuery.locale
-  });
 
   const state = {
-    localeKey: initialLocaleKey,
-    strings: STRINGS[initialLocaleKey],
+    localeKey: "",
+    loadedLocaleKey: "",
+    strings: cloneStrings(DEFAULT_STRINGS),
     storageSnapshot: {},
     run: null,
     sessionGroups: [],
@@ -284,6 +169,9 @@
   };
 
   function normalizeLocaleTag(value) {
+    if (typeof i18nShared.normalizeUiLocaleTag === "function") {
+      return i18nShared.normalizeUiLocaleTag(value);
+    }
     const locale = String(value || "").trim().toLowerCase();
     if (!locale) {
       return "";
@@ -291,18 +179,58 @@
     return locale.startsWith("zh") ? "zh-CN" : "en-US";
   }
 
+  function cloneStrings(value) {
+    if (typeof i18nShared.cloneLocaleValue === "function") {
+      return i18nShared.cloneLocaleValue(value);
+    }
+    return JSON.parse(JSON.stringify(value));
+  }
+
   function getLocaleKey(options) {
     const settings = options && typeof options === "object" ? options : {};
     const preferredLocale = normalizeLocaleTag(settings.preferredLocale);
     if (preferredLocale) {
-      return preferredLocale.startsWith("zh") ? "zh" : "en";
+      return preferredLocale;
     }
     const hintLocale = normalizeLocaleTag(settings.hintLocale);
     if (hintLocale) {
-      return hintLocale.startsWith("zh") ? "zh" : "en";
+      return hintLocale;
     }
-    const language = String(navigator.language || "").toLowerCase();
-    return language.startsWith("zh") ? "zh" : "en";
+    return normalizeLocaleTag(navigator.language) || "en-US";
+  }
+
+  async function ensureStrings(localeTag) {
+    const nextLocaleTag = getLocaleKey({
+      preferredLocale: localeTag,
+      hintLocale: state.query?.locale
+    });
+    if (nextLocaleTag === state.loadedLocaleKey && state.strings) {
+      return false;
+    }
+    if (typeof i18nShared.resolveCustomI18nSection === "function") {
+      state.strings = await i18nShared.resolveCustomI18nSection(
+        "visualizer",
+        nextLocaleTag,
+        DEFAULT_STRINGS,
+      );
+    } else {
+      state.strings = cloneStrings(DEFAULT_STRINGS);
+    }
+    state.localeKey = nextLocaleTag;
+    state.loadedLocaleKey = nextLocaleTag;
+    return true;
+  }
+
+  function refreshLocaleStrings(localeTag) {
+    Promise.resolve(ensureStrings(localeTag))
+      .catch(function () {})
+      .then(function () {
+        if (state.storageSnapshot && Object.keys(state.storageSnapshot).length) {
+          recomputeRun();
+          return;
+        }
+        renderEmptyState();
+      });
   }
 
   function applyLocalePreference(preferredLocale) {
@@ -314,7 +242,7 @@
       return false;
     }
     state.localeKey = nextLocaleKey;
-    state.strings = STRINGS[nextLocaleKey];
+    refreshLocaleStrings(nextLocaleKey);
     return true;
   }
 
@@ -1612,7 +1540,9 @@
     root.addEventListener("click", handleRootClick);
     document.addEventListener("keydown", handleKeyDown);
     try {
-      applyLocalePreference(await readPreferredLocaleTag());
+      await ensureStrings(
+        (await readPreferredLocaleTag()) || state.query?.locale || navigator.language,
+      );
     } catch {}
     loadInitialStorage().catch(function (error) {
       console.error("[visualizer] failed to load storage", error);

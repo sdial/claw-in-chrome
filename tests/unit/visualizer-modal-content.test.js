@@ -1,4 +1,5 @@
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
 const path = require("node:path");
 
 const {
@@ -14,6 +15,36 @@ const {
 
 const corePath = path.join(__dirname, "..", "..", "visualizer-core.js");
 const scriptPath = path.join(__dirname, "..", "..", "visualizer.js");
+const customZhPack = Function(
+  `"use strict"; return (${fs.readFileSync(
+    path.join(__dirname, "..", "..", "i18n", "custom", "zh-CN.js"),
+    "utf8",
+  )});`,
+)();
+
+function createI18nShared() {
+  return {
+    cloneLocaleValue(value) {
+      return JSON.parse(JSON.stringify(value));
+    },
+    normalizeUiLocaleTag(value) {
+      const locale = String(value || "").trim().toLowerCase();
+      if (!locale) {
+        return "";
+      }
+      return locale.startsWith("zh") ? "zh-CN" : "en-US";
+    },
+    async resolveCustomI18nSection(sectionName, localeTag, defaults) {
+      if (String(localeTag || "").toLowerCase() === "zh-cn") {
+        return {
+          ...JSON.parse(JSON.stringify(defaults)),
+          ...(customZhPack[sectionName] || {}),
+        };
+      }
+      return JSON.parse(JSON.stringify(defaults));
+    },
+  };
+}
 
 function createStorageState(snapshot, scopeId, sessionId) {
   return {
@@ -54,6 +85,7 @@ function createVisualizerHarness(snapshot, options = {}) {
       search: options.search || ""
     },
     URLSearchParams,
+    __CP_I18N_SHARED__: createI18nShared(),
     setTimeout,
     clearTimeout
   };

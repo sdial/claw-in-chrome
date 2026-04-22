@@ -10,7 +10,10 @@ const i = {
   tokenize: function (e, t, i) {
     const o = this;
     const c = o.events[o.events.length - 1];
-    const s = c && c[1].type === "linePrefix" ? c[2].sliceSerialize(c[1], true).length : 0;
+    const s =
+      c && c[1].type === "linePrefix"
+        ? c[2].sliceSerialize(c[1], true).length
+        : 0;
     let u = 0;
     return function (t) {
       e.enter("mathFlow");
@@ -36,7 +39,7 @@ const i = {
       } else {
         e.enter("mathFlowFenceMeta");
         e.enter("chunkString", {
-          contentType: "string"
+          contentType: "string",
         });
         return m(t);
       }
@@ -62,10 +65,14 @@ const i = {
       }
     }
     function p(t) {
-      return e.attempt({
-        tokenize: w,
-        partial: true
-      }, g, d)(t);
+      return e.attempt(
+        {
+          tokenize: w,
+          partial: true,
+        },
+        g,
+        d,
+      )(t);
     }
     function d(t) {
       return (s ? n(e, x, "linePrefix", s + 1) : x)(t);
@@ -95,11 +102,18 @@ const i = {
     }
     function w(e, t, i) {
       let r = 0;
-      return n(e, function (t) {
-        e.enter("mathFlowFence");
-        e.enter("mathFlowFenceSequence");
-        return c(t);
-      }, "linePrefix", o.parser.constructs.disable.null.includes("codeIndented") ? undefined : 4);
+      return n(
+        e,
+        function (t) {
+          e.enter("mathFlowFence");
+          e.enter("mathFlowFenceSequence");
+          return c(t);
+        },
+        "linePrefix",
+        o.parser.constructs.disable.null.includes("codeIndented")
+          ? undefined
+          : 4,
+      );
       function c(t) {
         if (t === 36) {
           r++;
@@ -122,7 +136,7 @@ const i = {
       }
     }
   },
-  concrete: true
+  concrete: true,
 };
 const r = {
   tokenize: function (e, t, n) {
@@ -144,7 +158,7 @@ const r = {
       }
     }
   },
-  partial: true
+  partial: true,
 };
 function o(e) {
   let t = (e || {}).singleDollarTextMath;
@@ -220,7 +234,7 @@ function o(e) {
       }
     },
     resolve: c,
-    previous: s
+    previous: s,
   };
 }
 function c(e) {
@@ -228,8 +242,11 @@ function c(e) {
   let n;
   let a = e.length - 4;
   let i = 3;
-  if ((e[i][1].type === "lineEnding" || e[i][1].type === "space") && (e[a][1].type === "lineEnding" || e[a][1].type === "space")) {
-    for (t = i; ++t < a;) {
+  if (
+    (e[i][1].type === "lineEnding" || e[i][1].type === "space") &&
+    (e[a][1].type === "lineEnding" || e[a][1].type === "space")
+  ) {
+    for (t = i; ++t < a; ) {
       if (e[t][1].type === "mathTextData") {
         e[a][1].type = "mathTextPadding";
         e[i][1].type = "mathTextPadding";
@@ -260,195 +277,227 @@ function c(e) {
   return e;
 }
 function s(e) {
-  return e !== 36 || this.events[this.events.length - 1][1].type === "characterEscape";
+  return (
+    e !== 36 ||
+    this.events[this.events.length - 1][1].type === "characterEscape"
+  );
 }
 const u = {};
 function l(n) {
   const a = n || u;
   const r = this.data();
-  const c = r.micromarkExtensions ||= [];
-  const s = r.fromMarkdownExtensions ||= [];
-  const l = r.toMarkdownExtensions ||= [];
-  c.push(function (e) {
-    return {
-      flow: {
-        36: i
-      },
-      text: {
-        36: o(e)
-      }
-    };
-  }(a));
-  s.push(function () {
-    return {
-      enter: {
-        mathFlow: function (e) {
-          this.enter({
-            type: "math",
-            meta: null,
-            value: "",
-            data: {
-              hName: "pre",
-              hChildren: [{
-                type: "element",
-                tagName: "code",
-                properties: {
-                  className: ["language-math", "math-display"]
+  const c = (r.micromarkExtensions ||= []);
+  const s = (r.fromMarkdownExtensions ||= []);
+  const l = (r.toMarkdownExtensions ||= []);
+  c.push(
+    (function (e) {
+      return {
+        flow: {
+          36: i,
+        },
+        text: {
+          36: o(e),
+        },
+      };
+    })(a),
+  );
+  s.push(
+    (function () {
+      return {
+        enter: {
+          mathFlow: function (e) {
+            this.enter(
+              {
+                type: "math",
+                meta: null,
+                value: "",
+                data: {
+                  hName: "pre",
+                  hChildren: [
+                    {
+                      type: "element",
+                      tagName: "code",
+                      properties: {
+                        className: ["language-math", "math-display"],
+                      },
+                      children: [],
+                    },
+                  ],
                 },
-                children: []
-              }]
-            }
-          }, e);
-        },
-        mathFlowFenceMeta: function () {
-          this.buffer();
-        },
-        mathText: function (e) {
-          this.enter({
-            type: "inlineMath",
-            value: "",
-            data: {
-              hName: "code",
-              hProperties: {
-                className: ["language-math", "math-inline"]
               },
-              hChildren: []
-            }
-          }, e);
-          this.buffer();
-        }
-      },
-      exit: {
-        mathFlow: function (t) {
-          const n = this.resume().replace(/^(\r?\n|\r)|(\r?\n|\r)$/g, "");
-          const a = this.stack[this.stack.length - 1];
-          e(a.type === "math");
-          this.exit(t);
-          a.value = n;
-          const i = a.data.hChildren[0];
-          e(i.type === "element");
-          e(i.tagName === "code");
-          i.children.push({
-            type: "text",
-            value: n
-          });
-          this.data.mathFlowInside = undefined;
-        },
-        mathFlowFence: function () {
-          if (!this.data.mathFlowInside) {
+              e,
+            );
+          },
+          mathFlowFenceMeta: function () {
             this.buffer();
-            this.data.mathFlowInside = true;
-          }
+          },
+          mathText: function (e) {
+            this.enter(
+              {
+                type: "inlineMath",
+                value: "",
+                data: {
+                  hName: "code",
+                  hProperties: {
+                    className: ["language-math", "math-inline"],
+                  },
+                  hChildren: [],
+                },
+              },
+              e,
+            );
+            this.buffer();
+          },
         },
-        mathFlowFenceMeta: function () {
-          const t = this.resume();
-          const n = this.stack[this.stack.length - 1];
-          e(n.type === "math");
-          n.meta = t;
+        exit: {
+          mathFlow: function (t) {
+            const n = this.resume().replace(/^(\r?\n|\r)|(\r?\n|\r)$/g, "");
+            const a = this.stack[this.stack.length - 1];
+            e(a.type === "math");
+            this.exit(t);
+            a.value = n;
+            const i = a.data.hChildren[0];
+            e(i.type === "element");
+            e(i.tagName === "code");
+            i.children.push({
+              type: "text",
+              value: n,
+            });
+            this.data.mathFlowInside = undefined;
+          },
+          mathFlowFence: function () {
+            if (!this.data.mathFlowInside) {
+              this.buffer();
+              this.data.mathFlowInside = true;
+            }
+          },
+          mathFlowFenceMeta: function () {
+            const t = this.resume();
+            const n = this.stack[this.stack.length - 1];
+            e(n.type === "math");
+            n.meta = t;
+          },
+          mathFlowValue: t,
+          mathText: function (t) {
+            const n = this.resume();
+            const a = this.stack[this.stack.length - 1];
+            e(a.type === "inlineMath");
+            this.exit(t);
+            a.value = n;
+            a.data.hChildren.push({
+              type: "text",
+              value: n,
+            });
+          },
+          mathTextData: t,
         },
-        mathFlowValue: t,
-        mathText: function (t) {
-          const n = this.resume();
-          const a = this.stack[this.stack.length - 1];
-          e(a.type === "inlineMath");
-          this.exit(t);
-          a.value = n;
-          a.data.hChildren.push({
-            type: "text",
-            value: n
-          });
+      };
+      function t(e) {
+        this.config.enter.data.call(this, e);
+        this.config.exit.data.call(this, e);
+      }
+    })(),
+  );
+  l.push(
+    (function (e) {
+      let n = (e || {}).singleDollarTextMath;
+      if (n == null) {
+        n = true;
+      }
+      a.peek = function () {
+        return "$";
+      };
+      return {
+        unsafe: [
+          {
+            character: "\r",
+            inConstruct: "mathFlowMeta",
+          },
+          {
+            character: "\n",
+            inConstruct: "mathFlowMeta",
+          },
+          {
+            character: "$",
+            after: n ? undefined : "\\$",
+            inConstruct: "phrasing",
+          },
+          {
+            character: "$",
+            inConstruct: "mathFlowMeta",
+          },
+          {
+            atBreak: true,
+            character: "$",
+            after: "\\$",
+          },
+        ],
+        handlers: {
+          math: function (e, n, a, i) {
+            const r = e.value || "";
+            const o = a.createTracker(i);
+            const c = "$".repeat(Math.max(t(r, "$") + 1, 2));
+            const s = a.enter("mathFlow");
+            let u = o.move(c);
+            if (e.meta) {
+              const t = a.enter("mathFlowMeta");
+              u += o.move(
+                a.safe(e.meta, {
+                  after: "\n",
+                  before: u,
+                  encode: ["$"],
+                  ...o.current(),
+                }),
+              );
+              t();
+            }
+            u += o.move("\n");
+            if (r) {
+              u += o.move(r + "\n");
+            }
+            u += o.move(c);
+            s();
+            return u;
+          },
+          inlineMath: a,
         },
-        mathTextData: t
-      }
-    };
-    function t(e) {
-      this.config.enter.data.call(this, e);
-      this.config.exit.data.call(this, e);
-    }
-  }());
-  l.push(function (e) {
-    let n = (e || {}).singleDollarTextMath;
-    if (n == null) {
-      n = true;
-    }
-    a.peek = function () {
-      return "$";
-    };
-    return {
-      unsafe: [{
-        character: "\r",
-        inConstruct: "mathFlowMeta"
-      }, {
-        character: "\n",
-        inConstruct: "mathFlowMeta"
-      }, {
-        character: "$",
-        after: n ? undefined : "\\$",
-        inConstruct: "phrasing"
-      }, {
-        character: "$",
-        inConstruct: "mathFlowMeta"
-      }, {
-        atBreak: true,
-        character: "$",
-        after: "\\$"
-      }],
-      handlers: {
-        math: function (e, n, a, i) {
-          const r = e.value || "";
-          const o = a.createTracker(i);
-          const c = "$".repeat(Math.max(t(r, "$") + 1, 2));
-          const s = a.enter("mathFlow");
-          let u = o.move(c);
-          if (e.meta) {
-            const t = a.enter("mathFlowMeta");
-            u += o.move(a.safe(e.meta, {
-              after: "\n",
-              before: u,
-              encode: ["$"],
-              ...o.current()
-            }));
-            t();
-          }
-          u += o.move("\n");
-          if (r) {
-            u += o.move(r + "\n");
-          }
-          u += o.move(c);
-          s();
-          return u;
-        },
-        inlineMath: a
-      }
-    };
-    function a(e, t, a) {
-      let i = e.value || "";
-      let r = 1;
-      for (n || r++; new RegExp("(^|[^$])" + "\\$".repeat(r) + "([^$]|$)").test(i);) {
-        r++;
-      }
-      const o = "$".repeat(r);
-      if (/[^ \r\n]/.test(i) && (/^[ \r\n]/.test(i) && /[ \r\n]$/.test(i) || /^\$|\$$/.test(i))) {
-        i = " " + i + " ";
-      }
-      let c = -1;
-      while (++c < a.unsafe.length) {
-        const e = a.unsafe[c];
-        if (!e.atBreak) {
-          continue;
+      };
+      function a(e, t, a) {
+        let i = e.value || "";
+        let r = 1;
+        for (
+          n || r++;
+          new RegExp("(^|[^$])" + "\\$".repeat(r) + "([^$]|$)").test(i);
+
+        ) {
+          r++;
         }
-        const t = a.compilePattern(e);
-        let n;
-        while (n = t.exec(i)) {
-          let e = n.index;
-          if (i.codePointAt(e) === 10 && i.codePointAt(e - 1) === 13) {
-            e--;
-          }
-          i = i.slice(0, e) + " " + i.slice(n.index + 1);
+        const o = "$".repeat(r);
+        if (
+          /[^ \r\n]/.test(i) &&
+          ((/^[ \r\n]/.test(i) && /[ \r\n]$/.test(i)) || /^\$|\$$/.test(i))
+        ) {
+          i = " " + i + " ";
         }
+        let c = -1;
+        while (++c < a.unsafe.length) {
+          const e = a.unsafe[c];
+          if (!e.atBreak) {
+            continue;
+          }
+          const t = a.compilePattern(e);
+          let n;
+          while ((n = t.exec(i))) {
+            let e = n.index;
+            if (i.codePointAt(e) === 10 && i.codePointAt(e - 1) === 13) {
+              e--;
+            }
+            i = i.slice(0, e) + " " + i.slice(n.index + 1);
+          }
+        }
+        return o + i + o;
       }
-      return o + i + o;
-    }
-  }(a));
+    })(a),
+  );
 }
 export { l as default };

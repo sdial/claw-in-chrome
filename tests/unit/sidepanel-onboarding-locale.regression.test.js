@@ -6,6 +6,7 @@ const rootDir = path.join(__dirname, "..", "..");
 const intlRuntimePath = path.join(rootDir, "assets", "index-5uYI7rOK.js");
 const sidepanelBundlePath = path.join(rootDir, "assets", "sidepanel-BoLm9pmH.js");
 const zhMessagesPath = path.join(rootDir, "i18n", "zh-CN.json");
+const zhTwMessagesPath = path.join(rootDir, "i18n", "zh-TW.json");
 
 function read(filePath) {
   return fs.readFileSync(filePath, "utf8").replace(/\r\n/g, "\n");
@@ -16,13 +17,19 @@ function testSidepanelLocaleFallsBackToBrowserLanguage() {
 
   assert.match(
     source,
-    /const kn = \["en-US", "zh-CN", "de-DE", "fr-FR", "ko-KR", "ja-JP", "es-419", "es-ES", "it-IT", "hi-IN", "pt-BR", "id-ID"\];/,
-    "sidepanel intl runtime should register zh-CN as a supported locale"
+    /const kn = \[\s*"en-US",\s*"zh-CN",\s*"zh-TW",\s*"de-DE",\s*"fr-FR",\s*"ko-KR",\s*"ja-JP",\s*"es-419",\s*"es-ES",\s*"it-IT",\s*"hi-IN",\s*"pt-BR",\s*"id-ID",?\s*\];/s,
+    "sidepanel intl runtime should register zh-CN and zh-TW as supported locales"
   );
 
   assert.match(
     source,
-    /function Pn\(\) \{\s*const e = navigator\.language;\s*if \(kn\.includes\(e\)\) \{\s*return e;\s*\}\s*const t = e\.split\("-"\)\[0\];\s*return kn\.find\(e => e\.startsWith\(t \+ "-"\)\) \|\| wn;\s*\}/s,
+    /"zh-TW": "繁體中文"/,
+    "sidepanel intl runtime should expose a Traditional Chinese locale label"
+  );
+
+  assert.match(
+    source,
+    /function Pn\(\) \{\s*const e = navigator\.language;\s*if \(kn\.includes\(e\)\) \{\s*return e;\s*\}\s*const t = e\.split\("-"\)\[0\];\s*return kn\.find\(\(?e\)?\s*=>\s*e\.startsWith\(t \+ "-"\)\) \|\| wn;\s*\}/s,
     "sidepanel intl runtime should fall back from navigator.language to a matching locale family such as zh-CN"
   );
 
@@ -76,10 +83,21 @@ function testChineseLocaleContainsOnboardingTranslations() {
   assert.equal(messages["wVu1FLTwAn"], "开始吧");
 }
 
+function testTraditionalChineseLocaleContainsOnboardingTranslations() {
+  const messages = JSON.parse(read(zhTwMessagesPath));
+
+  assert.equal(messages["/06n65wN4J"], "這是一個 Beta 功能");
+  assert.equal(messages.RWrtnxjH8o, "這個 Beta 功能具有與其他 Claw 產品不同的獨特風險。使用本產品所帶來的全部風險需由你自行承擔。");
+  assert.equal(messages.Ddc1eapnSI, "Claw 在響應時可以截圖。出於隱私考慮，請避免在醫療、交友等敏感網站上使用 Claw。");
+  assert.equal(messages.DvXQDnOGPc, "惡意行為者可能會把指令隱藏在網站、郵件和文檔中，誘導 AI 在你不知情的情況下執行有害操作。<link>瞭解更多</link>");
+  assert.equal(messages["wVu1FLTwAn"], "開始吧");
+}
+
 function main() {
   testSidepanelLocaleFallsBackToBrowserLanguage();
   testOnboardingCardsReferenceLocalizedMessageIds();
   testChineseLocaleContainsOnboardingTranslations();
+  testTraditionalChineseLocaleContainsOnboardingTranslations();
   console.log("sidepanel onboarding locale regression test passed");
 }
 

@@ -4,48 +4,48 @@
   }
 
   const uiContract = globalThis.__CP_CONTRACT__?.ui || {};
+  const i18nShared =
+    globalThis.__CP_I18N_SHARED__ ||
+    globalThis.__CP_GITHUB_UPDATE_SHARED__ ||
+    {};
   const PANEL_ID = "cp-options-visualizer-panel";
   const ANCHOR_ID = "cp-options-visualizer-anchor";
   const BUTTON_ATTR = "data-cp-visualizer-launch";
   const ROOT_ATTR = "data-cp-visualizer-root";
-  const PRIMARY_BUTTON_CLASS = "px-6 py-3 bg-brand-100 text-oncolor-100 rounded-xl hover:bg-brand-100/90 transition-all font-large disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2";
-  const PREFERRED_LOCALE_STORAGE_KEY = uiContract.PREFERRED_LOCALE_STORAGE_KEY || "preferred_locale";
+  const PRIMARY_BUTTON_CLASS =
+    "px-6 py-3 bg-brand-100 text-oncolor-100 rounded-xl hover:bg-brand-100/90 transition-all font-large disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2";
+  const PREFERRED_LOCALE_STORAGE_KEY =
+    uiContract.PREFERRED_LOCALE_STORAGE_KEY || "preferred_locale";
 
-  const STRINGS = {
-    zh: {
-      updatesTitle: "扩展更新",
-      cardTitle: "执行可视化",
-      cardSubtitle: "打开一个独立全屏页，用真实的本地会话数据查看请求、工具执行步骤和最终答复。",
-      cardMeta: "默认优先显示当前 activeSession；没有运行中的请求时，会自动回退到最近一次本地会话。",
-      buttonLabel: "打开执行可视化",
-      openFailed: "打开执行可视化失败：{message}",
-      unknown: "未知原因"
-    },
-    en: {
-      updatesTitle: "Extension updates",
-      cardTitle: "Execution visualizer",
-      cardSubtitle: "Open a standalone full-screen page that shows the request, tool execution steps, and final answer from real local session data.",
-      cardMeta: "It prefers the current activeSession and falls back to the most recent local session when nothing is running.",
-      buttonLabel: "Open visualizer",
-      openFailed: "Failed to open visualizer: {message}",
-      unknown: "unknown reason"
-    }
+  const DEFAULT_STRINGS = {
+    updatesTitle: "Extension updates",
+    cardTitle: "Execution visualizer",
+    cardSubtitle:
+      "Open a standalone full-screen page that shows the request, tool execution steps, and final answer from real local session data.",
+    cardMeta:
+      "It prefers the current activeSession and falls back to the most recent local session when nothing is running.",
+    buttonLabel: "Open visualizer",
+    openFailed: "Failed to open visualizer: {message}",
+    unknown: "unknown reason",
   };
 
   let renderScheduled = false;
   let openStatus = null;
   let mountRetryBudget = 0;
+  let currentLocaleTag = "";
+  let currentStrings = DEFAULT_STRINGS;
+  let handleExternalUiLocaleChanged = null;
 
   function buildRenderSignature(strings) {
     const currentStrings = strings || getStrings();
     return [
-      getLocaleKey(),
+      currentLocaleTag || getLocaleTag(),
       currentStrings.cardTitle,
       currentStrings.cardSubtitle,
       currentStrings.cardMeta,
       currentStrings.buttonLabel,
       openStatus?.kind || "",
-      openStatus?.text || ""
+      openStatus?.text || "",
     ].join("||");
   }
 
@@ -64,30 +64,72 @@
     });
   }
 
-  function normalizeLocaleKey(value) {
-    const locale = String(value || "").trim().toLowerCase();
+  function cloneStrings(value) {
+    if (typeof i18nShared.cloneLocaleValue === "function") {
+      return i18nShared.cloneLocaleValue(value);
+    }
+    return JSON.parse(JSON.stringify(value));
+  }
+
+  function normalizeLocaleTag(value) {
+    if (typeof i18nShared.normalizeUiLocaleTag === "function") {
+      return i18nShared.normalizeUiLocaleTag(value);
+    }
+    const locale = String(value || "")
+      .trim()
+      .toLowerCase();
     if (!locale) {
       return "";
     }
-    return locale.startsWith("zh") ? "zh" : "en";
+    return locale.startsWith("zh") ? "zh-CN" : "en-US";
   }
 
-  function getLocaleKey() {
-    const pageText = String(document.body?.innerText || document.body?.textContent || "");
-    if (pageText.includes("Claw in Chrome 设置") || pageText.includes("扩展更新") || pageText.includes("选项")) {
-      return "zh";
+  function getLocaleTag() {
+    if (typeof i18nShared.getUiLocaleTag === "function") {
+      return i18nShared.getUiLocaleTag({
+        document,
+        navigatorLanguage: navigator.language,
+        zhPageHints: ["Claw in Chrome 设置", "扩展更新", "选项"],
+        enPagePatterns: [/\bExtension updates\b/i, /\bOptions\b/i],
+      });
     }
-    const htmlLang = String(document.documentElement.lang || "").toLowerCase();
-    if (htmlLang.startsWith("zh")) {
-      return "zh";
-    }
-    return normalizeLocaleKey(navigator.language) || "en";
+    return normalizeLocaleTag(
+      document.documentElement?.lang || navigator.language,
+    );
   }
 
-  async function readPreferredLocaleKey() {
+  async function ensureStrings(localeTag) {
+    const nextLocaleTag = normalizeLocaleTag(localeTag) || "en-US";
+    if (nextLocaleTag === currentLocaleTag && currentStrings) {
+      return false;
+    }
+    if (typeof i18nShared.resolveCustomI18nSection === "function") {
+      currentStrings = await i18nShared.resolveCustomI18nSection(
+        "optionsVisualizerLauncher",
+        nextLocaleTag,
+        DEFAULT_STRINGS,
+      );
+    } else {
+      currentStrings = cloneStrings(DEFAULT_STRINGS);
+    }
+    currentLocaleTag = nextLocaleTag;
+    return true;
+  }
+
+  function refreshLocaleStrings(localeTag) {
+    Promise.resolve(ensureStrings(localeTag))
+      .catch(function () {})
+      .then(function () {
+        scheduleRender();
+      });
+  }
+
+  async function readPreferredLocaleTag() {
     try {
-      const stored = await chrome.storage.local.get(PREFERRED_LOCALE_STORAGE_KEY);
-      return normalizeLocaleKey(stored[PREFERRED_LOCALE_STORAGE_KEY]);
+      const stored = await chrome.storage.local.get(
+        PREFERRED_LOCALE_STORAGE_KEY,
+      );
+      return normalizeLocaleTag(stored[PREFERRED_LOCALE_STORAGE_KEY]);
     } catch {
       return "";
     }
@@ -96,12 +138,17 @@
   async function buildVisualizerTargetUrl() {
     const baseUrl = chrome.runtime.getURL("visualizer.html");
     const separator = baseUrl.includes("?") ? "&" : "?";
-    const localeKey = await readPreferredLocaleKey() || getLocaleKey();
-    return baseUrl + separator + "locale=" + encodeURIComponent(localeKey === "zh" ? "zh-CN" : "en-US");
+    const localeTag = (await readPreferredLocaleTag()) || getLocaleTag();
+    return (
+      baseUrl +
+      separator +
+      "locale=" +
+      encodeURIComponent(localeTag || "en-US")
+    );
   }
 
   function getStrings() {
-    return STRINGS[getLocaleKey()];
+    return currentStrings;
   }
 
   function getActiveTab() {
@@ -119,16 +166,23 @@
     if (getActiveTab() !== "options") {
       return false;
     }
-    const subview = String(getHashQuery().get("provider") || "").trim().toLowerCase();
+    const subview = String(getHashQuery().get("provider") || "")
+      .trim()
+      .toLowerCase();
     return !subview;
   }
 
   function findUpdatePanel() {
     const strings = getStrings();
-    return Array.from(document.querySelectorAll("section")).find(function (section) {
-      const heading = section.querySelector("h3");
-      return heading && String(heading.textContent || "").trim() === strings.updatesTitle;
-    }) || null;
+    return (
+      Array.from(document.querySelectorAll("section")).find(function (section) {
+        const heading = section.querySelector("h3");
+        return (
+          heading &&
+          String(heading.textContent || "").trim() === strings.updatesTitle
+        );
+      }) || null
+    );
   }
 
   function ensureAnchor(updatePanel) {
@@ -167,8 +221,8 @@
     openStatus = {
       kind: "error",
       text: interpolate(getStrings().openFailed, {
-        message: getErrorMessage(error)
-      })
+        message: getErrorMessage(error),
+      }),
     };
     scheduleRender();
   }
@@ -180,20 +234,23 @@
 
     try {
       if (globalThis.chrome?.tabs?.create) {
-        chrome.tabs.create({
-          url: targetUrl
-        }, function () {
-          if (chrome.runtime.lastError) {
-            if (!openWithWindow(targetUrl)) {
-              setOpenError(chrome.runtime.lastError.message);
-              return;
+        chrome.tabs.create(
+          {
+            url: targetUrl,
+          },
+          function () {
+            if (chrome.runtime.lastError) {
+              if (!openWithWindow(targetUrl)) {
+                setOpenError(chrome.runtime.lastError.message);
+                return;
+              }
             }
-          }
-          if (openStatus) {
-            openStatus = null;
-            scheduleRender();
-          }
-        });
+            if (openStatus) {
+              openStatus = null;
+              scheduleRender();
+            }
+          },
+        );
         return;
       }
     } catch (error) {
@@ -215,7 +272,8 @@
     if (!panel) {
       panel = document.createElement("section");
       panel.id = PANEL_ID;
-      panel.className = "cp-page-card cp-page-panel bg-bg-100 border border-border-300 rounded-xl px-6 pt-6 pb-6 md:px-8 md:pt-8 md:pb-8";
+      panel.className =
+        "cp-page-card cp-page-panel bg-bg-100 border border-border-300 rounded-xl px-6 pt-6 pb-6 md:px-8 md:pt-8 md:pb-8";
       panel.setAttribute(ROOT_ATTR, "true");
     }
     panel.style.marginTop = "24px";
@@ -276,7 +334,9 @@
   }
 
   function requestMountRetries(attempts) {
-    const nextAttempts = Number.isFinite(Number(attempts)) ? Math.max(0, Number(attempts)) : 0;
+    const nextAttempts = Number.isFinite(Number(attempts))
+      ? Math.max(0, Number(attempts))
+      : 0;
     if (nextAttempts > mountRetryBudget) {
       mountRetryBudget = nextAttempts;
     }
@@ -288,11 +348,12 @@
       return;
     }
     renderScheduled = true;
-    const scheduler = typeof requestAnimationFrame === "function"
-      ? requestAnimationFrame
-      : function (callback) {
-        return setTimeout(callback, 16);
-      };
+    const scheduler =
+      typeof requestAnimationFrame === "function"
+        ? requestAnimationFrame
+        : function (callback) {
+            return setTimeout(callback, 16);
+          };
     scheduler(function () {
       renderScheduled = false;
       const mounted = renderPanel();
@@ -305,18 +366,30 @@
     });
   }
 
-  function bootstrap() {
+  async function bootstrap() {
+    await ensureStrings((await readPreferredLocaleTag()) || getLocaleTag());
     requestMountRetries(120);
+    handleExternalUiLocaleChanged = function (event) {
+      const nextLocaleTag =
+        normalizeLocaleTag(event?.detail?.locale) || getLocaleTag();
+      refreshLocaleStrings(nextLocaleTag);
+    };
+    window.addEventListener(
+      "cp:ui-locale-changed",
+      handleExternalUiLocaleChanged,
+    );
     window.addEventListener("hashchange", function () {
       requestMountRetries(120);
     });
   }
 
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", bootstrap, {
-      once: true
+    document.addEventListener("DOMContentLoaded", function () {
+      bootstrap().catch(function () {});
+    }, {
+      once: true,
     });
   } else {
-    bootstrap();
+    bootstrap().catch(function () {});
   }
 })();

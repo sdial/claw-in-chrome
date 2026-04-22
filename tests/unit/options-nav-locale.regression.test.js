@@ -3,11 +3,13 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const rootDir = path.join(__dirname, "..", "..");
+const intlRuntimePath = path.join(rootDir, "assets", "index-5uYI7rOK.js");
 const optionsBundlePath = path.join(rootDir, "assets", "options-Hyb_OzME.js");
 const optionsEnhancerPath = path.join(rootDir, "options-update-enhancer.js");
 const optionsUpdatePreviewPath = path.join(rootDir, "options-update-preview.local.js");
 
 function main() {
+  const intlRuntimeSource = fs.readFileSync(intlRuntimePath, "utf8");
   const optionsBundleSource = fs.readFileSync(optionsBundlePath, "utf8");
   const optionsEnhancerSource = fs.readFileSync(optionsEnhancerPath, "utf8");
   const optionsUpdatePreviewSource = fs.readFileSync(optionsUpdatePreviewPath, "utf8");
@@ -55,6 +57,18 @@ function main() {
   );
 
   assert.match(
+    intlRuntimeSource,
+    /document\.documentElement\.dataset\.cpUiLocale = t;/,
+    "shared intl runtime should expose the resolved page locale through documentElement.dataset for option add-ons"
+  );
+
+  assert.match(
+    intlRuntimeSource,
+    /new CustomEvent\("cp:ui-locale-changed"/,
+    "shared intl runtime should dispatch a locale change event for late-mounted option add-ons"
+  );
+
+  assert.match(
     optionsEnhancerSource,
     /function getOptionsLocaleKey\(\) \{/,
     "options enhancer should resolve locale from the current options page instead of freezing browser language at load time"
@@ -68,20 +82,20 @@ function main() {
 
   assert.match(
     optionsEnhancerSource,
-    /function getStrings\(\) \{\s*return STRINGS\[getOptionsLocaleKey\(\)\];\s*\}/s,
-    "options enhancer should derive all copy from the live locale helper"
+    /resolveCustomI18nSection\(\s*"optionsUpdateEnhancer",/s,
+    "options enhancer should hydrate its copy from the custom language pack"
   );
 
   assert.match(
     optionsEnhancerSource,
-    /httpCardTitle: "HTTP 协议"/,
-    "options enhancer should provide a Chinese title for the HTTP card"
+    /const DEFAULT_STRINGS = \{/,
+    "options enhancer should keep English defaults in source as the fallback copy"
   );
 
   assert.doesNotMatch(
     optionsEnhancerSource,
-    /const localeKey = String\(navigator\.language \|\| ""\)\.toLowerCase\(\)\.startsWith\("zh"\) \? "zh" : "en";/,
-    "options enhancer should no longer freeze its locale from navigator.language at script load time"
+    /const STRINGS = \{\s*zh:/s,
+    "options enhancer should no longer ship a local zh/en split copy table"
   );
 
   assert.match(
@@ -98,20 +112,20 @@ function main() {
 
   assert.match(
     optionsUpdatePreviewSource,
-    /function getStrings\(\) \{\s*return STRINGS\[getOptionsLocaleKey\(\)\];\s*\}/s,
-    "update preview addon should derive its copy from the live locale helper"
+    /resolveCustomI18nSection\(\s*"optionsUpdatePreview",/s,
+    "update preview addon should hydrate its copy from the custom language pack"
   );
 
   assert.match(
     optionsUpdatePreviewSource,
-    /title: "更新 UI 预览"/,
-    "update preview addon should keep a Chinese title for the local preview card"
+    /const DEFAULT_STRINGS = \{/,
+    "update preview addon should keep English defaults in source as the fallback copy"
   );
 
   assert.doesNotMatch(
     optionsUpdatePreviewSource,
-    /const localeKey = String\(navigator\.language \|\| ""\)\.toLowerCase\(\)\.startsWith\("zh"\) \? "zh" : "en";/,
-    "update preview addon should no longer freeze its locale from navigator.language at script load time"
+    /const STRINGS = \{\s*zh:/s,
+    "update preview addon should no longer ship a local zh/en split copy table"
   );
 
   console.log("options nav locale regression test passed");

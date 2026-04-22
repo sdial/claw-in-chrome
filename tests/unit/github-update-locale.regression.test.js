@@ -25,6 +25,12 @@ function main() {
   );
 
   assert.match(
+    sharedSource,
+    /function resolveCustomI18nSection\(sectionPath, localeTag, defaults\) \{/,
+    "github update shared should expose a reusable custom language pack loader"
+  );
+
+  assert.match(
     optionsSource,
     /return detectUiLocaleKey\(getLocaleOptions\(\)\);/,
     "github update options should derive locale from the shared detector"
@@ -32,8 +38,8 @@ function main() {
 
   assert.doesNotMatch(
     optionsSource,
-    /const localeKey = String\(navigator\.language \|\| ""\)\.toLowerCase\(\)\.startsWith\("zh"\) \? "zh" : "en";/,
-    "github update options should no longer freeze locale from navigator.language"
+    /const STRINGS = \{\s*zh:/s,
+    "github update options should no longer ship a local zh/en split string table"
   );
 
   assert.match(
@@ -44,13 +50,13 @@ function main() {
 
   assert.doesNotMatch(
     sidepanelSource,
-    /const localeKey = String\(navigator\.language \|\| ""\)\.toLowerCase\(\)\.startsWith\("zh"\) \? "zh" : "en";/,
-    "github update sidepanel should no longer freeze locale from navigator.language"
+    /const STRINGS = \{\s*zh:/s,
+    "github update sidepanel should no longer ship a local zh/en split string table"
   );
 
   assert.match(
     sidepanelSource,
-    /if \(nextLocaleKey !== lastLocaleKey\) \{\s*render\(\);/s,
+    /if \(nextLocaleTag !== lastLocaleTag\) \{\s*Promise\.resolve\(ensureStrings\(nextLocaleTag\)\)/s,
     "github update sidepanel should rerender when the detected UI locale changes after bootstrap"
   );
 

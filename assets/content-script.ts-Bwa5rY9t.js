@@ -4,10 +4,12 @@
   const __cpClaudeOnboardingPromptDataAttribute = "data-task-prompt";
 
   // 语义锚点：content-script -> service worker 的动作名（打开 sidepanel 并填充 prompt）
-  const __cpContentScriptContractMessages = globalThis.__CP_CONTRACT__?.messages || {};
-  const __cpContentScriptMessageTypeOpenSidePanel = __cpContentScriptContractMessages.open_side_panel || "open_side_panel";
+  const __cpContentScriptContractMessages =
+    globalThis.__CP_CONTRACT__?.messages || {};
+  const __cpContentScriptMessageTypeOpenSidePanel =
+    __cpContentScriptContractMessages.open_side_panel || "open_side_panel";
 
-  document.body.addEventListener("click", t => {
+  document.body.addEventListener("click", (t) => {
     const e = t.target.closest(__cpClaudeOnboardingButtonSelector);
     if (e) {
       (async function (t) {
@@ -15,7 +17,7 @@
         if (e) {
           await chrome.runtime.sendMessage({
             type: __cpContentScriptMessageTypeOpenSidePanel,
-            prompt: e
+            prompt: e,
           });
         }
       })(e);

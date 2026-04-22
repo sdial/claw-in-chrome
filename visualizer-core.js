@@ -393,7 +393,13 @@
   }
 
   function messageHasUserPrompt(message) {
-    if (!message || message.role !== "user") {
+    if (
+      !message ||
+      message.role !== "user" ||
+      message.isSynthetic === true ||
+      message.isSyntheticResult === true ||
+      message.isCompactSummary === true
+    ) {
       return false;
     }
     return message.blocks.some(function (block) {
@@ -417,7 +423,11 @@
       id: String(rawMessage.id || "message_" + String(index)).trim(),
       role,
       blocks,
-      timestamp: normalizeNumber(rawMessage.timestamp, 0)
+      timestamp: normalizeNumber(rawMessage.timestamp, 0),
+      isSynthetic: rawMessage._synthetic === true,
+      isSyntheticResult: rawMessage._syntheticResult === true,
+      isCompactSummary: rawMessage.isCompactSummary === true,
+      isCompactionMessage: rawMessage.isCompactionMessage === true
     };
   }
 
@@ -449,6 +459,14 @@
   function buildFallbackPreview(messages) {
     const reversed = Array.isArray(messages) ? messages.slice().reverse() : [];
     for (const message of reversed) {
+      if (
+        message?.isSynthetic === true ||
+        message?.isSyntheticResult === true ||
+        message?.isCompactSummary === true ||
+        message?.isCompactionMessage === true
+      ) {
+        continue;
+      }
       const text = cleanDisplayText(getMessageDisplayText(message), 160);
       if (text) {
         return text;
@@ -571,11 +589,22 @@
       });
     });
     const events = [];
+    const hiddenBoundaryToolUseIds = new Set();
     let reachedFinalAnswer = false;
     let sawExecution = false;
     scopedMessages.forEach(function (message, messageIndex) {
+      const ignoreSpecialUserText = message.role === "user" && (
+        message.isSynthetic === true ||
+        message.isSyntheticResult === true ||
+        message.isCompactSummary === true
+      );
+      const ignoreSpecialAssistantText = message.role === "assistant" && message.isCompactionMessage === true;
       message.blocks.forEach(function (block, blockIndex) {
         if (message.role === "assistant" && block.type === "tool_use" && block.name === "turn_answer_start") {
+          const boundaryToolUseId = String(block.id || "").trim();
+          if (boundaryToolUseId) {
+            hiddenBoundaryToolUseIds.add(boundaryToolUseId);
+          }
           reachedFinalAnswer = true;
           events.push({
             id: "turn_" + String(turnIndex) + "_answer_start_" + messageIndex + "_" + blockIndex,
@@ -587,6 +616,9 @@
         }
 
         if (block.type === "text") {
+          if (ignoreSpecialUserText || ignoreSpecialAssistantText) {
+            return;
+          }
           const text = cleanDisplayText(block.text, 2000);
           if (!text) {
             return;
@@ -630,35 +662,39 @@
         }
 
         if (block.type === "tool_result") {
+          const toolUseId = String(block.tool_use_id || "").trim();
+          if (hiddenBoundaryToolUseIds.has(toolUseId)) {
+            return;
+          }
           sawExecution = true;
           if (block.permissionRequired) {
             events.push({
-              id: (block.tool_use_id || message.id + "_permission_" + blockIndex) + "_permission",
+              id: (toolUseId || message.id + "_permission_" + blockIndex) + "_permission",
               type: "permission_required",
+              stage: "execution",
+              toolUseId: block.permissionRequired.tool_use_id || toolUseId,
+              toolName: block.permissionRequired.tool || "Permission required",
+              url: block.permissionRequired.url || "",
+              actionData: block.permissionRequired.actionData || {},
+              actionDataPreview: safeJsonPreview(block.permissionRequired.actionData, 600)
+            });
+            return;
+          }
+          events.push({
+            id: (toolUseId || message.id + "_result_" + blockIndex) + "_result",
+            type: "tool_result",
             stage: "execution",
-            toolUseId: block.permissionRequired.tool_use_id || block.tool_use_id,
-            toolName: block.permissionRequired.tool || "Permission required",
-            url: block.permissionRequired.url || "",
-            actionData: block.permissionRequired.actionData || {},
-            actionDataPreview: safeJsonPreview(block.permissionRequired.actionData, 600)
+            toolUseId,
+            text: cleanDisplayText(block.text || block.rawPreview || "", TOOL_RESULT_TEXT_PREVIEW_LIMIT),
+            fullText: cleanDisplayText(block.fullText || block.rawFull || block.text || block.rawPreview || "", TOOL_RESULT_TEXT_FULL_LIMIT),
+            isError: block.is_error === true,
+            imageUrl: block.imageUrl || "",
+            contentRaw: typeof block.contentRaw === "undefined" ? null : block.contentRaw,
+            rawPreview: block.rawPreview || "",
+            rawFull: block.rawFull || ""
           });
           return;
         }
-        events.push({
-          id: (block.tool_use_id || message.id + "_result_" + blockIndex) + "_result",
-            type: "tool_result",
-          stage: "execution",
-          toolUseId: String(block.tool_use_id || "").trim(),
-          text: cleanDisplayText(block.text || block.rawPreview || "", TOOL_RESULT_TEXT_PREVIEW_LIMIT),
-          fullText: cleanDisplayText(block.fullText || block.rawFull || block.text || block.rawPreview || "", TOOL_RESULT_TEXT_FULL_LIMIT),
-          isError: block.is_error === true,
-          imageUrl: block.imageUrl || "",
-          contentRaw: typeof block.contentRaw === "undefined" ? null : block.contentRaw,
-          rawPreview: block.rawPreview || "",
-          rawFull: block.rawFull || ""
-        });
-        return;
-      }
 
         if (block.type === "permission_required") {
           sawExecution = true;

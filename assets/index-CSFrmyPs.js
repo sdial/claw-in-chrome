@@ -13,13 +13,16 @@ function s(r, a) {
 function e(e, t) {
   var i = document.createElement("a");
   i.href = t;
-  var n = i.search.slice(1).split("&").reduce(function (a, s) {
-    var e = s.split("=");
-    var t = e[0];
-    var i = e[1];
-    a[t] = r(i);
-    return a;
-  }, {});
+  var n = i.search
+    .slice(1)
+    .split("&")
+    .reduce(function (a, s) {
+      var e = s.split("=");
+      var t = e[0];
+      var i = e[1];
+      a[t] = r(i);
+      return a;
+    }, {});
   var u = [];
   var o = n.ajs_uid;
   var d = n.ajs_event;

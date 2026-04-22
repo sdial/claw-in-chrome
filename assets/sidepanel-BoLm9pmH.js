@@ -23298,7 +23298,7 @@ const Cy = e => ({
   analytics: e.analytics,
   necessary: true
 });
-const _y = Xg()?.disableNonessentialTelemetry ?? false;
+const _y = globalThis.__CP_TELEMETRY_DISABLED__ === true || (Xg()?.disableNonessentialTelemetry ?? false);
 const My = Wg || _y ? new class {
   constructor() {
     this.loadIfNecessary = () => null;
@@ -33943,13 +33943,19 @@ function Vb({
   result: n,
   toolInfo: s,
   lastScreenshot: r,
-  debugMode: i = false
+  debugMode: i = false,
+  forceExpanded: z = false
 }) {
   // 语义锚点：sidepanel 的工具结果卡片 consumer。
   // 头部摘要、展开态文本、调试截图叠层都在这里按 toolInfo/result 联合消费。
   const o = t();
-  const [c, u] = a.useState(false);
+  const [c, u] = a.useState(z);
   const [d, h] = a.useState(false);
+  a.useEffect(() => {
+    if (z) {
+      u(true);
+    }
+  }, [z]);
   a.useEffect(() => {
     y(v.SHOW_SYSTEM_REMINDERS).then(e => {
       if (e !== undefined) {
@@ -34522,10 +34528,10 @@ function Vb({
   } : null;
   const g = m || f;
   const x = s?.name === "update_plan" && (g?.text === "Plan approved" || g?.text === "Plan rejected");
-  const b = i || s?.name === "update_plan" && !x;
+  const b = z || i || s?.name === "update_plan" && !x;
   return l.jsxs("div", {
     className: "overflow-hidden border-[0.5px] border-border-300 rounded-[10px]",
-    children: [b ? l.jsxs("button", {
+    children: [b && !z ? l.jsxs("button", {
       onClick: () => u(!c),
       className: "w-full px-3 py-2 bg-bg-100 flex items-center justify-between text-left hover:bg-bg-200 cursor-pointer transition-colors",
       children: [l.jsxs("div", {
@@ -34566,7 +34572,7 @@ function Vb({
           approach: s.input.approach || []
         }
       })
-    }), i && c && l.jsx("div", {
+    }), (z || i) && c && l.jsx("div", {
       className: "p-4 bg-bg-000 border-t-[0.5px] border-border-200",
       children: l.jsxs("div", {
         className: "space-y-3",
@@ -34686,16 +34692,21 @@ const $b = a.memo(function ({
   screenshotsByTab: x
 }) {
   const [b, w] = a.useState(false);
-  const [k, C] = a.useState(false);
+  const [k, C] = a.useState(true);
+  const [P, V] = a.useState(false);
   a.useEffect(() => {
-    y(v.DEBUG_MODE).then(e => {
+    C(true);
+    y(v.SHOW_TOOL_RESULT_DETAILS).then(e => {
       if (e !== undefined) {
-        C(e);
+        V(!!e);
       }
     });
     const e = e => {
       if (e[v.DEBUG_MODE]?.newValue !== undefined) {
-        C(e[v.DEBUG_MODE].newValue);
+        C(true);
+      }
+      if (e[v.SHOW_TOOL_RESULT_DETAILS]?.newValue !== undefined) {
+        V(!!e[v.SHOW_TOOL_RESULT_DETAILS].newValue);
       }
     };
     chrome.storage.onChanged.addListener(e);
@@ -34703,7 +34714,13 @@ const $b = a.memo(function ({
       chrome.storage.onChanged.removeListener(e);
     };
   }, []);
-  const _ = !k && n !== "update_plan";
+  a.useEffect(() => {
+    if (P) {
+      w(true);
+    }
+  }, [P]);
+  const _ = !k && !P && n !== "update_plan";
+  const D = P || b;
   const M = t();
   const S = {
     name: n,
@@ -34758,7 +34775,7 @@ const $b = a.memo(function ({
     });
   } else {
     return l.jsx(ar, {
-      isExpanded: b,
+      isExpanded: D,
       setIsExpanded: w,
       isStreaming: g,
       icon: N,
@@ -34768,15 +34785,16 @@ const $b = a.memo(function ({
       renderMode: d,
       isFirstItemInGroup: m,
       isLastItemInGroup: f,
-      isExpandingDisabled: _,
+      isExpandingDisabled: P ? true : _,
       secondaryElement: R,
       children: l.jsx(ir, {
-        isExpanded: b,
+        isExpanded: D,
         children: u ? l.jsx(Vb, {
           result: u,
           toolName: n,
           toolInfo: S,
           debugMode: true,
+          forceExpanded: P,
           lastScreenshot: O
         }) : l.jsx("div", {
           className: "font-small text-text-500 p-3",
@@ -36965,7 +36983,7 @@ const sk = a.memo(function ({
           messageIndex: p,
           screenshotsByTab: F,
           onComputerFileClick: f
-        }), (D || u && o && c) && l.jsx("div", {
+        }), D && l.jsx("div", {
           className: "h-7 flex items-center",
           children: l.jsxs("div", {
             className: Le("flex items-center gap-0.5 mt-2 -ml-1.5", a && u && o && c ? "opacity-100" : "opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto"),
@@ -36987,52 +37005,12 @@ const sk = a.memo(function ({
                   defaultMessage: "Copy message",
                   id: "8Rj4WgXPcB"
                 }),
-                children: S ? l.jsx(En, {
-                  size: 12
-                }) : l.jsx(Rn, {
-                  size: 12
-                })
+              children: S ? l.jsx(En, {
+                size: 12
+              }) : l.jsx(Rn, {
+                size: 12
               })
-            }), u && o && c && l.jsxs(l.Fragment, {
-              children: [l.jsx(J, {
-                tooltipContent: g.formatMessage({
-                  defaultMessage: "Give positive feedback",
-                  id: "FGCv00cdfW"
-                }),
-                side: "bottom",
-                children: l.jsx("button", {
-                  onClick: o,
-                  className: "p-1.5 rounded-md transition-colors " + (i === "positive" ? "text-text-100" : "text-text-300 hover:bg-bg-300 hover:text-text-100"),
-                  "aria-label": g.formatMessage({
-                    defaultMessage: "Good response",
-                    id: "OSbNg+1qqF"
-                  }),
-                  children: i === "positive" ? l.jsx(zs, {
-                    size: 12
-                  }) : l.jsx(rs, {
-                    size: 12
-                  })
-                })
-              }), l.jsx(J, {
-                tooltipContent: g.formatMessage({
-                  defaultMessage: "Give negative feedback",
-                  id: "ngzzQUJCXB"
-                }),
-                side: "bottom",
-                children: l.jsx("button", {
-                  onClick: c,
-                  className: "p-1.5 rounded-md transition-colors " + (i === "negative" ? "text-text-100" : "text-text-300 hover:bg-bg-300 hover:text-text-100"),
-                  "aria-label": g.formatMessage({
-                    defaultMessage: "Bad response",
-                    id: "tuJiA0ZNUD"
-                  }),
-                  children: i === "negative" ? l.jsx(Fs, {
-                    size: 12
-                  }) : l.jsx(ss, {
-                    size: 12
-                  })
-                })
-              })]
+            })
             })]
           })
         })]
@@ -52483,8 +52461,7 @@ const $R = ({
   fallbackModelName: n,
   fallbackDisplayName: s,
   learnMoreUrl: r,
-  onRetry: i,
-  onSendFeedback: o
+  onRetry: i
 }) => l.jsxs("div", {
   className: "bg-bg-000 rounded-2xl border-[0.5px] border-border-300 px-4 py-4",
   style: {
@@ -52499,19 +52476,11 @@ const $R = ({
   }), l.jsx("p", {
     className: "font-base text-text-100 mb-0",
     children: l.jsx(e, {
-      defaultMessage: "{currentModelName}'s safety filters flagged this chat. Due to its advanced capabilities, {currentModelName} has additional safety measures that occasionally pause normal, safe chats. We're working to improve this. Continue your chat with {fallbackDisplayName}, {sendFeedbackLink}, or {learnMoreLink}.",
+      defaultMessage: "{currentModelName}'s safety filters flagged this chat. Due to its advanced capabilities, {currentModelName} has additional safety measures that occasionally pause normal, safe chats. We're working to improve this. Continue your chat with {fallbackDisplayName} or {learnMoreLink}.",
       id: "DLwrrxRpu/",
       values: {
         currentModelName: t,
         fallbackDisplayName: s,
-        sendFeedbackLink: l.jsx("button", {
-          onClick: o,
-          className: "inline-link hover:opacity-70 transition-opacity",
-          children: l.jsx(e, {
-            defaultMessage: "send feedback",
-            id: "Rtb80IDfRS"
-          })
-        }),
         learnMoreLink: l.jsx("button", {
           onClick: () => chrome.tabs.create({
             url: r
@@ -81507,8 +81476,7 @@ function YY({
             fallbackModelName: e.fallbackModelName,
             fallbackDisplayName: e.fallbackDisplayName,
             learnMoreUrl: e.learnMoreUrl,
-            onRetry: re,
-            onSendFeedback: ie
+            onRetry: re
           });
         } else {
           return null;
@@ -81953,24 +81921,14 @@ const eX = [{
   value: "navigation_error",
   label: "Navigation, clicking, typing, scrolling error"
 }, {
-  value: "report_content",
-  label: "Report content"
-}, {
   value: "other",
   label: "Other"
 }];
 const tX = ({
   onClose: n,
-  onSubmit: s,
-  feedbackType: r,
-  message: i,
-  hardcodedType: o = null,
-  messageId: c = null
+  feedbackType: r
 }) => {
-  const u = t();
-  const [d, h] = a.useState("");
-  const [p, m] = a.useState("");
-  const [f, g] = a.useState(false);
+  const s = t();
   return l.jsxs("div", {
     className: "bg-bg-000 rounded-[14px]",
     children: [l.jsxs("div", {
@@ -81986,17 +81944,14 @@ const tX = ({
         }), l.jsx("h3", {
           className: "font-ui text-[14px] font-normal leading-[140%] text-text-100",
           children: l.jsx(e, {
-            defaultMessage: "Share {feedbackType} feedback",
-            id: "xUedNbOuGK",
-            values: {
-              feedbackType: r
-            }
+            defaultMessage: "Feedback disabled",
+            id: "2n6oD3u2Lw"
           })
         })]
       }), l.jsx("button", {
         onClick: n,
         className: "p-1 text-text-300 hover:bg-bg-100 rounded transition-colors",
-        "aria-label": u.formatMessage({
+        "aria-label": s.formatMessage({
           defaultMessage: "Close",
           id: "rbrahOGMC3"
         }),
@@ -82006,149 +81961,30 @@ const tX = ({
       })]
     }), l.jsx("div", {
       className: "border-t border-border-300 mb-4"
-    }), l.jsxs("div", {
-      className: "space-y-4 px-4",
-      children: [r === "negative" && l.jsxs(l.Fragment, {
-        children: [!o && l.jsxs("div", {
-          children: [l.jsx("p", {
-            className: "font-base-bold text-text-100 mb-2",
-            children: l.jsx(e, {
-              defaultMessage: "What type of issue do you wish to report? (optional)",
-              id: "IFWIi9rs1t"
-            })
-          }), l.jsxs("div", {
-            className: "relative",
-            children: [l.jsxs("select", {
-              value: d,
-              onChange: e => h(e.target.value),
-              className: "w-full h-10 px-3 bg-bg-100 border border-border-200 rounded-lg text-text-100 text-sm font-normal font-ui leading-tight focus:outline-none focus:ring-2 focus:ring-brand-200 focus:border-transparent appearance-none",
-              children: [l.jsx("option", {
-                value: "",
-                children: u.formatMessage({
-                  defaultMessage: "Select",
-                  id: "kQAf2d9u+x"
-                })
-              }), eX.map(e => l.jsx("option", {
-                value: e.value,
-                children: e.label
-              }, e.value))]
-            }), l.jsx(Ae, {
-              className: "absolute right-3 top-3 w-4 h-4 text-text-300 pointer-events-none"
-            })]
-          })]
-        }), d === "report_content" ? l.jsx("div", {
-          className: "p-4 bg-bg-100 border border-border-200 rounded-lg",
-          children: l.jsx("p", {
-            className: "text-sm font-normal font-ui text-text-100",
-            children: l.jsx(e, {
-              defaultMessage: "Please use this <link>form</link> to report violative content.",
-              id: "QSjqvNNsUq",
-              values: {
-                link: e => l.jsx("a", {
-                  href: We,
-                  target: "_blank",
-                  rel: "noopener noreferrer",
-                  className: "inline-link cursor-pointer hover:text-text-200",
-                  children: e
-                })
-              }
-            })
-          })
-        }) : l.jsxs("div", {
-          children: [l.jsx("p", {
-            className: "font-base-bold text-text-100 mb-2",
-            children: l.jsx(e, {
-              defaultMessage: "Please provide details: (optional)",
-              id: "og1W/bIZdx"
-            })
-          }), l.jsx("textarea", {
-            value: p,
-            onChange: e => m(e.target.value),
-            placeholder: u.formatMessage({
-              defaultMessage: "What was unsatisfying about this response?",
-              id: "+DB/t6WTki"
-            }),
-            className: "w-full h-28 p-3 bg-bg-100 border border-border-200 rounded-lg text-text-100 placeholder-text-400 text-sm font-normal font-ui leading-tight resize-none focus:outline-none focus:ring-2 focus:ring-brand-200 focus:border-transparent"
-          })]
-        })]
-      }), r === "positive" && l.jsx(l.Fragment, {
-        children: l.jsxs("div", {
-          children: [l.jsx("p", {
-            className: "font-base-bold text-text-100 mb-2",
-            children: l.jsx(e, {
-              defaultMessage: "Please provide details: (optional)",
-              id: "og1W/bIZdx"
-            })
-          }), l.jsx("textarea", {
-            value: p,
-            onChange: e => m(e.target.value),
-            placeholder: u.formatMessage({
-              defaultMessage: "What was satisfying about this response?",
-              id: "yJFWG3mK1I"
-            }),
-            className: "w-full h-28 p-3 bg-bg-100 border border-border-200 rounded-lg text-text-100 placeholder-text-400 text-sm font-normal font-ui leading-tight resize-none focus:outline-none focus:ring-2 focus:ring-brand-200 focus:border-transparent"
-          })]
-        })
-      }), d !== "report_content" && l.jsx("div", {
-        className: "text-text-300",
-        children: l.jsx("p", {
-          className: "text-xs font-small font-ui",
-          children: l.jsx(e, {
-            defaultMessage: "Submitting this report will send the entire current conversation to Anthropic for future improvements to our models. <link>Learn more</link>",
-            id: "04w/1piSXb",
-            values: {
-              link: e => l.jsx("a", {
-                href: "https://support.claude.com/en/articles/10023548-how-long-do-you-store-my-data",
-                target: "_blank",
-                rel: "noopener noreferrer",
-                className: "inline-link cursor-pointer hover:text-text-200",
-                children: e
-              })
-            }
-          })
-        })
-      })]
     }), l.jsx("div", {
-      className: "px-3 py-[10px] space-y-[5px] mt-[10px] mb-0.5",
-      children: l.jsxs("div", {
-        className: "flex justify-end gap-2",
-        children: [l.jsx("button", {
+      className: "px-4 pb-4",
+      children: l.jsx("p", {
+        className: "text-sm font-normal font-ui text-text-100",
+        children: l.jsx(e, {
+          defaultMessage: "This build has feedback and content-report upload disabled. No conversation data will be sent to Anthropic from this panel.",
+          id: "i8O9B0v1Mf"
+        })
+      })
+    }), l.jsx("div", {
+      className: "px-3 py-[10px] mt-[10px] mb-0.5",
+      children: l.jsx("div", {
+        className: "flex justify-end",
+        children: l.jsx("button", {
           onClick: n,
           className: "h-8 min-w-20 px-3.5 py-[3px] rounded-lg outline outline-[0.50px] outline-offset-[-0.50px] outline-border-200/30 flex justify-center items-center gap-2 overflow-hidden hover:bg-bg-100 transition-colors",
           children: l.jsx("div", {
             className: "flex-1 text-center justify-start text-text-100 text-sm font-medium font-ui leading-tight",
             children: l.jsx(e, {
-              defaultMessage: "Cancel",
-              id: "47FYwba+bI"
+              defaultMessage: "Close",
+              id: "4x6j4iP3SJ"
             })
           })
-        }), d !== "report_content" && l.jsx("button", {
-          onClick: () => {
-            g(true);
-            try {
-              s({
-                thumbs: r,
-                type: o || d,
-                message: p,
-                messageId: c || i?.id || "unknown"
-              });
-            } finally {
-              g(false);
-              n();
-            }
-          },
-          className: "h-8 min-w-20 px-3.5 py-[3px] bg-text-100 rounded-lg flex justify-center items-center gap-2 overflow-hidden hover:bg-text-200 transition-colors",
-          children: l.jsx("div", {
-            className: "flex-1 text-center justify-start text-bg-100 text-sm font-medium font-ui leading-tight",
-            children: f ? l.jsx(e, {
-              defaultMessage: "Submitting...",
-              id: "txkW56MpkQ"
-            }) : l.jsx(e, {
-              defaultMessage: "Submit",
-              id: "wSZR47Y5kj"
-            })
-          })
-        })]
+        })
       })
     })]
   });
@@ -83151,6 +82987,48 @@ const uX = ({
   onDeny: h,
   disableAlwaysAllow: p
 });
+const __cpSidepanelPermissionManagerContract =
+  globalThis.__CP_CONTRACT__?.permissionManager || {};
+const __cpSidepanelAutoApproveAllPermissionRequestsStorageKey =
+  __cpSidepanelPermissionManagerContract.AUTO_APPROVE_ALL_REQUESTS_STORAGE_KEY ||
+  "autoApprovePermissionRequests";
+async function __cpEnableAutoApproveAllPermissionRequests() {
+  await chrome.storage.local.set({
+    [__cpSidepanelAutoApproveAllPermissionRequestsStorageKey]: true,
+    [v.LAST_PERMISSION_MODE_PREFERENCE]: "skip_all_permission_checks"
+  });
+}
+function __cpResolvePermissionScopeFromPrompt(e) {
+  if (!e || typeof e !== "object") {
+    return {
+      type: "netloc",
+      netloc: ""
+    };
+  }
+  if (e.tool === C.DOMAIN_TRANSITION) {
+    return {
+      type: "domain_transition",
+      fromDomain: e.actionData?.fromDomain,
+      toDomain: e.actionData?.toDomain
+    };
+  }
+  if (e.tool === C.PLAN_APPROVAL || e.tool === C.REMOTE_MCP) {
+    return {
+      type: "netloc",
+      netloc: ""
+    };
+  }
+  let t = "";
+  try {
+    t = new URL(e.url).host;
+  } catch {
+    t = String(e.url || "").trim();
+  }
+  return {
+    type: "netloc",
+    netloc: t
+  };
+}
 const __cpSidepanelRenderChatInputFooter = YY;
 function dX({
   permissionPrompt: t,
@@ -83179,6 +83057,15 @@ function dX({
       });
     }
   }, []);
+  const d = c || t;
+  const h = a.useCallback(async () => {
+    const e = c || t;
+    if (!e) {
+      return;
+    }
+    await __cpEnableAutoApproveAllPermissionRequests();
+    await n(w.ONCE, __cpResolvePermissionScopeFromPrompt(e));
+  }, [c, t, n]);
   if (!i) {
     return l.jsx("div", {
       className: "flex items-center justify-center h-screen bg-bg-100 p-3",
@@ -83194,24 +83081,56 @@ function dX({
       })
     });
   }
-  const d = c || t;
   if (d) {
     return l.jsx("div", {
       className: "flex items-center justify-center h-screen bg-bg-100 p-3",
-      children: l.jsx("div", {
-        className: "w-full max-w-sm border border-border-300 rounded-[14px]",
-        children: l.jsx(uX, {
-          tool: d.tool,
-          url: d.url,
-          screenshot: d.actionData?.screenshot,
-          coordinate: d.actionData?.coordinate,
-          typeText: d.actionData?.text,
-          fromDomain: d.actionData?.fromDomain,
-          toDomain: d.actionData?.toDomain,
-          onAllow: n,
-          onDeny: s,
-          disableAlwaysAllow: r
-        })
+      children: l.jsxs("div", {
+        className: "w-full max-w-sm space-y-3",
+        children: [l.jsx("div", {
+          className: "border border-border-300 rounded-[14px]",
+          children: l.jsx(uX, {
+            tool: d.tool,
+            url: d.url,
+            screenshot: d.actionData?.screenshot,
+            coordinate: d.actionData?.coordinate,
+            typeText: d.actionData?.text,
+            fromDomain: d.actionData?.fromDomain,
+            toDomain: d.actionData?.toDomain,
+            onAllow: n,
+            onDeny: s,
+            disableAlwaysAllow: r
+          })
+        }), l.jsxs("div", {
+          className: "border border-border-300 rounded-[14px] bg-bg-100 p-3",
+          children: [l.jsxs(cb, {
+            onClick: h,
+            isPrimary: true,
+            height: "55px",
+            children: [l.jsxs("div", {
+              className: "flex flex-col items-start",
+              children: [l.jsx("span", {
+                children: l.jsx(e, {
+                  defaultMessage: "Always auto-approve future permission requests",
+                  id: "bp7E2oF6fQ"
+                })
+              }), l.jsx("span", {
+                className: "font-small text-oncolor-100 opacity-80",
+                children: l.jsx(e, {
+                  defaultMessage: "Allow this one and future requests automatically",
+                  id: "x5J5dM6P6M"
+                })
+              })]
+            }), l.jsx(ob, {
+              className: "text-oncolor-100"
+            })]
+          }), l.jsx("p", {
+            className: "font-small text-text-500 px-1 mt-2",
+            children: l.jsx(e, {
+              defaultMessage: "Turn on global automatic approval and allow this request now",
+              id: "4c6SH4z8sL"
+            })
+          })]
+        })]
       })
     });
   } else {
@@ -87579,45 +87498,49 @@ async function lQ(e, t) {
   }
 }
 async function cQ(e, t, n = {}) {
-  const s = __cpExtractSessionDisplayText(e?.content, __CP_CHAT_SESSION_TEXT_LIMIT);
-  const r = __cpBuildTaskStyleGroupTitleFallback(s, n);
   try {
+    const s = __cpExtractSessionDisplayText(e?.content, __CP_CHAT_SESSION_TEXT_LIMIT);
     if (!s || s.trim() === "") {
-      return r;
+      return "";
     }
-    const i = __cpBuildTaskStyleGroupTitlePrompt(s, n);
-    const o = [{
+    const r = function (e) {
+      return `<conversation>\n\n${e}\n\n</conversation>\n\nThink about it, then suggest a title based on the first message, putting it between <title> tags.`;
+    }(s);
+    const i = [{
       role: "user",
-      content: i
+      content: r
     }];
-    o.push({
+    i.push({
       role: "assistant",
-      content: "Here is a concise task-style title for this browser tab group:\n\n<title>"
+      content: "Here is a clear, concise title for this browser automation conversation:\n\n<title>"
     });
-    const a = function (e) {
+    return function (e) {
+      const t = e => {
+        const t = String(e || "").replace(/<\/?title>/gi, " ").replace(/<[^>]*>/g, " ").replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim();
+        return t && t.toLowerCase() !== "title" ? __cpTrimSessionText(__cpStripSessionDisplayArtifacts(t), __CP_GROUP_TITLE_LIMIT) : "";
+      };
       if (!e.content || e.content.length === 0) {
         return "";
       }
-      const t = e.content.filter(e => e.type === "text").map(e => "text" in e ? e.text : "").join("\n");
-      const n = t.match(/<title>([\s\S]*?)<\/title>/i);
-      if (n) {
-        return __cpNormalizeGeneratedGroupTitle(n[1]);
-      }
-      const s = t.match(/^([\s\S]*?)<\/title>/i);
+      const n = e.content.filter(e => e.type === "text").map(e => "text" in e ? e.text : "").join("\n");
+      const s = n.match(/<title>([\s\S]*?)<\/title>/i);
       if (s) {
-        return __cpNormalizeGeneratedGroupTitle(s[1]);
+        return t(s[1]);
       }
-      const r = t.match(/<title>([\s\S]*)$/i);
-      return r ? __cpNormalizeGeneratedGroupTitle(r[1]) : __cpNormalizeGeneratedGroupTitle(t);
+      const r = n.match(/^([\s\S]*?)<\/title>/i);
+      if (r) {
+        return t(r[1]);
+      }
+      const i = n.match(/<title>([\s\S]*)$/i);
+      return i ? t(i[1]) : t(n);
     }(await t({
       maxTokens: 128,
-      messages: o,
-      system: "Act as an accurate and concise tab-group title generator for browser automation tasks.\nGenerate a <title> that reads like the active task label for a browser agent.\n\nPriority order:\n1. Use the user's request as the primary signal.\n2. Use the current site, page title, and open tabs only to sharpen the task.\n3. Prefer a task label over a conversation summary.\n\nRequirements:\n- Use the same language as the user's request when clear\n- 2-5 words, ideally under 42 characters\n- Sound like a live task name, not a sentence\n- Avoid generic words like Help, Assistance, Request, Browser Automation, Chat, Session, Task\n- Include a site or product name only when it helps identify the task\n- Prefer strong nouns and verbs over filler words\n- If uncertain, return an empty <title></title>\n\nExamples:\n- <title>Gmail Draft Reply</title>\n- <title>Amazon Price Check</title>\n- <title>TripAdvisor Hotel Search</title>\n- <title>整理飞书日报</title>\n- <title>查询快递进度</title>",
+      messages: i,
+      system: "Act as an accurate and concise title generator for browser automation conversations.\nGenerate a <title> based on the first message in the conversation.\n\nBasic tips:\n- Focus on the main browser task or action being requested\n- Identify the key website, action, or goal from the message\n- The conversation is a request to an AI assistant for browser automation. Avoid using \"Help\", \"Assistance\", \"Request\" in the title.\n- Be informative and specific to create a unique, distinctive title\n- Keep it short and concise - typically 2-4 words\n- Start with the most identifying/important word first\n- Think like an editor - what will be most compelling and informative for identifying this conversation\n- If you are unsure what the task is about, just create an empty <title></title>\n\nExamples of good titles for browser automation tasks:\n- <title>Draft email response</title>\n- <title>Grocery shopping</title>\n- <title>Paris flight search</title>",
       modelClass: "small_fast"
     }));
-    return a || r;
-  } catch (i) {
-    return r;
+  } catch (s) {
+    return "";
   }
 }
 function __cpEscapeXmlText(e) {
@@ -96413,6 +96336,10 @@ function o1() {
   a.useEffect(() => {
     if (X.current) {
       x(v.LAST_PERMISSION_MODE_PREFERENCE, i.permissionMode);
+      chrome.storage.local.set({
+        [__cpSidepanelAutoApproveAllPermissionRequestsStorageKey]:
+          i.permissionMode === "skip_all_permission_checks"
+      }).catch(() => {});
     }
   }, [i.permissionMode]);
   a.useEffect(() => {
@@ -96818,6 +96745,14 @@ function o1() {
       i.setPermissionPrompt(null);
     }
   }, [i]);
+  const __cpEnableAutoApproveAndAllowCurrentPermission = a.useCallback(async () => {
+    if (!i.permissionPrompt) {
+      return;
+    }
+    await __cpEnableAutoApproveAllPermissionRequests();
+    i.setPermissionMode("skip_all_permission_checks");
+    await nn(w.ONCE, __cpResolvePermissionScopeFromPrompt(i.permissionPrompt));
+  }, [i, nn]);
   const __cpPermissionApproveHandler = nn;
   const __cpPermissionDenyHandler = sn;
   const __cpSessionCreatedAtRef = a.useRef(Date.now());
@@ -97572,6 +97507,7 @@ function o1() {
     if (!e.ready || !e.scopeId || __cpLoadedScopeIdRef.current === e.scopeId) {
       return;
     }
+    const __cpIsMcpPermissionOnlyWindow = __cpSidepanelMcpPermissionPopupParseSearch(window.location.search).permissionOnly;
     __cpLoadedScopeIdRef.current = e.scopeId;
     const __cpHydrationRunId = ++__cpHydrationRunRef.current;
     let __cpHydrationCancelled = false;
@@ -97589,7 +97525,10 @@ function o1() {
         currentMessageCount: Array.isArray(dt) ? dt.length : 0
       });
       try {
-        sn();
+        if (!__cpIsMcpPermissionOnlyWindow) {
+          // 语义锚点：mcpPermissionOnly 权限窗的 requestId 回包不能被通用 session hydrate 起手 sn() 提前拒绝。
+          sn();
+        }
         // 语义锚点：scope 切换前，先把旧 scope 当前会话落到 storage，供新 sidepanel / detached window 接续恢复。
         if (__cpPreviousScopeState?.ready && __cpPreviousScopeState.scopeId && __cpPreviousScopeState.scopeId !== e.scopeId) {
           if (__cpSessionHasMeaningfulMessages(dt)) {
@@ -97832,7 +97771,11 @@ function o1() {
           return false;
         }
         if (a.type === __cpSidepanelRuntimeMessageTypeStopAgent) {
-          // 语义锚点：STOP_AGENT 当前不按 targetTabId 过滤；收到消息就直接走 cancel + permission deny 收口。
+          // 语义锚点：STOP_AGENT 先按 targetTabId 过滤；只有命中当前 tab 的 sidepanel 才会走 cancel + permission deny 收口。
+          const t = typeof a.targetTabId == "number" ? a.targetTabId : null;
+          if (t && e && e !== t) {
+            return false;
+          }
           if (n) {
             s();
           }
@@ -98018,33 +97961,9 @@ function o1() {
     __cpSetHighRiskWarningReady(true);
     await __cpSetHighRiskWarningDismissed(t);
   }, [r, __cpSetHighRiskWarningDismissed]);
-  const hn = a.useCallback(async e => {
-    try {
-      if (j !== null && j >= 0) {
-        const e = new Map(A);
-        e.set(j, M);
-        R(e);
-      }
-      He?.track("claude_chrome.chat.feedback", {
-        ...e,
-        sessionId: o.sessionId,
-        permissions: i.permissionMode,
-        quick_mode: ne
-      });
-    } catch (t) {}
-  }, [j, A, R, M, He, ne, o.sessionId, i.permissionMode]);
-  const pn = a.useCallback(e => {
-    S("positive");
-    E(e);
-    N(null);
-    _(true);
-  }, [S, E, N, _]);
-  const mn = a.useCallback(e => {
-    S("negative");
-    E(e);
-    N(null);
-    _(true);
-  }, [S, E, N, _]);
+  const hn = a.useCallback(async () => {}, []);
+  const pn = a.useCallback(() => {}, []);
+  const mn = a.useCallback(() => {}, []);
   const fn = a.useCallback(e => {
     const t = $.modelFallbacks?.[D];
     if (t) {
@@ -98060,12 +97979,7 @@ function o1() {
     H.current = true;
     mt();
   }, [$.modelFallbacks, D, z, V, mt, P, F, H]);
-  const gn = a.useCallback(() => {
-    S("negative");
-    E(null);
-    N("sc/false_positive");
-    _(true);
-  }, [S, E, N, _]);
+  const gn = a.useCallback(() => {}, []);
   const yn = a.useCallback(e => {
     if (!H.current) {
       U(e, ne);
@@ -98458,12 +98372,42 @@ function o1() {
                   onDeny: sn,
                   disableAlwaysAllow: ke
                 })
+              }), l.jsxs("div", {
+                className: "mx-3 md:mx-0 mt-3 border border-border-300 rounded-[14px] bg-bg-100 p-3",
+                children: [l.jsxs(cb, {
+                  onClick: __cpEnableAutoApproveAndAllowCurrentPermission,
+                  isPrimary: true,
+                  height: "55px",
+                  children: [l.jsxs("div", {
+                    className: "flex flex-col items-start",
+                    children: [l.jsx("span", {
+                      children: l.jsx(e, {
+                        defaultMessage: "Always auto-approve future permission requests",
+                        id: "bp7E2oF6fQ"
+                      })
+                    }), l.jsx("span", {
+                      className: "font-small text-oncolor-100 opacity-80",
+                      children: l.jsx(e, {
+                        defaultMessage: "Allow this one and future requests automatically",
+                        id: "x5J5dM6P6M"
+                      })
+                    })]
+                  }), l.jsx(ob, {
+                    className: "text-oncolor-100"
+                  })]
+                }), l.jsx("p", {
+                  className: "font-small text-text-500 px-1 mt-2",
+                  children: l.jsx(e, {
+                    defaultMessage: "Turn on global automatic approval and allow this request now",
+                    id: "4c6SH4z8sL"
+                  })
+                })]
               }), l.jsx("div", {
                 className: "bg-bg-100 h-3"
               })]
             })
           })]
-        }), k && l.jsx("div", {
+        }), false && k && l.jsx("div", {
           className: "fixed bottom-0 left-0 right-0 z-50 flex justify-center px-3 pb-3",
           children: l.jsx("div", {
             className: "w-full max-w-3xl border border-border-300 rounded-[14px] bg-bg-100",

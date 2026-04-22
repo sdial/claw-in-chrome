@@ -1,5 +1,5 @@
 param(
-  [string]$OutputRoot = "_local-release-import",
+  [string]$OutputRoot = "local-release-import",
   [string]$FolderName = "claw-in-chrome"
 )
 

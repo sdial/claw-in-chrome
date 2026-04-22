@@ -10,14 +10,20 @@ function main() {
 
   assert.match(
     source,
-    /const addModelButton = createNode\("button", "cp-model-action-btn cp-model-action-btn-add [^"]+", strings\.manualAddModelTitle\);/,
+    /const addModelButton = createNode\(\s*"button",\s*"cp-model-action-btn cp-model-action-btn-add [^"]+",\s*strings\.manualAddModelTitle,\s*\);/s,
     "manual add model button should render the localized manualAddModelTitle text"
   );
 
   assert.match(
     source,
-    /addModelAria: "手动添加模型"/,
-    "manual add model button should keep the Chinese accessibility label"
+    /resolveCustomI18nSection\(\s*"customProvider",/s,
+    "manual add model copy should come from the custom provider language pack section"
+  );
+
+  assert.match(
+    source,
+    /addModelAria: "Add model manually"/,
+    "manual add model button should keep an English fallback accessibility label in source"
   );
 
   assert.doesNotMatch(

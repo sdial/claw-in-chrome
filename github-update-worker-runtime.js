@@ -7,7 +7,7 @@
     return {
       info() {},
       warn() {},
-      error() {}
+      error() {},
     };
   }
 
@@ -16,15 +16,21 @@
     const chromeApi = options.chrome;
     const shared = options.shared;
     if (!chromeApi) {
-      throw new Error("createGithubUpdateWorkerRuntime requires a chrome dependency");
+      throw new Error(
+        "createGithubUpdateWorkerRuntime requires a chrome dependency",
+      );
     }
     if (!shared) {
-      throw new Error("createGithubUpdateWorkerRuntime requires a shared dependency");
+      throw new Error(
+        "createGithubUpdateWorkerRuntime requires a shared dependency",
+      );
     }
 
-    const consoleApi = options.console || globalThis.console || createNoopConsole();
+    const consoleApi =
+      options.console || globalThis.console || createNoopConsole();
     const fetchImpl = options.fetch || globalThis.fetch;
-    const now = typeof options.now === "function" ? options.now : () => Date.now();
+    const now =
+      typeof options.now === "function" ? options.now : () => Date.now();
     const {
       LATEST_JSON_URL,
       STORAGE_KEYS,
@@ -36,13 +42,17 @@
       isBlockedByMinVersion,
       createDefaultUpdateInfo,
       normalizeStoredInfo,
-      normalizeLatestPayload
+      normalizeLatestPayload,
     } = shared;
 
     function log(event, detail, level) {
-      const method = level === "error" ? "error" : level === "warn" ? "warn" : "info";
+      const method =
+        level === "error" ? "error" : level === "warn" ? "warn" : "info";
       try {
-        const logger = typeof consoleApi[method] === "function" ? consoleApi[method] : consoleApi.info;
+        const logger =
+          typeof consoleApi[method] === "function"
+            ? consoleApi[method]
+            : consoleApi.info;
         logger.call(consoleApi, "[github-update]", event, detail || "");
       } catch {}
     }
@@ -54,7 +64,7 @@
     function getVersionInfoPayload(info) {
       if (info && info.minSupportedVersion) {
         return {
-          min_supported_version: info.minSupportedVersion
+          min_supported_version: info.minSupportedVersion,
         };
       }
       return {};
@@ -78,7 +88,7 @@
           dismissedVersion: "",
           autoCheckEnabled: true,
           seenVersion: "",
-          previousVersion: ""
+          previousVersion: "",
         };
       }
       const currentVersion = getCurrentVersion();
@@ -87,14 +97,18 @@
         STORAGE_KEYS.DISMISSED_VERSION,
         STORAGE_KEYS.AUTO_CHECK_ENABLED,
         STORAGE_KEYS.SEEN_VERSION,
-        STORAGE_KEYS.PREVIOUS_VERSION
+        STORAGE_KEYS.PREVIOUS_VERSION,
       ]);
       return {
         info: normalizeStoredInfo(stored[STORAGE_KEYS.INFO], currentVersion),
-        dismissedVersion: String(stored[STORAGE_KEYS.DISMISSED_VERSION] || "").trim(),
+        dismissedVersion: String(
+          stored[STORAGE_KEYS.DISMISSED_VERSION] || "",
+        ).trim(),
         autoCheckEnabled: stored[STORAGE_KEYS.AUTO_CHECK_ENABLED] !== false,
         seenVersion: String(stored[STORAGE_KEYS.SEEN_VERSION] || "").trim(),
-        previousVersion: String(stored[STORAGE_KEYS.PREVIOUS_VERSION] || "").trim()
+        previousVersion: String(
+          stored[STORAGE_KEYS.PREVIOUS_VERSION] || "",
+        ).trim(),
       };
     }
 
@@ -110,20 +124,24 @@
       const visible = !!hasUpdate;
       try {
         await chromeApi.action.setBadgeText({
-          text: visible ? "NEW" : ""
+          text: visible ? "NEW" : "",
         });
         if (visible) {
           await chromeApi.action.setBadgeBackgroundColor?.({
-            color: "#ca4330"
+            color: "#ca4330",
           });
           await chromeApi.action.setBadgeTextColor?.({
-            color: "#ffffff"
+            color: "#ffffff",
           });
         }
       } catch (error) {
-        log("badge.sync_failed", {
-          error: String(error?.message || error || "")
-        }, "warn");
+        log(
+          "badge.sync_failed",
+          {
+            error: String(error?.message || error || ""),
+          },
+          "warn",
+        );
       }
     }
 
@@ -132,7 +150,7 @@
       await chromeApi.storage.local.set({
         [STORAGE_KEYS.INFO]: normalizedInfo,
         [STORAGE_KEYS.UPDATE_AVAILABLE]: normalizedInfo.hasUpdate,
-        [STORAGE_KEYS.VERSION_INFO]: getVersionInfoPayload(normalizedInfo)
+        [STORAGE_KEYS.VERSION_INFO]: getVersionInfoPayload(normalizedInfo),
       });
       await syncBadge(normalizedInfo.hasUpdate);
       return normalizedInfo;
@@ -174,7 +192,7 @@
       await syncBadge(nextInfo.hasUpdate);
       return {
         state,
-        info: nextInfo
+        info: nextInfo,
       };
     }
 
@@ -185,8 +203,8 @@
       const response = await fetchImpl(LATEST_JSON_URL, {
         cache: "no-store",
         headers: {
-          Accept: "application/json"
-        }
+          Accept: "application/json",
+        },
       });
       if (!response.ok) {
         throw new Error(`更新元数据请求失败（HTTP ${response.status}）。`);
@@ -197,43 +215,52 @@
     async function performUpdateCheck(options) {
       const settings = options && typeof options === "object" ? options : {};
       const currentVersion = getCurrentVersion();
-      const lifecycle = await syncInstalledVersion(settings.lifecycleReason || "");
+      const lifecycle = await syncInstalledVersion(
+        settings.lifecycleReason || "",
+      );
       const cachedInfo = normalizeStoredInfo(lifecycle.info, currentVersion);
 
       if (shouldSkipNetworkCheck(cachedInfo, settings.force === true)) {
         log("check.skipped_recently", {
           reason: settings.reason || "unknown",
-          lastCheckedAt: cachedInfo.lastCheckedAt
+          lastCheckedAt: cachedInfo.lastCheckedAt,
         });
         return {
           ok: true,
           info: cachedInfo,
-          fromCache: true
+          fromCache: true,
         };
       }
 
       try {
         const rawPayload = await fetchLatestPayload();
-        const normalizedInfo = normalizeLatestPayload(rawPayload, currentVersion);
+        const normalizedInfo = normalizeLatestPayload(
+          rawPayload,
+          currentVersion,
+        );
         const persistedInfo = await persistInfo(normalizedInfo);
         log("check.success", {
           reason: settings.reason || "unknown",
           currentVersion,
           latestVersion: persistedInfo.latestVersion,
           hasUpdate: persistedInfo.hasUpdate,
-          minSupportedVersion: persistedInfo.minSupportedVersion
+          minSupportedVersion: persistedInfo.minSupportedVersion,
         });
         return {
           ok: true,
           info: persistedInfo,
-          fromCache: false
+          fromCache: false,
         };
       } catch (error) {
         const errorMessage = String(error?.message || error || "未知错误");
-        log("check.failed", {
-          reason: settings.reason || "unknown",
-          error: errorMessage
-        }, settings.silent ? "warn" : "error");
+        log(
+          "check.failed",
+          {
+            reason: settings.reason || "unknown",
+            error: errorMessage,
+          },
+          settings.silent ? "warn" : "error",
+        );
         if (!settings.silent) {
           throw error instanceof Error ? error : new Error(errorMessage);
         }
@@ -241,7 +268,7 @@
           ok: false,
           info: cachedInfo,
           error: errorMessage,
-          fromCache: true
+          fromCache: true,
         };
       }
     }
@@ -249,7 +276,7 @@
     async function dismissUpdateBanner(version) {
       const currentDismissedVersion = normalizeVersion(version);
       await chromeApi.storage.local.set({
-        [STORAGE_KEYS.DISMISSED_VERSION]: currentDismissedVersion
+        [STORAGE_KEYS.DISMISSED_VERSION]: currentDismissedVersion,
       });
     }
 
@@ -257,14 +284,17 @@
       if (!chromeApi.alarms?.create) {
         return;
       }
-      const enabled = typeof forceEnabled === "boolean" ? forceEnabled : await isAutoCheckEnabled();
+      const enabled =
+        typeof forceEnabled === "boolean"
+          ? forceEnabled
+          : await isAutoCheckEnabled();
       if (!enabled) {
         await chromeApi.alarms.clear?.(ALARM_NAME);
         return;
       }
       await chromeApi.alarms.create(ALARM_NAME, {
         delayInMinutes: 1,
-        periodInMinutes: CHECK_INTERVAL_MINUTES
+        periodInMinutes: CHECK_INTERVAL_MINUTES,
       });
     }
 
@@ -272,7 +302,7 @@
       const reason = details?.reason || "";
       try {
         await initializeAlarm();
-        if (!await isAutoCheckEnabled()) {
+        if (!(await isAutoCheckEnabled())) {
           await syncInstalledVersion(reason);
           return;
         }
@@ -280,20 +310,24 @@
           force: true,
           silent: true,
           reason: "onInstalled",
-          lifecycleReason: reason
+          lifecycleReason: reason,
         });
       } catch (error) {
-        log("install.init_failed", {
-          reason,
-          error: String(error?.message || error || "")
-        }, "warn");
+        log(
+          "install.init_failed",
+          {
+            reason,
+            error: String(error?.message || error || ""),
+          },
+          "warn",
+        );
       }
     }
 
     async function onStartup() {
       try {
         await initializeAlarm();
-        if (!await isAutoCheckEnabled()) {
+        if (!(await isAutoCheckEnabled())) {
           await syncInstalledVersion("startup");
           return;
         }
@@ -301,12 +335,16 @@
           force: false,
           silent: true,
           reason: "onStartup",
-          lifecycleReason: "startup"
+          lifecycleReason: "startup",
         });
       } catch (error) {
-        log("startup.init_failed", {
-          error: String(error?.message || error || "")
-        }, "warn");
+        log(
+          "startup.init_failed",
+          {
+            error: String(error?.message || error || ""),
+          },
+          "warn",
+        );
       }
     }
 
@@ -315,20 +353,26 @@
         if (!alarm || alarm.name !== ALARM_NAME) {
           return;
         }
-        isAutoCheckEnabled().then(function (enabled) {
-          if (!enabled) {
-            return initializeAlarm(false);
-          }
-          return performUpdateCheck({
-            force: true,
-            silent: true,
-            reason: "alarm"
+        isAutoCheckEnabled()
+          .then(function (enabled) {
+            if (!enabled) {
+              return initializeAlarm(false);
+            }
+            return performUpdateCheck({
+              force: true,
+              silent: true,
+              reason: "alarm",
+            });
+          })
+          .catch(function (error) {
+            log(
+              "alarm.check_failed",
+              {
+                error: String(error?.message || error || ""),
+              },
+              "warn",
+            );
           });
-        }).catch(function (error) {
-          log("alarm.check_failed", {
-            error: String(error?.message || error || "")
-          }, "warn");
-        });
       };
     }
 
@@ -337,12 +381,17 @@
         if (areaName !== "local" || !changes[STORAGE_KEYS.AUTO_CHECK_ENABLED]) {
           return;
         }
-        const enabled = changes[STORAGE_KEYS.AUTO_CHECK_ENABLED].newValue !== false;
+        const enabled =
+          changes[STORAGE_KEYS.AUTO_CHECK_ENABLED].newValue !== false;
         initializeAlarm(enabled).catch(function (error) {
-          log("alarm.reconfigure_failed", {
-            enabled,
-            error: String(error?.message || error || "")
-          }, "warn");
+          log(
+            "alarm.reconfigure_failed",
+            {
+              enabled,
+              error: String(error?.message || error || ""),
+            },
+            "warn",
+          );
         });
       };
     }
@@ -354,31 +403,35 @@
           performUpdateCheck({
             force: true,
             silent: false,
-            reason: "manual_check"
-          }).then(function (result) {
-            sendResponse({
-              ok: true,
-              info: result.info
+            reason: "manual_check",
+          })
+            .then(function (result) {
+              sendResponse({
+                ok: true,
+                info: result.info,
+              });
+            })
+            .catch(function (error) {
+              sendResponse({
+                ok: false,
+                error: String(error?.message || error || "检查更新失败。"),
+              });
             });
-          }).catch(function (error) {
-            sendResponse({
-              ok: false,
-              error: String(error?.message || error || "检查更新失败。")
-            });
-          });
           return true;
         }
         if (type === MESSAGE_TYPES.DISMISS) {
-          dismissUpdateBanner(message?.version || "").then(function () {
-            sendResponse({
-              ok: true
+          dismissUpdateBanner(message?.version || "")
+            .then(function () {
+              sendResponse({
+                ok: true,
+              });
+            })
+            .catch(function (error) {
+              sendResponse({
+                ok: false,
+                error: String(error?.message || error || "忽略更新失败。"),
+              });
             });
-          }).catch(function (error) {
-            sendResponse({
-              ok: false,
-              error: String(error?.message || error || "忽略更新失败。")
-            });
-          });
           return true;
         }
         return false;
@@ -396,18 +449,30 @@
           ...info,
           currentVersion,
           hasUpdate: computeHasUpdate(currentVersion, info.latestVersion),
-          minSupportedVersion: info.minSupportedVersion || null
+          minSupportedVersion: info.minSupportedVersion || null,
         };
-        fixedInfo.hasUpdate = computeHasUpdate(fixedInfo.currentVersion, fixedInfo.latestVersion);
-        if (isBlockedByMinVersion(fixedInfo.currentVersion, fixedInfo.minSupportedVersion)) {
+        fixedInfo.hasUpdate = computeHasUpdate(
+          fixedInfo.currentVersion,
+          fixedInfo.latestVersion,
+        );
+        if (
+          isBlockedByMinVersion(
+            fixedInfo.currentVersion,
+            fixedInfo.minSupportedVersion,
+          )
+        ) {
           fixedInfo.hasUpdate = fixedInfo.hasUpdate || false;
         }
         await persistInfo(fixedInfo);
         await syncInstalledVersion("bootstrap");
       } catch (error) {
-        log("bootstrap.failed", {
-          error: String(error?.message || error || "")
-        }, "warn");
+        log(
+          "bootstrap.failed",
+          {
+            error: String(error?.message || error || ""),
+          },
+          "warn",
+        );
       }
     }
 
@@ -416,7 +481,7 @@
       onStartup,
       onAlarm: createAlarmHandler(),
       onStorageChanged: createStorageChangedHandler(),
-      onMessage: createMessageHandler()
+      onMessage: createMessageHandler(),
     };
 
     return {
@@ -439,7 +504,7 @@
       createStorageChangedHandler,
       createMessageHandler,
       bootstrap,
-      handlers
+      handlers,
     };
   }
 
@@ -449,7 +514,9 @@
     chromeApi.runtime?.onInstalled?.addListener?.(runtime.handlers.onInstalled);
     chromeApi.runtime?.onStartup?.addListener?.(runtime.handlers.onStartup);
     chromeApi.alarms?.onAlarm?.addListener?.(runtime.handlers.onAlarm);
-    chromeApi.storage?.onChanged?.addListener?.(runtime.handlers.onStorageChanged);
+    chromeApi.storage?.onChanged?.addListener?.(
+      runtime.handlers.onStorageChanged,
+    );
     chromeApi.runtime?.onMessage?.addListener?.(runtime.handlers.onMessage);
     if (deps?.bootstrap !== false) {
       runtime.bootstrap();
@@ -459,6 +526,6 @@
 
   globalThis.__CP_GITHUB_UPDATE_WORKER_RUNTIME__ = {
     createGithubUpdateWorkerRuntime,
-    registerGithubUpdateWorker
+    registerGithubUpdateWorker,
   };
 })();

@@ -99,6 +99,13 @@ async function testContractExposesFrozenStableKeys() {
   assert.equal(contract.workflows.STORAGE_KEY, "claw_site_workflows_v1");
   assert.equal(contract.models.CONFIG_STORAGE_KEY, "chrome_ext_models");
   assert.equal(contract.ui.PREFERRED_LOCALE_STORAGE_KEY, "preferred_locale");
+  assert.equal(contract.ui.DEBUG_MODE_STORAGE_KEY, "debugMode");
+  assert.equal(contract.ui.SHOW_TRACE_IDS_STORAGE_KEY, "showTraceIds");
+  assert.equal(
+    contract.ui.SHOW_SYSTEM_REMINDERS_STORAGE_KEY,
+    "showSystemReminders",
+  );
+  assert.equal(contract.ui.SHOW_TOOL_RESULT_DETAILS_STORAGE_KEY, "showToolResultDetails");
   assert.equal(contract.permissionManager.UPDATE_AVAILABLE_STORAGE_KEY, "updateAvailable");
   assert.equal(contract.permissionManager.SAVED_PROMPTS_STORAGE_KEY, "savedPrompts");
   assert.equal(contract.offscreen.KEEPALIVE_INTERVAL_MS, 20000);

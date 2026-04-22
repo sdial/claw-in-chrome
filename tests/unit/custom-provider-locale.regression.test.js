@@ -16,7 +16,7 @@ function main() {
 
   assert.match(
     source,
-    /const PREFERRED_LOCALE_STORAGE_KEY = uiContract\.PREFERRED_LOCALE_STORAGE_KEY \|\| "preferred_locale";/,
+    /const PREFERRED_LOCALE_STORAGE_KEY =\s*uiContract\.PREFERRED_LOCALE_STORAGE_KEY \|\| "preferred_locale";/s,
     "custom provider settings should use the shared preferred locale storage key"
   );
 
@@ -34,14 +34,38 @@ function main() {
 
   assert.match(
     source,
-    /if \(PREFERRED_LOCALE_STORAGE_KEY in changes && applyPreferredUiLocaleKey\(changes\[PREFERRED_LOCALE_STORAGE_KEY\]\?\.newValue\)\) \{\s*scheduleUiRebuild\(\);\s*return;\s*\}/s,
+    /document\?\.documentElement\?\.dataset\?\.cpUiLocale/,
+    "custom provider settings should honor the explicit options page locale marker before guessing from browser language"
+  );
+
+  assert.match(
+    source,
+    /resolveCustomI18nSection\(\s*"customProvider",/s,
+    "custom provider settings should load its copy from the custom language pack section"
+  );
+
+  assert.match(
+    source,
+    /if \(\s*PREFERRED_LOCALE_STORAGE_KEY in changes &&\s*applyPreferredUiLocaleKey\(\s*changes\[PREFERRED_LOCALE_STORAGE_KEY\]\?\.newValue,\s*\)\s*\) \{\s*scheduleUiRebuild\(\);\s*return;\s*\}/s,
     "preferred locale changes should trigger a full UI rebuild"
   );
 
   assert.match(
     source,
-    /async function bootstrapUi\(\) \{\s*applyPreferredUiLocaleKey\(await readStoredPreferredUiLocaleKey\(\)\);\s*buildUi\(\);\s*\}/s,
+    /async function bootstrapUi\(\) \{[\s\S]*applyPreferredUiLocaleKey\(await readStoredPreferredUiLocaleKey\(\)\);[\s\S]*await buildUiForCurrentLocale\(\);/s,
     "bootstrap should resolve the preferred locale before the first render"
+  );
+
+  assert.match(
+    source,
+    /window\.addEventListener\("cp:ui-locale-changed", handleExternalUiLocaleChanged\);/,
+    "custom provider settings should listen for explicit options locale change events"
+  );
+
+  assert.match(
+    source,
+    /scheduleDeferredUiLocaleCheck\(20\);/,
+    "custom provider settings should probe for a late-resolved locale after bootstrap to avoid mixed-language first paint"
   );
 
   assert.doesNotMatch(

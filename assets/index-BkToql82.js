@@ -10,19 +10,24 @@ function t(t, i) {
     if (o && a) {
       var s = o[a];
       if (!e(o, s)) {
-        r.updateEvent("integrations", n(n({}, r.event.integrations), {
-          All: false,
-          "Segment.io": true
-        }));
+        r.updateEvent(
+          "integrations",
+          n(n({}, r.event.integrations), {
+            All: false,
+            "Segment.io": true,
+          }),
+        );
         return r;
       }
-      var u = function (n, e) {
+      var u = (function (n, e) {
         if (!n || !Object.keys(n)) {
           return {};
         }
-        var r = n.integrations ? Object.keys(n.integrations).filter(function (e) {
-          return n.integrations[e] === false;
-        }) : [];
+        var r = n.integrations
+          ? Object.keys(n.integrations).filter(function (e) {
+              return n.integrations[e] === false;
+            })
+          : [];
         var o = [];
         (e.remotePlugins ?? []).forEach(function (n) {
           r.forEach(function (e) {
@@ -34,13 +39,22 @@ function t(t, i) {
         return (e.remotePlugins ?? []).reduce(function (n, e) {
           if (e.settings.subscriptions && o.includes(e.name)) {
             e.settings.subscriptions.forEach(function (t) {
-              return n[`${e.name} ${t.partnerAction}`] = false;
+              return (n[`${e.name} ${t.partnerAction}`] = false);
             });
           }
           return n;
         }, {});
-      }(s, i);
-      r.updateEvent("integrations", n(n(n({}, r.event.integrations), s == null ? undefined : s.integrations), u));
+      })(s, i);
+      r.updateEvent(
+        "integrations",
+        n(
+          n(
+            n({}, r.event.integrations),
+            s == null ? undefined : s.integrations,
+          ),
+          u,
+        ),
+      );
     }
     return r;
   }
@@ -58,7 +72,7 @@ function t(t, i) {
     alias: r,
     track: r,
     identify: r,
-    group: r
+    group: r,
   };
 }
 export { t as schemaFilter };

@@ -1,4 +1,5 @@
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
 const path = require("node:path");
 
 const {
@@ -14,6 +15,12 @@ const {
 } = require("../helpers/fake-dom");
 
 const scriptPath = path.join(__dirname, "..", "..", "github-update-options.js");
+const customZhPack = Function(
+  `"use strict"; return (${fs.readFileSync(
+    path.join(__dirname, "..", "..", "i18n", "custom", "zh-CN.js"),
+    "utf8",
+  )});`,
+)();
 
 function createOptionsHarness(options = {}) {
   const chromeMock = createChromeMock({
@@ -87,6 +94,25 @@ function createOptionsHarness(options = {}) {
         return "en-US";
       }
       return String(context.navigatorLanguage || "").toLowerCase().startsWith("zh") ? "zh-CN" : "en-US";
+    },
+    cloneLocaleValue(value) {
+      return JSON.parse(JSON.stringify(value));
+    },
+    normalizeUiLocaleTag(value) {
+      const locale = String(value || "").trim().toLowerCase();
+      if (!locale) {
+        return "";
+      }
+      return locale.startsWith("zh") ? "zh-CN" : "en-US";
+    },
+    async resolveCustomI18nSection(sectionName, localeTag, defaults) {
+      if (String(localeTag || "").toLowerCase() === "zh-cn") {
+        return {
+          ...JSON.parse(JSON.stringify(defaults)),
+          ...(customZhPack[sectionName] || {}),
+        };
+      }
+      return JSON.parse(JSON.stringify(defaults));
     },
     formatTimestamp(value) {
       return `fmt:${value}`;
