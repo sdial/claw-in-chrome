@@ -1,9 +1,12 @@
 const assert = require("node:assert/strict");
+const childProcess = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
 
 const workflowPath = path.join(__dirname, "..", "..", ".github", "workflows", "release-extension.yml");
 const packageListPath = path.join(__dirname, "..", "..", ".github", "release-package-items.txt");
+const packageJsonPath = path.join(__dirname, "..", "..", "package.json");
+const checkScriptPath = path.join(__dirname, "..", "..", "scripts", "check-release-package.js");
 const optionsHtmlPath = path.join(__dirname, "..", "..", "options.html");
 const sidepanelHtmlPath = path.join(__dirname, "..", "..", "sidepanel.html");
 const pairingHtmlPath = path.join(__dirname, "..", "..", "pairing.html");
@@ -12,6 +15,7 @@ const gifViewerHtmlPath = path.join(__dirname, "..", "..", "gif_viewer.html");
 const serviceWorkerLoaderPath = path.join(__dirname, "..", "..", "service-worker-loader.js");
 const workflowSource = fs.readFileSync(workflowPath, "utf8");
 const packageListSource = fs.readFileSync(packageListPath, "utf8");
+const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf8"));
 const optionsHtml = fs.readFileSync(optionsHtmlPath, "utf8");
 const sidepanelHtml = fs.readFileSync(sidepanelHtmlPath, "utf8");
 const pairingHtml = fs.readFileSync(pairingHtmlPath, "utf8");
@@ -103,6 +107,26 @@ function testWorkflowUsesTrackedPackageList() {
   assert.match(workflowSource, /mapfile -t PACKAGE_ITEMS/, "workflow should load package items into an array");
 }
 
+function testReleasePackageCheckScriptPasses() {
+  childProcess.execFileSync(process.execPath, [checkScriptPath], {
+    cwd: path.join(__dirname, "..", ".."),
+    stdio: "pipe"
+  });
+}
+
+function testReleasePackageCheckIsWiredIntoScriptsAndWorkflow() {
+  assert.equal(
+    packageJson.scripts["check:release-package"],
+    "node scripts/check-release-package.js",
+    "package.json should expose the release package checker script"
+  );
+  assert.match(
+    workflowSource,
+    /Verify release package manifest[\s\S]*npm run check:release-package/m,
+    "release workflow should verify the release package manifest before archiving"
+  );
+}
+
 function testMinSupportedVersionIsOptional() {
   assert.match(workflowSource, /workflow_dispatch:\s+inputs:\s+min_supported_version:/m, "workflow_dispatch should expose optional min_supported_version input");
   assert.doesNotMatch(workflowSource, /min_supported_version:\s*version/, "workflow should not force every release to block all older versions");
@@ -125,6 +149,8 @@ function main() {
   testPackageListIncludesRuntimeDependencies();
   testReleaseArchiveExcludesLocalPreviewAddon();
   testWorkflowUsesTrackedPackageList();
+  testReleasePackageCheckScriptPasses();
+  testReleasePackageCheckIsWiredIntoScriptsAndWorkflow();
   testMinSupportedVersionIsOptional();
   testReleaseNotesUseTriggeringPushCommitMessages();
   console.log("release workflow metadata tests passed");

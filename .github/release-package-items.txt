@@ -37,4 +37,9 @@ sidepanel-debug-logger.js
 sidepanel-inline-provider.css
 sidepanel-inline-provider.js
 sidepanel.html
+telemetry-disable.js
 theme-init.js
+visualizer.html
+visualizer.js
+visualizer.css
+visualizer-core.js

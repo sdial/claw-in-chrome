@@ -31,6 +31,9 @@ jobs:
         with:
           node-version: 20
 
+      - name: Verify release package manifest
+        run: npm run check:release-package
+
       - name: Resolve release metadata
         id: meta
         shell: bash
