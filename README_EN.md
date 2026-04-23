@@ -15,8 +15,8 @@ Put Claw into Chrome's sidebar so you can connect your own model providers direc
 
 <a href="#-quick-start"><b>🚀 Quick Start</b></a> | <a href="#-features"><b>✨ Features</b></a> | <a href="#-project-structure"><b>🗂️ Project Structure</b></a>
 
-![Sidebar chat](./docs/03.png) 
-![Flow visualizer](./docs/06.png)
+![Sidebar chat](./screenshots/03.png) 
+![Flow visualizer](./screenshots/06.png)
 
 ---
 
