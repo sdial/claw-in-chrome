@@ -379,7 +379,7 @@ const __cpMcpScreenshotViewportContextLedger = M;
 const __cpMcpClearScreenshotViewportContextForTab = (e) => M.clearContext(e);
 const __cpMcpClearAllScreenshotViewportContexts = () => M.clearAllContexts();
 function D(e) {
-  if (!e.startsWith("http")) {
+  if (!/^[a-z][a-z\d+.-]*:/i.test(e)) {
     e = `https://${e}`;
   }
   try {
@@ -427,7 +427,7 @@ function __cpNormalizeDomainCategory(e) {
 function U(e, t) {
   let r;
   try {
-    r = new URL(/^https?:\/\//.test(e) ? e : `https://${e}`);
+    r = new URL(/^[a-z][a-z\d+.-]*:/i.test(e) ? e : `https://${e}`);
   } catch {
     return false;
   }
@@ -4042,6 +4042,8 @@ class H {
             width: window.innerWidth,
             height: window.innerHeight,
             devicePixelRatio: window.devicePixelRatio,
+            scrollX: window.scrollX,
+            scrollY: window.scrollY,
           };
           if (e) {
             return {
@@ -4070,23 +4072,40 @@ class H {
         throw new Error("Failed to get viewport information");
       }
       const {
-        width: l,
-        height: d,
-        dom_nodes: u,
-        ready_state: h,
-        visibility_state: p,
-        iframe_count: m,
-        js_heap_mb: f,
+        width: viewportWidth,
+        height: viewportHeight,
+        devicePixelRatio: devicePixelRatio,
+        scrollX: scrollX,
+        scrollY: scrollY,
+        dom_nodes: domNodeCount,
+        ready_state: readyState,
+        visibility_state: visibilityState,
+        iframe_count: iframeCount,
+        js_heap_mb: jsHeapMb,
       } = r[0].result;
       n?.setAttributes({
-        target_dom_nodes: u,
-        target_ready_state: h,
-        target_visibility_state: p,
-        target_iframe_count: m,
-        target_js_heap_mb: Math.round(f),
+        target_dom_nodes: domNodeCount,
+        target_ready_state: readyState,
+        target_visibility_state: visibilityState,
+        target_iframe_count: iframeCount,
+        target_js_heap_mb: Math.round(jsHeapMb),
       });
-      const [g, b] = C(l, d, o);
-      const w = g < l ? g / l : 1;
+      const captureDeviceScaleFactor = devicePixelRatio || 1;
+      const captureSourceWidth = Math.round(
+        viewportWidth * captureDeviceScaleFactor,
+      );
+      const captureSourceHeight = Math.round(
+        viewportHeight * captureDeviceScaleFactor,
+      );
+      const [targetWidth, targetHeight] = C(
+        captureSourceWidth,
+        captureSourceHeight,
+        o,
+      );
+      const captureScale =
+        captureSourceWidth > 0
+          ? Math.min(1, targetWidth / captureSourceWidth)
+          : 1;
       if (a()) {
         try {
           await this.sendCommand(e, "Page.bringToFront", {});
@@ -4103,11 +4122,11 @@ class H {
           captureBeyondViewport: false,
           fromSurface: true,
           clip: {
-            x: 0,
-            y: 0,
-            width: l,
-            height: d,
-            scale: w,
+            x: scrollX,
+            y: scrollY,
+            width: viewportWidth,
+            height: viewportHeight,
+            scale: captureScale,
           },
         });
       } finally {
@@ -4120,16 +4139,16 @@ class H {
       n?.setAttributes({
         screenshot_b64_len: v.length,
         screenshot_format: s,
-        screenshot_capture_px: g * b,
+        screenshot_capture_px: targetWidth * targetHeight,
       });
       if (v.length <= H.MAX_BASE64_CHARS) {
         const t = {
           base64: v,
-          width: g,
-          height: b,
+          width: targetWidth,
+          height: targetHeight,
           format: s,
-          viewportWidth: l,
-          viewportHeight: d,
+          viewportWidth,
+          viewportHeight,
         };
         // 语义锚点：screenshot 会把 viewport/screenshot 尺寸写进上下文，供后续坐标动作做缩放换算。
         // 原始截图直返与 content-script 压缩回退，最终都会写入同一份 M 尺寸账本。
@@ -4140,8 +4159,8 @@ class H {
         e,
         v,
         s,
-        l,
-        d,
+        viewportWidth,
+        viewportHeight,
         1,
         o,
         i,
@@ -4403,6 +4422,36 @@ const re = (e, t) => {
   }
   return [];
 };
+const __cpMcpLocalImageRegistry = new Map();
+const __cpMcpLocalImageRegistryLimit = 32;
+function __cpMcpRememberImage(e, t) {
+  if (!e || !t?.base64) {
+    return;
+  }
+  if (__cpMcpLocalImageRegistry.has(e)) {
+    __cpMcpLocalImageRegistry.delete(e);
+  }
+  __cpMcpLocalImageRegistry.set(e, t);
+  while (__cpMcpLocalImageRegistry.size > __cpMcpLocalImageRegistryLimit) {
+    const r = __cpMcpLocalImageRegistry.keys().next().value;
+    if (r === undefined) {
+      break;
+    }
+    __cpMcpLocalImageRegistry.delete(r);
+  }
+}
+function __cpMcpResolveImageFromLocalRegistry(e) {
+  if (!e) {
+    return;
+  }
+  const t = __cpMcpLocalImageRegistry.get(e);
+  if (t) {
+    __cpMcpLocalImageRegistry.delete(e);
+    __cpMcpLocalImageRegistry.set(e, t);
+    console.info(`[imageUtils] ✅ Found cached image data for ID ${e}`);
+  }
+  return t;
+}
 function oe(e, t) {
   console.info(`[imageUtils] Looking for image with ID: ${t}`);
   console.info(`[imageUtils] Total messages to search: ${e.length}`);
@@ -5156,15 +5205,22 @@ const pe = {
                 func: () => ({
                   width: window.innerWidth,
                   height: window.innerHeight,
+                  scrollX: window.scrollX,
+                  scrollY: window.scrollY,
                 }),
               });
               if (!r || !r[0]?.result) {
                 throw new Error("Failed to get viewport dimensions");
               }
-              const { width: l, height: d } = r[0].result;
-              if (s > l || i > d) {
+              const {
+                width: viewportWidth,
+                height: viewportHeight,
+                scrollX: viewportScrollX,
+                scrollY: viewportScrollY,
+              } = r[0].result;
+              if (s > viewportWidth || i > viewportHeight) {
                 throw new Error(
-                  `Region exceeds viewport boundaries (${l}x${d}). Please choose a region within the visible viewport.`,
+                  `Region exceeds viewport boundaries (${viewportWidth}x${viewportHeight}). Please choose a region within the visible viewport.`,
                 );
               }
               const u = s - o;
@@ -5180,8 +5236,8 @@ const pe = {
                 captureBeyondViewport: false,
                 fromSurface: true,
                 clip: {
-                  x: o,
-                  y: n,
+                  x: viewportScrollX + o,
+                  y: viewportScrollY + n,
                   width: u,
                   height: h,
                   scale: 1,
@@ -5591,6 +5647,12 @@ async function ge(e, t) {
     console.info(
       `[Computer Tool] Screenshot dimensions: ${r.width}x${r.height}`,
     );
+    __cpMcpRememberImage(o, {
+      base64: r.base64,
+      mediaType: `image/${r.format}`,
+      width: r.width,
+      height: r.height,
+    });
     return {
       output: `Successfully captured screenshot (${r.width}x${r.height}, ${r.format}) - ID: ${o}`,
       base64Image: r.base64,
@@ -7645,6 +7707,37 @@ async function Me(e, t, r) {
     };
   }
 }
+// 语义锚点：navigate 的历史栈回退/前进改走 CDP。
+// 实测 chrome.tabs.goBack() 在 MCP 新建 tab 上会误报“Cannot find a next page in history”，
+// 即使页面自己的 history.back() 与 CDP history 都证明存在上一页；因此这里统一改成
+// Page.getNavigationHistory + Page.navigateToHistoryEntry，直接跟浏览器真实历史栈对齐。
+async function __cpMcpNavigateHistoryWithCdp(e, t) {
+  const r = await K.sendCommand(e, "Page.getNavigationHistory");
+  const o = Array.isArray(r?.entries) ? r.entries : [];
+  const a =
+    typeof r?.currentIndex === "number" && Number.isFinite(r.currentIndex)
+      ? r.currentIndex
+      : -1;
+  const n = t === "back" ? a - 1 : a + 1;
+  if (n < 0 || n >= o.length) {
+    throw new Error(
+      t === "back"
+        ? "Cannot find a previous page in history."
+        : "Cannot find a next page in history.",
+    );
+  }
+  const s = o[n];
+  const i = s?.id;
+  if (typeof i !== "number" || !Number.isFinite(i)) {
+    throw new Error("Navigation history entry is missing an ID.");
+  }
+  await K.sendCommand(e, "Page.navigateToHistoryEntry", {
+    entryId: i,
+  });
+  return {
+    url: typeof s?.url === "string" ? s.url : "",
+  };
+}
 const __cpMcpBeforeunloadNavigationGuard = Me;
 const De = {
   name: "navigate",
@@ -7709,40 +7802,48 @@ const De = {
       // 语义锚点：navigate 的 back / forward / 普通 URL 三路。
       // back/forward 直接走浏览器历史；普通 URL 则先补协议、过 blocklist，再做域权限检查。
       if (o.toLowerCase() === "back") {
-        const e = await Me(s, n, () => chrome.tabs.goBack(i.id));
-        if (e.kind === "blocked") {
+        let e;
+        const r = await Me(s, n, async () => {
+          e = await __cpMcpNavigateHistoryWithCdp(i.id, "back");
+        });
+        if (r.kind === "blocked") {
           return {
-            error: e.error,
+            error: r.error,
           };
         }
-        const r = await chrome.tabs.get(i.id);
-        const o = await F.getValidTabsWithMetadata(t.tabId);
+        const o = await chrome.tabs.get(i.id);
+        const a = await F.getValidTabsWithMetadata(t.tabId);
+        const c = e?.url || o.url || "";
         return {
-          output: `Navigated back to ${r.url}${e.kind === "accepted" ? e.suffix : ""}`,
+          output: `Navigated back to ${c}${r.kind === "accepted" ? r.suffix : ""}`,
           tabContext: {
             currentTabId: t.tabId,
             executedOnTabId: s,
-            availableTabs: o,
-            tabCount: o.length,
+            availableTabs: a,
+            tabCount: a.length,
           },
         };
       }
       if (o.toLowerCase() === "forward") {
-        const e = await Me(s, n, () => chrome.tabs.goForward(i.id));
-        if (e.kind === "blocked") {
+        let e;
+        const r = await Me(s, n, async () => {
+          e = await __cpMcpNavigateHistoryWithCdp(i.id, "forward");
+        });
+        if (r.kind === "blocked") {
           return {
-            error: e.error,
+            error: r.error,
           };
         }
-        const r = await chrome.tabs.get(i.id);
-        const o = await F.getValidTabsWithMetadata(t.tabId);
+        const o = await chrome.tabs.get(i.id);
+        const a = await F.getValidTabsWithMetadata(t.tabId);
+        const c = e?.url || o.url || "";
         return {
-          output: `Navigated forward to ${r.url}${e.kind === "accepted" ? e.suffix : ""}`,
+          output: `Navigated forward to ${c}${r.kind === "accepted" ? r.suffix : ""}`,
           tabContext: {
             currentTabId: t.tabId,
             executedOnTabId: s,
-            availableTabs: o,
-            tabCount: o.length,
+            availableTabs: a,
+            tabCount: a.length,
           },
         };
       }
@@ -7750,7 +7851,7 @@ const De = {
       // 语义锚点：普通 URL 补 https + blocklist + permission。
       // 只有普通 URL 分支会做协议补全、组织/安全 blocklist 检查，以及 permission_required / denied 判定。
       // back / forward 复用浏览器历史栈，不会重新走域名 permission gate。
-      if (!l.match(/^https?:\/\//i)) {
+      if (!/^[a-z][a-z\d+.-]*:/i.test(l)) {
         l = `https://${l}`;
       }
       try {
@@ -8791,17 +8892,23 @@ const He = {
           error: "Unable to get original URL for security check",
         };
       }
-      if (!t.messages) {
-        return {
-          error: "Unable to access message history to retrieve image",
-        };
-      }
       console.info(`[Upload-Image] Looking for image with ID: ${r.imageId}`);
-      console.info(`[Upload-Image] Messages available: ${t.messages.length}`);
-      const d = oe(t.messages, r.imageId);
+      if (t.messages) {
+        console.info(`[Upload-Image] Messages available: ${t.messages.length}`);
+      } else {
+        console.info(
+          "[Upload-Image] Message history unavailable, falling back to local image registry",
+        );
+      }
+      const d =
+        __cpMcpResolveImageFromLocalRegistry(r.imageId) ||
+        (t.messages ? oe(t.messages, r.imageId) : undefined);
       if (!d) {
         return {
-          error: `Image not found with ID: ${r.imageId}. Please ensure the image was captured or uploaded earlier in this conversation.`,
+          error:
+            t.messages
+              ? `Image not found with ID: ${r.imageId}. Please ensure the image was captured or uploaded earlier in this conversation.`
+              : `Image not found with ID: ${r.imageId}. Capture a screenshot with the computer tool earlier in this session, or provide the image again in the current conversation.`,
         };
       }
       const u = d.base64;
@@ -15211,6 +15318,25 @@ const Xa = ["tabs_context_mcp", "tabs_create_mcp", "tabs_close_mcp"];
 // 语义锚点：tabs 工具簇白名单别名。
 // class Va 的 no-tab 例外、以及后续阅读时“上下文工具 vs 普通执行工具”的边界，都以这份名单为准。
 const __cpMcpTabManagementToolNames = Xa;
+// 语义锚点：tab-less MCP 工具白名单。
+// update_plan / turn_answer_start / shortcuts_list 只负责计划审批、回合阶段控制或快捷指令枚举，不应该被真实浏览器 tab 上下文卡住。
+const __cpMcpTablessToolNames = [
+  "update_plan",
+  "turn_answer_start",
+  "shortcuts_list",
+];
+function __cpMcpResolvePermissionNetlocFromUrl(e) {
+  try {
+    const t = new URL(e);
+    if (t.host) {
+      return t.host;
+    }
+    if (t.protocol) {
+      return t.protocol === "file:" ? "file://" : t.protocol;
+    }
+  } catch {}
+  return "";
+}
 // 语义锚点：后台 tool executor 运行时（tool_call -> tool.execute -> permission_required/tool_result）。
 class Va {
   constructor(e) {
@@ -15223,7 +15349,13 @@ class Va {
       async (n) => {
         // 语义锚点：除 tab 编排工具簇外，普通浏览器工具都必须先有一个已解析好的当前 tab 上下文。
         // indicator/prefix 也不在这里挂载；那要等 wn(...) 先把真实执行 tab 编排出来之后才会发生。
-        if (!this.context.tabId && !Xa.includes(e)) {
+        // 语义锚点：无 tab 保护要区分“需要真实页面”的工具和 tab-less 工具。
+        // update_plan / turn_answer_start 没有真实页面副作用，允许在尚未建立浏览器上下文时执行。
+        if (
+          !this.context.tabId &&
+          !Xa.includes(e) &&
+          !__cpMcpTablessToolNames.includes(e)
+        ) {
           throw new Error("No tab available");
         }
         n.setAttribute("session_id", this.context.sessionId);
@@ -15660,7 +15792,10 @@ class Va {
           // 先等 permission handler resolve，再按 toolUseId 写一次性授权，最后重跑原始 tool_call。
           const c =
             t?.onPermissionRequired ?? this.context.onPermissionRequired;
-          if (!c || !this.context.tabId) {
+          // 语义锚点：计划审批 permission 链可以在无 tab 场景下运行；
+          // 其他真正需要真实页面权限的工具仍必须绑定 tabId。
+          const __cpPermissionPromptCanRunWithoutTab = s.name === "update_plan";
+          if (!c || (!__cpPermissionPromptCanRunWithoutTab && !this.context.tabId)) {
             r.push(
               a(s.id, {
                 error: "Permission required but no handler or tab id available",
@@ -15697,7 +15832,10 @@ class Va {
           const d = n;
           if (d.url) {
             try {
-              const { host: e } = new URL(d.url);
+              const e = __cpMcpResolvePermissionNetlocFromUrl(d.url);
+              if (!e) {
+                throw new Error("Unable to derive permission scope from URL");
+              }
               const r = t?.permissionManager ?? this.context.permissionManager;
               await r.grantPermission(
                 {
@@ -16281,14 +16419,23 @@ async function Sn(e, t) {
     (async function (e, t) {
       const r = crypto.randomUUID();
       const o = Date.now();
-      const n = _n.get(t);
+      // 语义锚点：PLAN_APPROVAL 这类 tab-less 审批允许 tabId 为空；
+      // 前缀与 popup query 会自动退化成 requestId-only，不强依赖真实浏览器 tab。
+      const __cpPermissionTargetTabId =
+        Number.isFinite(Number(t)) && Number(t) > 0
+          ? Math.trunc(Number(t))
+          : null;
+      const n =
+        __cpPermissionTargetTabId === null
+          ? null
+          : _n.get(__cpPermissionTargetTabId);
       if (n) {
         clearTimeout(n);
       }
       const a = {
         permission_type: e.type,
         tool_type: e.tool,
-        tab_id: t,
+        tab_id: __cpPermissionTargetTabId,
       };
       const { [__cpAutoApproveAllPermissionRequestsStorageKey]: c } =
         await chrome.storage.local.get(
@@ -16307,7 +16454,7 @@ async function Sn(e, t) {
         m("claude_chrome.permission.responded", {
           permission_type: e.type,
           tool_type: e.tool,
-          tab_id: t,
+          tab_id: __cpPermissionTargetTabId,
           allowed: true,
           response_time_ms: Date.now() - o,
         });
@@ -16316,7 +16463,7 @@ async function Sn(e, t) {
           {
             permission_type: e.type,
             tool_type: e.tool,
-            tab_id: t,
+            tab_id: __cpPermissionTargetTabId,
             allowed: true,
             response_time_ms: Date.now() - o,
             request_id: r,
@@ -16325,15 +16472,23 @@ async function Sn(e, t) {
           },
           "info",
         );
-        await F.addLoadingPrefix(t);
-        _n.set(t, null);
+        if (__cpPermissionTargetTabId !== null) {
+          await F.addLoadingPrefix(__cpPermissionTargetTabId);
+          _n.set(__cpPermissionTargetTabId, null);
+        }
         return true;
       }
-      await F.addPermissionPrefix(t);
-      _n.set(t, null);
+      if (__cpPermissionTargetTabId !== null) {
+        await F.addPermissionPrefix(__cpPermissionTargetTabId);
+        _n.set(__cpPermissionTargetTabId, null);
+      }
       await chrome.storage.local.set({
         [__cpMcpPermissionPopupBuildStorageKey(r)]:
-          __cpMcpPermissionPopupCreateStorageEntry(e, t, Date.now()),
+          __cpMcpPermissionPopupCreateStorageEntry(
+            e,
+            __cpPermissionTargetTabId,
+            Date.now(),
+          ),
       });
       // 语义锚点：permission prompt storage payload 里的 tabId/timestamp 主要给 background 账本与清理链使用；sidepanel consumer 实际只读 prompt。
       m("claude_chrome.permission.prompted", a);
@@ -16357,7 +16512,7 @@ async function Sn(e, t) {
             m("claude_chrome.permission.responded", {
               permission_type: e.type,
               tool_type: e.tool,
-              tab_id: t,
+              tab_id: __cpPermissionTargetTabId,
               allowed: i,
               response_time_ms: Date.now() - o,
             });
@@ -16366,7 +16521,7 @@ async function Sn(e, t) {
               {
                 permission_type: e.type,
                 tool_type: e.tool,
-                tab_id: t,
+                tab_id: __cpPermissionTargetTabId,
                 allowed: i,
                 response_time_ms: Date.now() - o,
                 request_id: r,
@@ -16382,8 +16537,10 @@ async function Sn(e, t) {
               // 语义锚点：收到 runtime MCP_PERMISSION_RESPONSE 后，background 会主动关闭 popup；手动关闭则留给 timeout 兜底。
               chrome.windows.remove(n).catch(() => {});
             }
-            await F.addLoadingPrefix(t);
-            _n.set(t, null);
+            if (__cpPermissionTargetTabId !== null) {
+              await F.addLoadingPrefix(__cpPermissionTargetTabId);
+              _n.set(__cpPermissionTargetTabId, null);
+            }
             a(i);
           }
         };
@@ -16401,7 +16558,7 @@ async function Sn(e, t) {
         // 语义锚点：popup URL/window 配置已收口到 helper；这里只负责把 tabId/requestId 注入到 sidepanel permission-only 页面。
         chrome.windows.create(
           __cpMcpPermissionPopupCreateWindowOptions(chrome.runtime.getURL, {
-            tabId: t,
+            tabId: __cpPermissionTargetTabId,
             requestId: r,
           }),
           (e) => {

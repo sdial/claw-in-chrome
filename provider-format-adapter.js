@@ -14,6 +14,20 @@
   const DEFAULT_MAX_OUTPUT_TOKENS = 10000;
   const MIN_CONTEXT_WINDOW = 20000;
   const REASONING_EFFORT_VALUES = ["none", "low", "medium", "high", "max"];
+  const DEFAULT_CHAT_COMPATIBILITY = Object.freeze({
+    responseReasoningFields: ["reasoning"],
+    streamReasoningFields: ["reasoning"],
+    requestReasoningField: null,
+    requestReasoningPolicy: "always",
+    thinkingFallback: "think_tags"
+  });
+  const DEEPSEEK_CHAT_COMPATIBILITY = Object.freeze({
+    responseReasoningFields: ["reasoning_content", "reasoning"],
+    streamReasoningFields: ["reasoning_content", "reasoning"],
+    requestReasoningField: "reasoning_content",
+    requestReasoningPolicy: "tool_context",
+    thinkingFallback: "omit"
+  });
   const THINK_OPEN_TAG = "<think>";
   const THINK_CLOSE_TAG = "</think>";
   const TOOL_CALL_OPEN_TAG = "<tool_call>";
@@ -156,6 +170,27 @@
       contextWindow: normalizeContextWindow(source.contextWindow),
       promptCacheKey: String(source.promptCacheKey || source.prompt_cache_key || source.id || source.profileId || "").trim()
     };
+  }
+  function isDeepSeekChatProvider(config, model) {
+    const baseUrl = String(config?.baseUrl || "").trim().toLowerCase();
+    const modelName = String(model || config?.defaultModel || "").trim().toLowerCase();
+    const name = String(config?.name || "").trim().toLowerCase();
+    return baseUrl.includes("deepseek") || modelName.startsWith("deepseek") || name.includes("deepseek");
+  }
+  function getChatCompatibilityProfile(config, model) {
+    return isDeepSeekChatProvider(config, model) ? DEEPSEEK_CHAT_COMPATIBILITY : DEFAULT_CHAT_COMPATIBILITY;
+  }
+  function readFirstStringField(source, fieldNames) {
+    if (!source || typeof source !== "object" || !Array.isArray(fieldNames)) {
+      return "";
+    }
+    for (const fieldName of fieldNames) {
+      const value = source[fieldName];
+      if (typeof value === "string" && value) {
+        return value;
+      }
+    }
+    return "";
   }
   function shouldApplyConfiguredReasoningEffort(model, effort) {
     const normalizedEffort = normalizeReasoningEffort(effort);
@@ -1190,8 +1225,8 @@
         return toolChoice;
     }
   }
-  function flushPendingOpenAIChatMessage(result, role, contentParts, toolCalls) {
-    if (!contentParts.length && !toolCalls.length) {
+  function flushPendingOpenAIChatMessage(result, role, contentParts, toolCalls, reasoningParts, reasoningField) {
+    if (!contentParts.length && !toolCalls.length && !(reasoningField && reasoningParts.length)) {
       return;
     }
     const message = {
@@ -1207,11 +1242,67 @@
     if (toolCalls.length) {
       message.tool_calls = toolCalls.slice();
     }
+    if (reasoningField && reasoningParts.length) {
+      message[reasoningField] = reasoningParts.join("");
+    }
     result.push(message);
     contentParts.length = 0;
     toolCalls.length = 0;
+    reasoningParts.length = 0;
   }
-  function convertMessageToOpenAI(role, content) {
+  function hasAnthropicContentBlockType(content, blockType) {
+    if (!Array.isArray(content) || !blockType) {
+      return false;
+    }
+    return content.some(function (block) {
+      return block?.type === blockType;
+    });
+  }
+  function shouldReplayOpenAIChatRequestReasoning(role, content, chatCompatibility, state) {
+    const reasoningField = role === "assistant" ? String(chatCompatibility?.requestReasoningField || "") : "";
+    if (!reasoningField) {
+      return false;
+    }
+    if (chatCompatibility?.requestReasoningPolicy !== "tool_context") {
+      return true;
+    }
+    // DeepSeek thinking mode requires replaying reasoning_content for tool-call turns,
+    // but plain no-tool thinking can be omitted from subsequent request messages.
+    return (
+      hasAnthropicContentBlockType(content, "tool_use") ||
+      state?.hasToolReasoningContext === true ||
+      state?.previousMessageHadToolResult === true
+    );
+  }
+  function updateOpenAIChatRequestReasoningState(state, content) {
+    if (!state || !Array.isArray(content)) {
+      if (state) {
+        state.previousMessageHadToolResult = false;
+      }
+      return;
+    }
+    const hasToolUse = hasAnthropicContentBlockType(content, "tool_use");
+    const hasToolResult = hasAnthropicContentBlockType(content, "tool_result");
+    if (hasToolUse || hasToolResult) {
+      state.hasToolReasoningContext = true;
+    }
+    state.previousMessageHadToolResult = hasToolResult;
+  }
+  function attachReasoningToPreviousOpenAIChatToolCallMessage(result, reasoningField, reasoningParts) {
+    if (!reasoningField || !reasoningParts.length || !Array.isArray(result)) {
+      return false;
+    }
+    for (let index = result.length - 1; index >= 0; index -= 1) {
+      const candidate = result[index];
+      if (candidate?.role === "assistant" && Array.isArray(candidate.tool_calls) && candidate.tool_calls.length) {
+        candidate[reasoningField] = String(candidate[reasoningField] || "") + reasoningParts.join("");
+        reasoningParts.length = 0;
+        return true;
+      }
+    }
+    return false;
+  }
+  function convertMessageToOpenAI(role, content, chatCompatibility, options = {}) {
     const result = [];
     if (content == null) {
       result.push({
@@ -1236,6 +1327,11 @@
     }
     const contentParts = [];
     const toolCalls = [];
+    const reasoningParts = [];
+    const reasoningField =
+      options.allowRequestReasoning === true && role === "assistant"
+        ? String(chatCompatibility?.requestReasoningField || "")
+        : "";
     for (const block of content) {
       const type = block?.type || "";
       if (type === "text") {
@@ -1258,6 +1354,13 @@
         });
         continue;
       }
+      if (type === "thinking" && reasoningField && typeof block?.thinking === "string" && block.thinking) {
+        reasoningParts.push(block.thinking);
+        continue;
+      }
+      if (type === "thinking" && chatCompatibility?.thinkingFallback === "omit") {
+        continue;
+      }
       const semanticText = serializeAnthropicSemanticBlockForOpenAI(block);
       if (semanticText) {
         contentParts.push({
@@ -1278,7 +1381,10 @@
         continue;
       }
       if (type === "tool_result") {
-        flushPendingOpenAIChatMessage(result, role, contentParts, toolCalls);
+        if (!contentParts.length && !toolCalls.length && reasoningParts.length && reasoningField) {
+          attachReasoningToPreviousOpenAIChatToolCallMessage(result, reasoningField, reasoningParts);
+        }
+        flushPendingOpenAIChatMessage(result, role, contentParts, toolCalls, reasoningParts, reasoningField);
         result.push({
           role: "tool",
           tool_call_id: String(block.tool_use_id || ""),
@@ -1287,14 +1393,15 @@
         // 部分 OpenAI 兼容接口要求 tool 结果紧跟 tool_calls，不能在中间插入额外消息。
       }
     }
-    flushPendingOpenAIChatMessage(result, role, contentParts, toolCalls);
+    flushPendingOpenAIChatMessage(result, role, contentParts, toolCalls, reasoningParts, reasoningField);
     return result;
   }
-  function anthropicToOpenAIChat(body, promptCacheKey) {
+  function anthropicToOpenAIChat(body, promptCacheKey, config) {
     const result = {};
     if (body?.model) {
       result.model = body.model;
     }
+    const chatCompatibility = getChatCompatibilityProfile(config, body?.model);
     const messages = [];
     const systemText = formatAnthropicSystemForSingleMessage(body?.system);
     if (systemText) {
@@ -1303,9 +1410,17 @@
         content: systemText
       });
     }
+    const requestReasoningState = {
+      hasToolReasoningContext: false,
+      previousMessageHadToolResult: false
+    };
     for (const message of Array.isArray(body?.messages) ? body.messages : []) {
       const role = message?.role || "user";
-      messages.push(...convertMessageToOpenAI(role, message?.content));
+      const content = message?.content;
+      messages.push(...convertMessageToOpenAI(role, content, chatCompatibility, {
+        allowRequestReasoning: shouldReplayOpenAIChatRequestReasoning(role, content, chatCompatibility, requestReasoningState)
+      }));
+      updateOpenAIChatRequestReasoningState(requestReasoningState, content);
     }
     result.messages = messages;
     if (body?.max_tokens != null) {
@@ -1361,12 +1476,13 @@
     }
     return result;
   }
-  function openAIChatToAnthropic(body) {
+  function openAIChatToAnthropic(body, config) {
     const choice = Array.isArray(body?.choices) ? body.choices[0] : null;
     if (!choice || !choice.message) {
       throw new Error("OpenAI Chat 响应里缺少 choices[0].message。");
     }
     const message = choice.message;
+    const chatCompatibility = getChatCompatibilityProfile(config, body?.model);
     const content = [];
     const thinkTagState = createThinkTagState();
     let inlineToolCallCount = 0;
@@ -1403,6 +1519,16 @@
     };
     let hasToolUse = false;
     let hasVisibleText = false;
+    const reasoningText = readFirstStringField(message, chatCompatibility.responseReasoningFields);
+    const pushReasoningText = function () {
+      if (!reasoningText) {
+        return;
+      }
+      pushAnthropicContentBlock(content, {
+        type: "thinking",
+        thinking: reasoningText
+      });
+    };
     const appendLooseToolCall = function (rawPayload, prefix) {
       const parsedToolCall = parseInlineToolCallPayload(rawPayload, prefix + inlineToolCallCount++);
       if (!parsedToolCall) {
@@ -1480,6 +1606,7 @@
         hasToolUse = true;
       }
     }
+    pushReasoningText();
     const promotedContent = promoteLooseToolCallTextBlocks(content, function () {
       return "text_block_tool_call_" + inlineToolCallCount++;
     });
@@ -1526,7 +1653,7 @@
     }
     return dataParts.join("\n").trim();
   }
-  function openAIChatSseToAnthropic(text) {
+  function openAIChatSseToAnthropic(text, config) {
     const content = [];
     const thinkTagState = createThinkTagState();
     let inlineToolCallCount = 0;
@@ -1587,10 +1714,12 @@
       }
       const choice = chunk.choices[0] || {};
       const delta = choice.delta || {};
-      if (typeof delta.reasoning === "string" && delta.reasoning) {
+      const chatCompatibility = getChatCompatibilityProfile(config, currentModel || config?.defaultModel);
+      const reasoningDelta = readFirstStringField(delta, chatCompatibility.streamReasoningFields);
+      if (reasoningDelta) {
         pushAnthropicContentBlock(content, {
           type: "thinking",
-          thinking: delta.reasoning
+          thinking: reasoningDelta
         });
       }
       const contentDelta = normalizeChatContentDelta(delta.content);
@@ -1705,7 +1834,7 @@
     }
     const upstreamText = await upstream.text();
     try {
-      const fallbackJson = contentType.includes("text/event-stream") ? openAIChatSseToAnthropic(upstreamText) : openAIChatToAnthropic(safeJsonParse(upstreamText, null));
+      const fallbackJson = contentType.includes("text/event-stream") ? openAIChatSseToAnthropic(upstreamText, candidateConfig) : openAIChatToAnthropic(safeJsonParse(upstreamText, null), candidateConfig);
       debugLog("provider.response_transform_stream_fallback", {
         ...attemptInfo,
         providerUrl,
@@ -2001,7 +2130,7 @@
       return "";
     }).join("");
   }
-  function createAnthropicStreamFromOpenAIChat(stream) {
+  function createAnthropicStreamFromOpenAIChat(stream, config) {
     const reader = stream.getReader();
     const decoder = new TextDecoder();
     const encoder = new TextEncoder();
@@ -2213,16 +2342,18 @@
       }
       const choice = chunk.choices[0] || {};
       const delta = choice.delta || {};
+      const chatCompatibility = getChatCompatibilityProfile(config, currentModel || config?.defaultModel);
       lastUsage = chunk.usage || lastUsage;
       ensureMessageStart(output, chunk);
-      if (typeof delta.reasoning === "string" && delta.reasoning) {
+      const reasoningDelta = readFirstStringField(delta, chatCompatibility.streamReasoningFields);
+      if (reasoningDelta) {
         const index = ensureNonToolBlock(output, "thinking");
         output.push(sseChunk("content_block_delta", {
           type: "content_block_delta",
           index,
           delta: {
             type: "thinking_delta",
-            thinking: delta.reasoning
+            thinking: reasoningDelta
           }
         }));
       }
@@ -2942,7 +3073,7 @@
         ...config,
         format: candidate.format
       };
-      const providerBody = candidate.format === OPENAI_CHAT_FORMAT ? anthropicToOpenAIChat(body, candidateConfig.promptCacheKey) : anthropicToOpenAIResponses(body, candidateConfig.promptCacheKey);
+      const providerBody = candidate.format === OPENAI_CHAT_FORMAT ? anthropicToOpenAIChat(body, candidateConfig.promptCacheKey, candidateConfig) : anthropicToOpenAIResponses(body, candidateConfig.promptCacheKey);
       const providerUrl = buildProviderUrl(candidateConfig);
       const isStreamRequest = !!providerBody.stream;
       debugLog("provider.request_attempt", {
@@ -3017,7 +3148,7 @@
             format: candidate.format,
             providerUrl
           });
-          const transformedStream = candidate.format === OPENAI_CHAT_FORMAT ? createAnthropicStreamFromOpenAIChat(upstream.body) : createAnthropicStreamFromResponses(upstream.body);
+          const transformedStream = candidate.format === OPENAI_CHAT_FORMAT ? createAnthropicStreamFromOpenAIChat(upstream.body, candidateConfig) : createAnthropicStreamFromResponses(upstream.body);
           return createSseResponse(upstream, transformedStream);
         }
         const upstreamText = await upstream.text();
@@ -3045,7 +3176,7 @@
           contentType
         });
         try {
-          const anthropicResponse = candidate.format === OPENAI_CHAT_FORMAT ? openAIChatToAnthropic(upstreamJson) : openAIResponsesToAnthropic(upstreamJson);
+          const anthropicResponse = candidate.format === OPENAI_CHAT_FORMAT ? openAIChatToAnthropic(upstreamJson, candidateConfig) : openAIResponsesToAnthropic(upstreamJson);
           if (candidate.format === OPENAI_CHAT_FORMAT && shouldRetryOpenAIChatViaStreamFallback(upstreamJson, anthropicResponse, contentType, isStreamRequest)) {
             const fallbackResponse = await retryOpenAIChatAsStreamAndTransform(providerUrl, request, candidateConfig, providerBody, {
               attempt: index + 1,

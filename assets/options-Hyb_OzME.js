@@ -662,11 +662,13 @@ const cpOptionsNavStrings = {
     provider: "模型供应商",
     session: "会话管理",
     prompt: "提示词修改",
+    mcp: "MCP",
   },
   en: {
     provider: "Model provider",
     session: "Session management",
     prompt: "Prompt overrides",
+    mcp: "MCP",
   },
 };
 function cpGetOptionsNavStrings(e) {
@@ -683,6 +685,7 @@ function cpGetOptionsNavStrings(e) {
 //   - #options?provider=true      -> provider 子视图（自定义供应商 / 模型）
 //   - #options?provider=session   -> session 子视图
 //   - #options?provider=prompt    -> prompt 子视图
+//   - #options?provider=mcp       -> MCP 子视图
 //
 // 3) 其它 query：
 //   - requestMicrophone=true / returnTabId=<number> 用于引导麦克风权限弹窗与回跳
@@ -747,6 +750,9 @@ function cpGetOptionsSubviewFromHash(e) {
   ) {
     return __cpOptionsPromptSubviewToken;
   }
+  if (s === __cpOptionsMcpSubviewToken) {
+    return __cpOptionsMcpSubviewToken;
+  }
   return "";
 }
 const __cpOptionsSettingsTabHashParser = cpGetSettingsTabFromHash;
@@ -754,6 +760,7 @@ const __cpOptionsSubviewHashParser = cpGetOptionsSubviewFromHash;
 const __cpOptionsProviderSubviewToken = "provider";
 const __cpOptionsSessionSubviewToken = "session";
 const __cpOptionsPromptSubviewToken = "prompt";
+const __cpOptionsMcpSubviewToken = "mcp";
 function cpGithubSendRuntimeMessage(e) {
   return new Promise((t) => {
     try {
@@ -1209,10 +1216,12 @@ const J = ({ subview: a }) => {
   const i = a === "provider";
   const o = a === "session";
   const l = a === "prompt";
-  const d = !i && !o && !l;
+  const d = a === "mcp";
+  const m = !i && !o && !l && !d;
   const __cpOptionsProviderMountAnchorId = "cp-options-provider-anchor";
   const __cpOptionsSessionMountAnchorId = "cp-options-session-anchor";
   const __cpOptionsPromptMountAnchorId = "cp-options-prompt-anchor";
+  const __cpOptionsMcpMountAnchorId = "cp-options-mcp-anchor";
   const __cpOptionsDebugMountAnchorId = "cp-options-debug-anchor";
   // custom-provider-settings.js / options-debug-logger.js 会依赖这些 DOM 挂载点做跨脚本注入。
   return n.jsxs("div", {
@@ -1230,9 +1239,13 @@ const J = ({ subview: a }) => {
         id: __cpOptionsPromptMountAnchorId,
         hidden: !l,
       }),
+      n.jsx("div", {
+        id: __cpOptionsMcpMountAnchorId,
+        hidden: !d,
+      }),
       n.jsxs("div", {
         className: "space-y-6",
-        hidden: !d,
+        hidden: !m,
         children: [
           n.jsx(cpGithubUpdateSection, {}),
           n.jsx("div", {
@@ -2931,17 +2944,20 @@ function ce() {
   const __cpOptionsProviderNavItemId = "cp-options-provider-nav-item";
   const __cpOptionsSessionNavItemId = "cp-options-session-nav-item";
   const __cpOptionsPromptNavItemId = "cp-options-prompt-nav-item";
+  const __cpOptionsMcpNavItemId = "cp-options-mcp-nav-item";
   const __cpOptionsNavHrefPermissions = "/settings/permissions";
   const __cpOptionsNavHrefPrompts = "/settings/prompts";
   const __cpOptionsNavHrefOptions = "/settings/options";
   const __cpOptionsNavHrefOptionsProvider = "/settings/options?provider=true";
   const __cpOptionsNavHrefOptionsSession = "/settings/options?provider=session";
   const __cpOptionsNavHrefOptionsPrompt = "/settings/options?provider=prompt";
+  const __cpOptionsNavHrefOptionsMcp = "/settings/options?provider=mcp";
   // options 子视图 hash 片段（用于写入 window.location.hash）
   const __cpOptionsHashFragmentOptions = "options";
   const __cpOptionsHashFragmentOptionsProvider = "options?provider=true";
   const __cpOptionsHashFragmentOptionsSession = "options?provider=session";
   const __cpOptionsHashFragmentOptionsPrompt = "options?provider=prompt";
+  const __cpOptionsHashFragmentOptionsMcp = "options?provider=mcp";
   const __cpOptionsCustomProviderContract =
     globalThis.__CP_CONTRACT__?.customProvider || {};
   const __cpOptionsAccountBootstrapStorageKey =
@@ -3017,6 +3033,8 @@ function ce() {
           s === __cpOptionsHashParamProviderAliasPrompts
         ) {
           i = __cpOptionsPromptSubviewToken;
+        } else if (s === __cpOptionsMcpSubviewToken) {
+          i = __cpOptionsMcpSubviewToken;
         }
       }
       return {
@@ -3083,7 +3101,7 @@ function ce() {
     window.location.hash = e;
   };
   const __cpOptionsSettingsTabHashWriter = f;
-  // 语义锚点：options 二级子视图切换（provider/session/prompt -> hash 持久化）
+  // 语义锚点：options 二级子视图切换（provider/session/prompt/mcp -> hash 持久化）
   const g = (e) => {
     __cpOptionsDebugLog("options.page.subview.click", {
       nextSubview: e,
@@ -3099,6 +3117,8 @@ function ce() {
           ? __cpOptionsHashFragmentOptionsSession
           : e === __cpOptionsPromptSubviewToken
             ? __cpOptionsHashFragmentOptionsPrompt
+            : e === __cpOptionsMcpSubviewToken
+              ? __cpOptionsHashFragmentOptionsMcp
             : __cpOptionsHashFragmentOptions;
   };
   const __cpOptionsSubviewHashWriter = g;
@@ -3220,6 +3240,17 @@ function ce() {
                             providerSubview === __cpOptionsPromptSubviewToken,
                           onClick: () => g(__cpOptionsPromptSubviewToken),
                           children: navStrings.prompt,
+                        }),
+                      }),
+                      n.jsx("li", {
+                        id: __cpOptionsMcpNavItemId,
+                        children: n.jsx(ne, {
+                          href: __cpOptionsNavHrefOptionsMcp,
+                          isActive:
+                            d === __cpOptionsSettingsTabTokenOptions &&
+                            providerSubview === __cpOptionsMcpSubviewToken,
+                          onClick: () => g(__cpOptionsMcpSubviewToken),
+                          children: navStrings.mcp,
                         }),
                       }),
                       i,

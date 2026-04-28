@@ -75,6 +75,11 @@
 
 - 其他浏览器工具在没有 `context.tabId` 时会先报 `No tab available`
 - 只有这 3 个工具允许在“还没拿到 tab 上下文”时先跑起来
+- 额外还有一类 `tab-less` 工具：
+  - `update_plan`
+  - `turn_answer_start`
+  - `shortcuts_list`
+  - 它们不碰真实页面，不参与 tab 编排前置条件
 
 源码里已经把职责写得很清楚：
 
@@ -187,6 +192,10 @@ bridge 场景下：
 - `tool executor permission_required 重试链`：
 - 先等 permission handler resolve，再按 `toolUseId` 写一次性授权，最后重跑原始 `tool_call`。
 - `update_plan`：审批通过后直接回 `"User has approved your plan..."` 文本，不重跑普通工具；它的 `permission_required` 只承担计划审批闸门。
+- `update_plan` 的计划审批链允许没有 `tabId`：
+  - background 不会再强制要求真实 tab
+  - permission popup 会退化成 `requestId` 驱动
+  - tab 前缀/indicator 只在存在真实 tab 时才写入
 - `rn(...) / __cpDomainTransitionPermissionRequiredFactory`：
   - `DOMAIN_TRANSITION` 专用 `permission_required producer`
   - 继续复用统一 sentinel 形状，但 `toolUseId` 在这里本地生成，`requestId` 仍留给 bridge 权限握手。

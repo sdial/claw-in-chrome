@@ -158,15 +158,15 @@
 
 - `assets/options-Hyb_OzME.js`
   - options 页面主 bundle。
-  - provider / session / prompt 的子视图切换与挂载点都在这里完成。
+  - provider / session / prompt / mcp 的子视图切换与挂载点都在这里完成。
   - 本轮补了几个关键锚点：
     - `__cpOptionsSettingsTabHashParser` / `__cpOptionsSubviewHashParser`
     - `__cpOptionsSettingsTabWhitelist` / `__cpOptionsHashParamTruthyValue` / `__cpOptionsHashChangeEventName`：hash 解析白名单、query 真值、hashchange 监听协议
-    - `__cpOptions*SubviewToken`：`provider` / `session` / `prompt`
-    - `__cpOptions*MountAnchorId`：`cp-options-provider-anchor` / `cp-options-session-anchor` / `cp-options-prompt-anchor`
+    - `__cpOptions*SubviewToken`：`provider` / `session` / `prompt` / `mcp`
+    - `__cpOptions*MountAnchorId`：`cp-options-provider-anchor` / `cp-options-session-anchor` / `cp-options-prompt-anchor` / `cp-options-mcp-anchor`
     - `__cpOptionsGithubRuntimeMessageBridge` + `__cpOptionsGithubUpdate*`：更新卡片的存储键、动作名与 handler
     - `__cpOptionsAccountBootstrapStorageKey` / `__cpOptionsAccountBootstrapReader`：账号态 bootstrap 入口
-    - `__cpOptionsProviderNavItemId` / `__cpOptionsNavHrefOptionsProvider`：provider 子页导航项 id 与 href 契约
+    - `__cpOptionsProviderNavItemId` / `__cpOptionsNavHrefOptionsProvider` / `__cpOptionsMcpNavItemId` / `__cpOptionsNavHrefOptionsMcp`：provider / MCP 子页导航项 id 与 href 契约
     - `__cpOptionsSettingsTabHashWriter` / `__cpOptionsSubviewHashWriter`：一级/二级导航写回 hash 的入口
     - `__cpOptionsRootMountElementId`：页面 React root 挂载点
     - 中文入口锚点：`options 页 hash -> 状态同步入口`、`一级 tab 点击后`、`options 二级子视图切换`
@@ -231,14 +231,14 @@
     - 新增中文入口锚点：`bridge runtime listener 当前只显式消费 pairing_confirmed`、`bridge permission_request 待回包账本`、`requestId 只负责 bridge permission_request/permission_response 对账`、`requestId 是 bridge permission_request/permission_response 的对账键`、`bridge 断连/重连时，未完成的 permission_request 一律按拒绝收口`、`permission prompt storage payload 里的 tabId/timestamp 主要给 background 账本与清理链使用`、`这里把 requestId 绑定到 pending permission promise`、`手动关闭 permission popup 不会立即回包`
     - 第三轮继续补清：
       - `tabs_context_mcp / tabs_create_mcp / tabs_close_mcp`：tab 上下文建立 / 新建 / 收口的专用工具簇
-      - `No tab available`：只对非引导工具生效；缺 tab 时先回到 tabs_*_mcp 建上下文
+      - `No tab available`：只对“需要真实页面”的非引导工具生效；`update_plan / turn_answer_start / shortcuts_list` 这类 tab-less 工具不会被它拦住，缺 tab 时其他工具仍需先回到 tabs_*_mcp 建上下文
       - `tabId 是实际执行目标键，只从 tool args 进入后台工具链；toolUseId 继续负责外层 tool_call/tool_result 归属，requestId 仍留给权限握手`
       - `tool executor 上下文对象`：`toolUseId` 稳定归属；`tabId/tabGroupId/sessionScope` 只负责选择执行环境
       - `tool executor 的标准 tool_result 封装器`：`tool_use_id` 对应外层 tool_call id，错误不引入 `requestId`
       - `permission_required sentinel`：`handleToolCall(...)` 返回带 `type` 的对象时，当前约定它仍是 sentinel，不是最终 `tool_result`
       - `普通工具的 permission_required sentinel 统一形状`：`{ type, tool, url, toolUseId, actionData? }`
       - `tool executor permission_required 重试链`：先等 permission handler resolve，再按 `toolUseId` 写一次性授权，最后重跑原始 tool_call
-      - `update_plan`：审批通过后直接回 `plan approved` 文本，不重跑普通工具
+      - `update_plan`：审批通过后直接回 `plan approved` 文本，不重跑普通工具；计划审批链允许 `tabId` 为空，popup 退化成 `requestId` 驱动
       - `__cpDomainTransitionPermissionRequiredFactory / rn(...)`：`DOMAIN_TRANSITION` 专用 producer，本地生成 `toolUseId`
       - `bridge tool_call -> tool executor -> tool_result 总链`
       - `内层 tool_use id 与外层 toolUseId 分工`

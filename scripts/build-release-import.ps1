@@ -7,10 +7,25 @@ $ErrorActionPreference = "Stop"
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot = (Resolve-Path (Join-Path $scriptDir "..")).Path
+$releasePackageCheckScriptPath = Join-Path $repoRoot "scripts\check-release-package.js"
 $packageListPath = Join-Path $repoRoot ".github\release-package-items.txt"
 $manifestPath = Join-Path $repoRoot "manifest.json"
 $outputRootPath = Join-Path $repoRoot $OutputRoot
 $outputPath = Join-Path $outputRootPath $FolderName
+
+if (-not (Test-Path -LiteralPath $releasePackageCheckScriptPath)) {
+  throw "Missing release package check script: $releasePackageCheckScriptPath"
+}
+
+Push-Location $repoRoot
+try {
+  & node $releasePackageCheckScriptPath
+  if ($LASTEXITCODE -ne 0) {
+    throw "Release package check failed with exit code: $LASTEXITCODE"
+  }
+} finally {
+  Pop-Location
+}
 
 if (-not (Test-Path -LiteralPath $packageListPath)) {
   throw "Missing package list: $packageListPath"

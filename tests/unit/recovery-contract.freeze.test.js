@@ -21,6 +21,11 @@ const optionsHtmlPath = path.join(rootDir, "options.html");
 const pairingHtmlPath = path.join(rootDir, "pairing.html");
 const offscreenHtmlPath = path.join(rootDir, "offscreen.html");
 const releaseWorkflowPath = path.join(rootDir, ".github", "workflows", "release-extension.yml");
+const releasePackageListPath = path.join(
+  rootDir,
+  ".github",
+  "release-package-items.txt",
+);
 
 function createSandbox(overrides = {}) {
   const sandbox = {
@@ -298,11 +303,13 @@ async function testShellEntryPointsLoadContractBeforeRecoveredModules() {
   assert.ok(offscreenContractIndex < indexOfOrFail(offscreenHtml, "offscreen.js", "offscreen.html"));
 
   const loaderContractIndex = indexOfOrFail(loaderSource, 'import "./claw-contract.js";', "service-worker-loader.js");
+  const loaderBindingIndex = indexOfOrFail(loaderSource, 'import "./native-host-binding.js";', "service-worker-loader.js");
   const loaderProtocolIndex = indexOfOrFail(loaderSource, 'import "./mcp-permission-popup-protocol.js";', "service-worker-loader.js");
   const loaderBundleIndex = indexOfOrFail(loaderSource, 'import "./assets/service-worker.ts-H0DVM1LS.js";', "service-worker-loader.js");
   const loaderDetachedRuntimeIndex = indexOfOrFail(loaderSource, 'import "./service-worker-detached-window-runtime.js";', "service-worker-loader.js");
 
-  assert.ok(loaderContractIndex < loaderProtocolIndex);
+  assert.ok(loaderContractIndex < loaderBindingIndex);
+  assert.ok(loaderBindingIndex < loaderProtocolIndex);
   assert.ok(loaderProtocolIndex < loaderBundleIndex);
   assert.ok(loaderBundleIndex < loaderDetachedRuntimeIndex);
 }
@@ -310,12 +317,15 @@ async function testShellEntryPointsLoadContractBeforeRecoveredModules() {
 async function testReleaseAndManifestKeepFrozenShellInterfaces() {
   const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
   const workflow = fs.readFileSync(releaseWorkflowPath, "utf8");
+  const releasePackageList = fs.readFileSync(releasePackageListPath, "utf8");
 
   assert.equal(manifest.background?.service_worker, "service-worker-loader.js");
   assert.equal(manifest.options_page, "options.html");
-  assert.match(workflow, /\bclaw-contract\.js\b/);
-  assert.match(workflow, /\bmcp-permission-popup-protocol\.js\b/);
-  assert.match(workflow, /\bservice-worker-detached-window-runtime\.js\b/);
+  assert.match(workflow, /\brelease-package-items\.txt\b/);
+  assert.match(releasePackageList, /\bclaw-contract\.js\b/);
+  assert.match(releasePackageList, /\bnative-host-binding\.js\b/);
+  assert.match(releasePackageList, /\bmcp-permission-popup-protocol\.js\b/);
+  assert.match(releasePackageList, /\bservice-worker-detached-window-runtime\.js\b/);
 }
 
 async function main() {

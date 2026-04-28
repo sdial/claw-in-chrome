@@ -141,6 +141,7 @@
       PERMISSION: "nativeMessaging",
       HOST_DESKTOP: "com.anthropic.claude_browser_extension",
       HOST_CLAUDE_CODE: "com.anthropic.claude_code_browser_extension",
+      BINDING_INSTANCE_ID_STORAGE_KEY: "claw.nativeHostBinding.instanceId.v1",
     },
     githubUpdate: {
       STORAGE_KEYS: {

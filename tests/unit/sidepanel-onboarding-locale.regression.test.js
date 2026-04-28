@@ -12,6 +12,26 @@ function read(filePath) {
   return fs.readFileSync(filePath, "utf8").replace(/\r\n/g, "\n");
 }
 
+function normalizeAnchorWhitespace(value) {
+  return String(value)
+    .replace(/\basync\s*\(\s*([A-Za-z_$][\w$]*)\s*\)\s*=>/g, "async $1 =>")
+    .replace(/\(\s*([A-Za-z_$][\w$]*)\s*\)\s*=>/g, "$1 =>")
+    .replace(/\s+/g, " ")
+    .replace(/\(\s+(?=[`"'A-Za-z_$[{])/g, "(")
+    .replace(/,\s+(?=[)\]}])/g, "")
+    .trim();
+}
+
+function assertIncludesNormalized(source, snippet, label) {
+  assert.equal(
+    normalizeAnchorWhitespace(source).includes(
+      normalizeAnchorWhitespace(snippet),
+    ),
+    true,
+    label,
+  );
+}
+
 function testSidepanelLocaleFallsBackToBrowserLanguage() {
   const source = read(intlRuntimePath);
 
@@ -33,10 +53,16 @@ function testSidepanelLocaleFallsBackToBrowserLanguage() {
     "sidepanel intl runtime should fall back from navigator.language to a matching locale family such as zh-CN"
   );
 
-  assert.match(
+  assertIncludesNormalized(
     source,
-    /if \(e && kn\.includes\(e\)\) \{\s*t\(e\);\s*\} else \{\s*t\(Pn\(\)\);\s*\}/s,
-    "sidepanel locale store should use the browser language when preferred_locale is not set"
+    'if (e && kn.includes(e)) { cpSyncDocumentUiLocale(e); t(e); } else { const e = Pn(); cpSyncDocumentUiLocale(e); t(e); }',
+    "sidepanel locale store should use the browser language when preferred_locale is not set",
+  );
+
+  assertIncludesNormalized(
+    source,
+    'catch { const e = Pn(); cpSyncDocumentUiLocale(e); t(e); }',
+    "sidepanel locale store should also fall back to the browser language after storage read failures",
   );
 }
 

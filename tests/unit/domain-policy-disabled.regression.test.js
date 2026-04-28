@@ -6,6 +6,18 @@ function readRepoFile(...parts) {
   return fs.readFileSync(path.join(__dirname, "..", "..", ...parts), "utf8");
 }
 
+function normalizeWhitespace(value) {
+  return String(value).replace(/\s+/g, " ").trim();
+}
+
+function assertIncludesNormalized(source, snippet, label) {
+  assert.equal(
+    normalizeWhitespace(source).includes(normalizeWhitespace(snippet)),
+    true,
+    label,
+  );
+}
+
 function testManifestNoLongerRegistersManagedSchema() {
   const manifest = JSON.parse(readRepoFile("manifest.json"));
   assert.equal(Object.prototype.hasOwnProperty.call(manifest, "storage"), false, "manifest should no longer register a managed storage schema");
@@ -30,10 +42,26 @@ function testRuntimeNoLongerReadsManagedEnterprisePolicies() {
 function testBlockingCategoriesAreNormalizedToAllowed() {
   const mcpPermissions = readRepoFile("assets", "mcpPermissions-qqAoJjJ8.js");
 
-  assert.match(mcpPermissions, /function __cpNormalizeDomainCategory\(e\) \{\s+return e === "category1" \|\| e === "category2" \|\| e === "category_org_blocked" \? "category0" : e;\s+\}/);
-  assert.match(mcpPermissions, /const a = t\.includes\("blocked\.html"\) \? "category0" : await O\.getCategory\(t\);/);
-  assert.match(mcpPermissions, /const a = t\.url\?\.includes\("blocked\.html"\) \? "category0" : await O\.getCategory\(t\.url \|\| ""\);/);
-  assert.match(mcpPermissions, /r\.categoriesByTab\.set\(o\.id, "category0"\);/);
+  assertIncludesNormalized(
+    mcpPermissions,
+    'function __cpNormalizeDomainCategory(e) { return e === "category1" || e === "category2" || e === "category_org_blocked" ? "category0" : e; }',
+    "blocking categories should normalize blocked variants back to category0",
+  );
+  assertIncludesNormalized(
+    mcpPermissions,
+    'const a = t.includes("blocked.html") ? "category0" : await O.getCategory(t);',
+    "string URLs pointing at blocked.html should normalize to category0",
+  );
+  assertIncludesNormalized(
+    mcpPermissions,
+    'const a = t.url?.includes("blocked.html") ? "category0" : await O.getCategory(t.url || "");',
+    "tab URLs pointing at blocked.html should normalize to category0",
+  );
+  assertIncludesNormalized(
+    mcpPermissions,
+    'r.categoriesByTab.set(o.id, "category0");',
+    "blocked tabs should be tracked as category0 in the tab ledger",
+  );
 }
 
 function main() {

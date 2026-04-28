@@ -20,6 +20,7 @@ icon-128.png
 managed_schema.json
 manifest.json
 mcp-permission-popup-protocol.js
+native-host-binding.js
 offscreen.html
 offscreen.js
 options-visualizer-launcher.js

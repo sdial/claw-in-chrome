@@ -1,4 +1,6 @@
 import "./claw-contract.js";
+// 先补原生宿主显式绑定补丁，确保后续 bundle connectNative 时会主动上报 browser/profile 实例归属。
+import "./native-host-binding.js";
 import "./mcp-permission-popup-protocol.js";
 import "./custom-provider-models.js";
 import "./provider-format-adapter.js";

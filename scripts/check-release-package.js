@@ -8,6 +8,13 @@ const packageListPath = path.join(
   "release-package-items.txt",
 );
 const optionalUnpackagedFiles = new Set(["options-update-preview.local.js"]);
+const jsStringLiteralPattern = [
+  "(?:",
+  "\"([^\"\\\\]*(?:\\\\.[^\"\\\\]*)*)\"",
+  "|'([^'\\\\]*(?:\\\\.[^'\\\\]*)*)'",
+  "|`((?:\\\\.|[^`])*)`",
+  ")"
+].join("");
 
 function toPosixPath(value) {
   return String(value || "").replace(/\\/g, "/");
@@ -108,6 +115,109 @@ function addDependency(dependencyMap, fromFile, rawTarget, options) {
   dependencyMap.set(normalized, refs);
 }
 
+function getJavaScriptLiteralMatchValue(match, offset = 1) {
+  for (let index = offset; index < match.length; index += 1) {
+    if (typeof match[index] === "string") {
+      return match[index];
+    }
+  }
+  return "";
+}
+
+function getTemplateLiteralStaticPrefix(rawTemplateLiteral) {
+  const templateSource = String(rawTemplateLiteral || "");
+  let escaped = false;
+  for (let index = 0; index < templateSource.length; index += 1) {
+    const current = templateSource[index];
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (current === "\\") {
+      escaped = true;
+      continue;
+    }
+    if (current === "$" && templateSource[index + 1] === "{") {
+      return {
+        hasExpressions: true,
+        prefix: templateSource.slice(0, index)
+      };
+    }
+  }
+  return {
+    hasExpressions: false,
+    prefix: templateSource
+  };
+}
+
+function getTemplateLiteralDependencyTarget(rawTemplateLiteral) {
+  const templateInfo = getTemplateLiteralStaticPrefix(rawTemplateLiteral);
+  if (!templateInfo.hasExpressions) {
+    return templateInfo.prefix;
+  }
+
+  const cleanedPrefix = toPosixPath(templateInfo.prefix)
+    .split("#")[0]
+    .split("?")[0]
+    .trim();
+
+  if (!cleanedPrefix) {
+    return "";
+  }
+
+  if (cleanedPrefix.endsWith("/")) {
+    return cleanedPrefix.replace(/\/+$/, "");
+  }
+
+  const lastSlashIndex = cleanedPrefix.lastIndexOf("/");
+  if (lastSlashIndex >= 0) {
+    const basename = cleanedPrefix.slice(lastSlashIndex + 1);
+    if (basename.includes(".")) {
+      return cleanedPrefix;
+    }
+
+    const directoryPath = cleanedPrefix.slice(0, lastSlashIndex);
+    if (!directoryPath || directoryPath === ".") {
+      return "";
+    }
+    return directoryPath;
+  }
+
+  return cleanedPrefix.includes(".") ? cleanedPrefix : "";
+}
+
+function addJavaScriptLiteralDependency(dependencyMap, fromFile, rawTarget, options = {}) {
+  const literalType = options.literalType || "string";
+  const candidate = literalType === "template"
+    ? getTemplateLiteralDependencyTarget(rawTarget)
+    : rawTarget;
+  const requireLocalSpecifier = options.requireLocalSpecifier === true;
+
+  if (!candidate) {
+    return;
+  }
+  if (requireLocalSpecifier && !candidate.startsWith(".") && !candidate.startsWith("/")) {
+    return;
+  }
+
+  addDependency(dependencyMap, fromFile, candidate, options);
+}
+
+function scanJavaScriptDependenciesByPattern(source, fromFile, dependencyMap, pattern, options = {}) {
+  let match = null;
+  while ((match = pattern.exec(source))) {
+    addJavaScriptLiteralDependency(
+      dependencyMap,
+      fromFile,
+      getJavaScriptLiteralMatchValue(match, options.matchValueOffset || 1),
+      {
+        ...options,
+        literalType: match[3] !== undefined ? "template" : "string"
+      }
+    );
+  }
+}
+
 function scanHtmlDependencies(source, fromFile, dependencyMap) {
   const pattern = /\b(?:src|href)=["']([^"']+)["']/g;
   let match = null;
@@ -137,19 +247,37 @@ function scanJavaScriptDependencies(source, fromFile, dependencyMap) {
     addDependency(dependencyMap, fromFile, specifier);
   }
 
-  const runtimeUrlPattern = /chrome\.runtime\.getURL\(["']([^"']+)["']\)/g;
-  while ((match = runtimeUrlPattern.exec(source))) {
-    addDependency(dependencyMap, fromFile, match[1], {
-      resolveFromRoot: true
-    });
-  }
+  const dynamicImportPattern = new RegExp(
+    String.raw`\bimport\s*\(\s*${jsStringLiteralPattern}\s*\)`,
+    "g"
+  );
+  scanJavaScriptDependenciesByPattern(source, fromFile, dependencyMap, dynamicImportPattern, {
+    requireLocalSpecifier: true
+  });
 
-  const workerScriptPattern = /workerScript\s*:\s*["']([^"']+)["']/g;
-  while ((match = workerScriptPattern.exec(source))) {
-    addDependency(dependencyMap, fromFile, match[1], {
-      resolveFromRoot: true
-    });
-  }
+  const runtimeUrlPattern = new RegExp(
+    String.raw`chrome\.runtime\.getURL\(\s*${jsStringLiteralPattern}\s*\)`,
+    "g"
+  );
+  scanJavaScriptDependenciesByPattern(source, fromFile, dependencyMap, runtimeUrlPattern, {
+    resolveFromRoot: true
+  });
+
+  const workerScriptPattern = new RegExp(
+    String.raw`workerScript\s*:\s*${jsStringLiteralPattern}`,
+    "g"
+  );
+  scanJavaScriptDependenciesByPattern(source, fromFile, dependencyMap, workerScriptPattern, {
+    resolveFromRoot: true
+  });
+
+  const directWorkerPattern = new RegExp(
+    String.raw`new\s+(?:Worker|SharedWorker)\(\s*${jsStringLiteralPattern}\s*(?:,|\))`,
+    "g"
+  );
+  scanJavaScriptDependenciesByPattern(source, fromFile, dependencyMap, directWorkerPattern, {
+    requireLocalSpecifier: true
+  });
 }
 
 function scanManifestDependencies(source, fromFile, dependencyMap) {
@@ -304,4 +432,15 @@ function main() {
   );
 }
 
-main();
+if (require.main === module) {
+  main();
+}
+
+module.exports = {
+  addDependency,
+  getTemplateLiteralDependencyTarget,
+  main,
+  normalizeDependency,
+  scanDependencies,
+  scanJavaScriptDependencies
+};

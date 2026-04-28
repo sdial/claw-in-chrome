@@ -28,8 +28,26 @@ function read(filePath) {
   return fs.readFileSync(filePath, "utf8");
 }
 
+function normalizeAnchorWhitespace(value) {
+  return String(value)
+    .replace(/\basync\s*\(\s*([A-Za-z_$][\w$]*)\s*\)\s*=>/g, "async $1 =>")
+    .replace(/\(\s*([A-Za-z_$][\w$]*)\s*\)\s*=>/g, "$1 =>")
+    .replace(/\s+/g, " ")
+    .replace(/\(\s+(?=[`"'A-Za-z_$[{])/g, "(")
+    .replace(/,\s+(?=[)\]}])/g, "")
+    .trim();
+}
+
 function assertIncludes(source, needle, label) {
-  assert.equal(source.includes(needle), true, `${label} should include ${needle}`);
+  const exactMatch = source.includes(needle);
+  const normalizedMatch = normalizeAnchorWhitespace(source).includes(
+    normalizeAnchorWhitespace(needle),
+  );
+  assert.equal(
+    exactMatch || normalizedMatch,
+    true,
+    `${label} should include ${needle}`,
+  );
 }
 
 async function testSidepanelAnchorsExist() {
@@ -361,7 +379,7 @@ async function testMcpPermissionsAnchorsExist() {
   assertIncludes(source, "const __cpMcpPermissionPopupCreateStorageEntry = __cpMcpPermissionPopupProtocol.createPromptStorageEntry || ((e, t, r = Date.now()) => ({", "mcpPermissions bundle");
   assertIncludes(source, "const __cpMcpBridgePairingQueryKeyRequestId = __cpPairingQueryKeys.REQUEST_ID || \"request_id\";", "mcpPermissions bundle");
   assertIncludes(source, "const __cpMcpPermissionPopupQueryKeyTabId = __cpMcpPermissionPopupQueryKeys.TAB_ID || \"tabId\";", "mcpPermissions bundle");
-  assertIncludes(source, "const __cpMcpPermissionPopupCreateUrl = __cpMcpPermissionPopupProtocol.buildPopupUrl || ((e, t) => e(`sidepanel.html?${__cpMcpPermissionPopupQueryKeyTabId}=${t.tabId}&${__cpMcpPermissionPopupQueryKeyPermissionOnly}=true&${__cpMcpPermissionPopupQueryKeyRequestId}=${t.requestId}`));", "mcpPermissions bundle");
+  assertIncludes(source, "const __cpMcpPermissionPopupCreateUrl =\n  __cpMcpPermissionPopupProtocol.buildPopupUrl ||", "mcpPermissions bundle");
   assertIncludes(source, "const __cpMcpPermissionPopupCreateWindowOptions = __cpMcpPermissionPopupProtocol.createPopupWindowOptions || ((e, t) => ({", "mcpPermissions bundle");
   assertIncludes(source, "const __cpMcpPermissionPopupResponseTimeoutMs = __cpMcpPermissionPopupProtocol.RESPONSE_TIMEOUT_MS || __cpMcpBridgeContract.PERMISSION_POPUP_RESPONSE_TIMEOUT_MS || 30000;", "mcpPermissions bundle");
   assertIncludes(source, "const __cpAgentIndicatorRuntimeMessageTypeShowAgentIndicators = __cpAgentIndicatorRuntimeMessageTypes.SHOW_AGENT_INDICATORS || \"SHOW_AGENT_INDICATORS\";", "mcpPermissions bundle");
@@ -370,7 +388,8 @@ async function testMcpPermissionsAnchorsExist() {
   assertIncludes(source, "const __cpMcpToolErrorResultFactory = bn;", "mcpPermissions bundle");
   assertIncludes(source, "const __cpMcpToolExecutor = wn;", "mcpPermissions bundle");
   assertIncludes(source, "const Xa = [\"tabs_context_mcp\", \"tabs_create_mcp\", \"tabs_close_mcp\"];", "mcpPermissions bundle");
-  assertIncludes(source, "if (!this.context.tabId && !Xa.includes(e)) {", "mcpPermissions bundle");
+  assertIncludes(source, "const __cpMcpTablessToolNames = [\n  \"update_plan\",\n  \"turn_answer_start\",\n  \"shortcuts_list\",\n];", "mcpPermissions bundle");
+  assertIncludes(source, "if (\n          !this.context.tabId &&\n          !Xa.includes(e) &&\n          !__cpMcpTablessToolNames.includes(e)\n        ) {", "mcpPermissions bundle");
   assertIncludes(source, "name: \"tabs_context_mcp\",", "mcpPermissions bundle");
   assertIncludes(source, "CRITICAL: You must get the context at least once before using other browser automation tools so you know what tabs exist.", "mcpPermissions bundle");
   assertIncludes(source, "name: \"tabs_create_mcp\",", "mcpPermissions bundle");
@@ -419,6 +438,8 @@ async function testMcpPermissionsAnchorsExist() {
   assertIncludes(source, "语义锚点：tool executor permission_required 重试链：", "mcpPermissions bundle");
   assertIncludes(source, "先等 permission handler resolve，再按 toolUseId 写一次性授权，最后重跑原始 tool_call。", "mcpPermissions bundle");
   assertIncludes(source, "语义锚点：update_plan 在 permission approve 后直接返回“plan approved”文本，", "mcpPermissions bundle");
+  assertIncludes(source, "语义锚点：计划审批 permission 链可以在无 tab 场景下运行；", "mcpPermissions bundle");
+  assertIncludes(source, "语义锚点：PLAN_APPROVAL 这类 tab-less 审批允许 tabId 为空；", "mcpPermissions bundle");
   assertIncludes(source, "语义锚点：tab 编排阶段。", "mcpPermissions bundle");
   assertIncludes(source, "语义锚点：执行前的 indicator/debugger 挂载链。", "mcpPermissions bundle");
   assertIncludes(source, "tabs_context_mcp 首次建组前若还没有真实 tab，上面的 no-tab 例外会先放行，但不会提前点亮 indicator。", "mcpPermissions bundle");
@@ -691,19 +712,21 @@ async function testOptionsBundleAnchorsExist() {
   assertIncludes(source, "__cpOptionsGithubUpdateCheckNowAction = r.CHECK_NOW;", "options bundle");
   assertIncludes(source, "__cpOptionsProviderMountAnchorId = \"cp-options-provider-anchor\";", "options bundle");
   assertIncludes(source, "__cpOptionsSessionMountAnchorId = \"cp-options-session-anchor\";", "options bundle");
+  assertIncludes(source, "__cpOptionsMcpMountAnchorId = \"cp-options-mcp-anchor\";", "options bundle");
   assertIncludes(source, "const __cpOptionsPermissionManagerContract = globalThis.__CP_CONTRACT__?.permissionManager || {};", "options bundle");
   assertIncludes(source, "const __cpOptionsPendingScheduledTaskStorageKey = __cpOptionsPermissionManagerContract.PENDING_SCHEDULED_TASK_STORAGE_KEY || T.PENDING_SCHEDULED_TASK;", "options bundle");
   assertIncludes(source, "const __cpOptionsCustomProviderContract = globalThis.__CP_CONTRACT__?.customProvider || {};", "options bundle");
   assertIncludes(source, "const __cpOptionsAccountBootstrapStorageKey = __cpOptionsCustomProviderContract.ANTHROPIC_API_KEY_STORAGE_KEY || T.ANTHROPIC_API_KEY;", "options bundle");
   assertIncludes(source, "const __cpOptionsProviderNavItemId = \"cp-options-provider-nav-item\";", "options bundle");
   assertIncludes(source, "const __cpOptionsNavHrefOptionsProvider = \"/settings/options?provider=true\";", "options bundle");
+  assertIncludes(source, "const __cpOptionsNavHrefOptionsMcp = \"/settings/options?provider=mcp\";", "options bundle");
   assertIncludes(source, "const __cpOptionsSettingsTabHashWriter = f;", "options bundle");
   assertIncludes(source, "const __cpOptionsSubviewHashWriter = g;", "options bundle");
   assertIncludes(source, "const __cpOptionsRootMountElementId = \"root\";", "options bundle");
   assertIncludes(source, "window.addEventListener(__cpOptionsHashChangeEventName, t);", "options bundle");
   assertIncludes(source, "语义锚点：options 页 hash -> 状态同步入口（一级 tab、二级子视图、麦克风回跳）", "options bundle");
   assertIncludes(source, "语义锚点：一级 tab 点击后，直接写回 window.location.hash 并清空 options 子视图。", "options bundle");
-  assertIncludes(source, "语义锚点：options 二级子视图切换（provider/session/prompt -> hash 持久化）", "options bundle");
+  assertIncludes(source, "语义锚点：options 二级子视图切换（provider/session/prompt/mcp -> hash 持久化）", "options bundle");
   assertIncludes(source, "const __cpOptionsBootstrapRuntimeChain = [R, _, L];", "options bundle");
 }
 

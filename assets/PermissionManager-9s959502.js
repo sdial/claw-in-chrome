@@ -23397,7 +23397,7 @@ class xy {
         permission: undefined,
       };
     }
-    const { host: i } = new URL(t);
+    const i = this.resolvePermissionNetlocFromUrl(t);
     if (!this.forcePrompt && this.isTurnApprovedDomain(i)) {
       return {
         allowed: true,
@@ -23602,6 +23602,20 @@ class xy {
         e.scope.netloc &&
         this.matchesNetloc(t, e.scope.netloc),
     );
+  }
+  // 语义锚点：无 host 的显式 scheme（如 file:// / data:）也要折叠成稳定权限键，
+  // 否则审批后写入空 netloc，重试时仍会继续 permission_required。
+  resolvePermissionNetlocFromUrl(t) {
+    try {
+      const e = new URL(t);
+      if (e.host) {
+        return e.host;
+      }
+      if (e.protocol) {
+        return e.protocol === "file:" ? "file://" : e.protocol;
+      }
+    } catch {}
+    return "";
   }
   // 语义锚点：netloc 匹配支持 *.example.com 通配和 www. 归一化比较。
   matchesNetloc(t, e) {

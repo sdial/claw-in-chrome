@@ -34,13 +34,19 @@ function main() {
 
   assert.match(
     source,
+    /mcpRoot\.hidden = !mcpActive;/,
+    "MCP root visibility should be driven by the shared visibility helper"
+  );
+
+  assert.match(
+    source,
     /const handleHashChange = function \(\) \{\s*syncSubviewVisibility\(\);\s*queueSyncMount\("hashchange"\);\s*\};/s,
     "hash changes should update subview visibility immediately before the deferred mount sync runs"
   );
 
   assert.match(
     source,
-    /const \{\s*providerActive,\s*workflowActive,\s*sessionActive,\s*promptActive\s*\}\s*=\s*syncSubviewVisibility\(\);/s,
+    /const \{\s*providerActive,\s*workflowActive,\s*sessionActive,\s*promptActive,\s*mcpActive,\s*\}\s*=\s*syncSubviewVisibility\(\);/s,
     "mount sync should reuse the same visibility computation instead of duplicating delayed state updates"
   );
 

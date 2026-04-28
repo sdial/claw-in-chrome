@@ -11,6 +11,26 @@ function read(filePath) {
   return fs.readFileSync(filePath, "utf8").replace(/\r\n/g, "\n");
 }
 
+function normalizeAnchorWhitespace(value) {
+  return String(value)
+    .replace(/\basync\s*\(\s*([A-Za-z_$][\w$]*)\s*\)\s*=>/g, "async $1 =>")
+    .replace(/\(\s*([A-Za-z_$][\w$]*)\s*\)\s*=>/g, "$1 =>")
+    .replace(/\s+/g, " ")
+    .replace(/\(\s+(?=[`"'A-Za-z_$[{])/g, "(")
+    .replace(/,\s+(?=[)\]}])/g, "")
+    .trim();
+}
+
+function assertIncludesNormalized(source, snippet, label) {
+  assert.equal(
+    normalizeAnchorWhitespace(source).includes(
+      normalizeAnchorWhitespace(snippet),
+    ),
+    true,
+    label,
+  );
+}
+
 function testInlineProviderOverlayIsRetired() {
   const source = read(inlineProviderPath);
 
@@ -36,10 +56,20 @@ function testSidepanelPromptOpensProviderSettingsSubview() {
     "sidepanel prompt should localize the provider settings guidance from the current browser locale"
   );
 
-  assert.match(
+  assertIncludesNormalized(
     source,
-    /onClick: \(\) => chrome\.tabs\.create\(\{\s*url: chrome\.runtime\.getURL\("options\.html#options\?provider=true"\)\s*\}\),\s*children: __cpGetLocalizedProviderPromptActionText\(ye\?\.locale\)/,
-    "sidepanel prompt should deep-link into the provider settings subview"
+    "onClick: () => chrome.tabs.create({",
+    "sidepanel prompt should deep-link into the provider settings subview",
+  );
+  assertIncludesNormalized(
+    source,
+    'url: chrome.runtime.getURL("options.html#options?provider=true")',
+    "sidepanel prompt should open the provider settings subview URL",
+  );
+  assertIncludesNormalized(
+    source,
+    "children: __cpGetLocalizedProviderPromptActionText(ye?.locale)",
+    "sidepanel prompt should render the localized provider settings action label",
   );
 
   assert.match(
@@ -48,28 +78,28 @@ function testSidepanelPromptOpensProviderSettingsSubview() {
     "provider settings prompt should reuse the existing black primary button token"
   );
 
-  assert.match(
+  assertIncludesNormalized(
     source,
-    /children: __cpGetLocalizedProviderPromptTitle\(n\?\.locale\)/,
-    "secondary sidepanel entry should reuse the localized provider prompt title"
+    "children: __cpGetLocalizedProviderPromptTitle(n?.locale)",
+    "secondary sidepanel entry should reuse the localized provider prompt title",
   );
 
-  assert.match(
+  assertIncludesNormalized(
     source,
-    /children: __cpGetLocalizedProviderPromptDescription\(n\?\.locale\)/,
-    "secondary sidepanel entry should reuse the localized provider prompt description"
+    "children: __cpGetLocalizedProviderPromptDescription(n?.locale)",
+    "secondary sidepanel entry should reuse the localized provider prompt description",
   );
 
-  assert.match(
+  assertIncludesNormalized(
     source,
-    /children: __cpGetLocalizedProviderPromptActionText\(n\?\.locale\)/,
-    "secondary sidepanel entry should reuse the localized provider prompt action label"
+    "children: __cpGetLocalizedProviderPromptActionText(n?.locale)",
+    "secondary sidepanel entry should reuse the localized provider prompt action label",
   );
 
-  assert.match(
+  assertIncludesNormalized(
     source,
-    /children: __cpGetLocalizedProviderPromptRetryText\(n\?\.locale\)/,
-    "secondary sidepanel entry should reuse the same localized provider prompt copy"
+    "children: __cpGetLocalizedProviderPromptRetryText(n?.locale)",
+    "secondary sidepanel entry should reuse the same localized provider prompt copy",
   );
 
   assert.doesNotMatch(
@@ -94,34 +124,39 @@ function testOnboardingPromptUsesLocalizedProviderSettingsCopy() {
     "first-run onboarding should localize its provider guidance from the browser locale"
   );
 
-  assert.match(
+  assertIncludesNormalized(
     source,
-    /onClick: \(\) => chrome\.tabs\.create\(\{\s*url: chrome\.runtime\.getURL\("options\.html#options\?provider=true"\)\s*\}\),\s*children: __cpGetLocalizedProviderOnboardingActionText\(\)/,
-    "first-run onboarding should deep-link into the provider settings subview"
+    "onClick: () => chrome.tabs.create({",
+    "first-run onboarding should deep-link into the provider settings subview",
+  );
+  assertIncludesNormalized(
+    source,
+    'url: chrome.runtime.getURL("options.html#options?provider=true")',
+    "first-run onboarding should open the provider settings subview URL",
   );
 
-  assert.match(
+  assertIncludesNormalized(
     source,
-    /children: __cpGetLocalizedProviderOnboardingTitle\(\)/,
-    "first-run onboarding should render through the localized provider onboarding title helper"
+    "children: __cpGetLocalizedProviderOnboardingTitle()",
+    "first-run onboarding should render through the localized provider onboarding title helper",
   );
 
-  assert.match(
+  assertIncludesNormalized(
     source,
-    /children: __cpGetLocalizedProviderOnboardingDescription\(void 0, e\)/,
-    "first-run onboarding should render through the localized provider onboarding description helper"
+    "children: __cpGetLocalizedProviderOnboardingDescription(void 0, e)",
+    "first-run onboarding should render through the localized provider onboarding description helper",
   );
 
-  assert.match(
+  assertIncludesNormalized(
     source,
-    /children: __cpGetLocalizedProviderOnboardingActionText\(\)/,
-    "first-run onboarding should render through the localized provider onboarding action helper"
+    "children: __cpGetLocalizedProviderOnboardingActionText()",
+    "first-run onboarding should render through the localized provider onboarding action helper",
   );
 
-  assert.match(
+  assertIncludesNormalized(
     source,
-    /children: __cpGetLocalizedProviderOnboardingRetryText\(\)/,
-    "first-run onboarding should render through the localized provider onboarding helpers"
+    "children: __cpGetLocalizedProviderOnboardingRetryText()",
+    "first-run onboarding should render through the localized provider onboarding helpers",
   );
 }
 

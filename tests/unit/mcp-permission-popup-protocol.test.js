@@ -51,7 +51,19 @@ async function testProtocolParsesPopupSearchAndStorageHelpers() {
   assert.equal(parsed.tabId, 12);
   assert.equal(parsed.permissionOnly, true);
   assert.equal(parsed.requestId, "req-1");
+
+  const requestOnlyParsed = protocol.parsePopupSearch(
+    "?mcpPermissionOnly=true&requestId=req-only",
+  );
+  assert.equal(requestOnlyParsed.tabId, null);
+  assert.equal(requestOnlyParsed.permissionOnly, true);
+  assert.equal(requestOnlyParsed.requestId, "req-only");
+
   assert.equal(protocol.isPermissionPopupSearch("?tabId=12&mcpPermissionOnly=true&requestId=req-1"), true);
+  assert.equal(
+    protocol.isPermissionPopupSearch("?mcpPermissionOnly=true&requestId=req-only"),
+    true,
+  );
   assert.equal(protocol.isPermissionPopupSearch("?tabId=12&mcpPermissionOnly=true"), false);
   assert.equal(protocol.buildPromptStorageKey("req-1"), "mcp_prompt_req-1");
 
@@ -86,6 +98,14 @@ async function testProtocolBuildsResponseAndPopupWindowPayloads() {
     "chrome-extension://test-extension-id/sidepanel.html?tabId=12&mcpPermissionOnly=true&requestId=req-1"
   );
 
+  const requestOnlyPopupUrl = protocol.buildPopupUrl(createRuntimeUrl, {
+    requestId: "req-only"
+  });
+  assert.equal(
+    requestOnlyPopupUrl,
+    "chrome-extension://test-extension-id/sidepanel.html?mcpPermissionOnly=true&requestId=req-only"
+  );
+
   const popupWindowOptions = protocol.createPopupWindowOptions(createRuntimeUrl, {
     tabId: 12,
     requestId: "req-1"
@@ -95,6 +115,18 @@ async function testProtocolBuildsResponseAndPopupWindowPayloads() {
   assert.equal(popupWindowOptions.width, 600);
   assert.equal(popupWindowOptions.height, 600);
   assert.equal(popupWindowOptions.focused, true);
+
+  const requestOnlyPopupWindowOptions = protocol.createPopupWindowOptions(
+    createRuntimeUrl,
+    {
+      requestId: "req-only"
+    },
+  );
+  assert.equal(requestOnlyPopupWindowOptions.url, requestOnlyPopupUrl);
+  assert.equal(requestOnlyPopupWindowOptions.type, "popup");
+  assert.equal(requestOnlyPopupWindowOptions.width, 600);
+  assert.equal(requestOnlyPopupWindowOptions.height, 600);
+  assert.equal(requestOnlyPopupWindowOptions.focused, true);
 }
 
 async function main() {

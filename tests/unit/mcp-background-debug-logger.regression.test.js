@@ -127,8 +127,23 @@ module.exports = {
   };
 }
 
+function normalizeAnchorWhitespace(value) {
+  return String(value)
+    .replace(/\s+/g, " ")
+    .replace(/\(\s+(?=[`"'A-Za-z_$[{])/g, "(")
+    .replace(/,\s+(?=[)\]}])/g, "")
+    .trim();
+}
+
 function assertIncludes(source, needle, label) {
-  assert.equal(source.includes(needle), true, `${label} should include ${needle}`);
+  assert.equal(
+    source.includes(needle) ||
+      normalizeAnchorWhitespace(source).includes(
+        normalizeAnchorWhitespace(needle),
+      ),
+    true,
+    `${label} should include ${needle}`,
+  );
 }
 
 async function testBackgroundLoggerPersistsSanitizedMcpEntries() {

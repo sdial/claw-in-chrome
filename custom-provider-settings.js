@@ -10,6 +10,7 @@
   const promptsContract = rootContract.prompts || {};
   const workflowsContract = rootContract.workflows || {};
   const debugContract = rootContract.debug || {};
+  const nativeMessagingContract = rootContract.nativeMessaging || {};
   const uiContract = rootContract.ui || {};
   const STORAGE_KEY = providerContract.STORAGE_KEY || "customProviderConfig";
   const BACKUP_KEY =
@@ -21,16 +22,19 @@
   const WORKFLOW_ROOT_ID = "cp-options-workflow-root";
   const SESSION_ROOT_ID = "cp-options-session-root";
   const PROMPT_ROOT_ID = "cp-options-prompt-root";
+  const MCP_ROOT_ID = "cp-options-mcp-root";
   const DEBUG_ROOT_ID = "cp-options-debug-root";
   const PROVIDER_ANCHOR_ID = "cp-options-provider-anchor";
   const SESSION_ANCHOR_ID = "cp-options-session-anchor";
   const PROMPT_ANCHOR_ID = "cp-options-prompt-anchor";
+  const MCP_ANCHOR_ID = "cp-options-mcp-anchor";
   const DEBUG_ANCHOR_ID = "cp-options-debug-anchor";
   const PANEL_ID = "cp-options-inline-provider-panel";
   const NAV_ITEM_ID = "cp-options-provider-nav-item";
   const WORKFLOW_NAV_ITEM_ID = "cp-options-workflow-nav-item";
   const SESSION_NAV_ITEM_ID = "cp-options-session-nav-item";
   const PROMPT_NAV_ITEM_ID = "cp-options-prompt-nav-item";
+  const MCP_NAV_ITEM_ID = "cp-options-mcp-nav-item";
   const BUILTIN_PROMPT_PROFILE_ID = "__builtin_default_prompt__";
   const DEBUG_LOGS_KEY =
     debugContract.SIDEPANEL_LOGS_STORAGE_KEY || "sidepanelDebugLogs";
@@ -56,6 +60,13 @@
   const SHOW_TOOL_RESULT_DETAILS_STORAGE_KEY =
     uiContract.SHOW_TOOL_RESULT_DETAILS_STORAGE_KEY ||
     "showToolResultDetails";
+  const MCP_SERVER_NAME = "claw-in-chrome";
+  const MCP_SERVER_COMMAND = "claw-in-chrome-mcp";
+  const MCP_WINDOWS_SERVER_COMMAND = "claw-in-chrome-mcp.cmd";
+  const MCP_BIND_BROWSER_ENV_KEY = "CIC_MCP_BIND_BROWSER";
+  const MCP_EXTENSION_IDS_ENV_KEY = "CLAW_IN_CHROME_EXTENSION_IDS";
+  const MCP_DEFAULT_EXTENSION_ID = "fcoeoabgfenejglbffodgkkbkcdhcgfn";
+  let detectedMcpBrowserPromise = null;
   const i18nShared =
     globalThis.__CP_I18N_SHARED__ ||
     globalThis.__CP_GITHUB_UPDATE_SHARED__ ||
@@ -517,6 +528,21 @@
       debugLogsEmpty: "No debug logs have been captured yet.",
       debugLogsCount: "{count} log entries available.",
       debugLogsUpdatedPrefix: "Last updated:",
+      mcpNavTitle: "MCP",
+      mcpSetupTitle: "MCP setup",
+      mcpSetupEnvLabel:
+        "Only for unpacked or forked builds: extension ID override",
+      mcpSetupEnvHelp:
+        "If your current extension ID is still the default packaged ID, you usually do not need this.",
+      mcpSetupConfigLabel: "Configuration example",
+      mcpSetupConfigHelp:
+        "Most users only need to copy this one block.",
+      mcpSetupRepoLabel: "Repository:",
+      copyVariable: "Copy",
+      copyConfig: "Copy config",
+      mcpSetupCopyEnvSuccess: "Extension ID environment variable copied.",
+      mcpSetupCopyConfigSuccess: "MCP server configuration copied.",
+      mcpSetupCopyFailure: "Failed to copy MCP setup text.",
       debugEnabled: "Debug mode is enabled.",
       debugDisabled: "Debug mode is disabled.",
       debugSaveFailure: "Failed to update debug mode.",
@@ -969,6 +995,131 @@
       URL.revokeObjectURL(objectUrl);
     }, 0);
   }
+  async function copyTextToClipboard(text) {
+    const value = String(text ?? "");
+    if (globalThis.navigator?.clipboard?.writeText) {
+      await globalThis.navigator.clipboard.writeText(value);
+      return;
+    }
+    const textarea = document.createElement("textarea");
+    textarea.value = value;
+    textarea.setAttribute("readonly", "readonly");
+    textarea.style.position = "fixed";
+    textarea.style.top = "-9999px";
+    textarea.style.left = "-9999px";
+    document.body.appendChild(textarea);
+    textarea.focus();
+    textarea.select();
+    const copied = document.execCommand("copy");
+    textarea.remove();
+    if (!copied) {
+      throw new Error("Clipboard copy failed");
+    }
+  }
+  function getCurrentExtensionId() {
+    return String(globalThis.chrome?.runtime?.id || "").trim();
+  }
+  function normalizeMcpSetupString(value) {
+    if (typeof value !== "string") {
+      return null;
+    }
+    const normalized = value.trim();
+    return normalized ? normalized : null;
+  }
+  function readMcpBrowserBrandText() {
+    const brands = globalThis.navigator?.userAgentData?.brands;
+    if (!Array.isArray(brands)) {
+      return "";
+    }
+    return brands
+      .map(function (entry) {
+        return normalizeMcpSetupString(entry?.brand) || "";
+      })
+      .filter(Boolean)
+      .join(" ");
+  }
+  async function detectMcpBrowserId() {
+    if (!detectedMcpBrowserPromise) {
+      detectedMcpBrowserPromise = (async function () {
+        const brandText = readMcpBrowserBrandText();
+        const userAgent = String(globalThis.navigator?.userAgent || "").toLowerCase();
+        if (
+          /microsoft edge/i.test(brandText) ||
+          /\bedg\//i.test(userAgent)
+        ) {
+          return "edge";
+        }
+        if (/opera/i.test(brandText) || /\bopr\//i.test(userAgent)) {
+          return "opera";
+        }
+        if (/vivaldi/i.test(brandText) || /vivaldi/i.test(userAgent)) {
+          return "vivaldi";
+        }
+        if (/arc/i.test(brandText) || /\barc\//i.test(userAgent)) {
+          return "arc";
+        }
+        try {
+          if (
+            globalThis.navigator?.brave &&
+            typeof globalThis.navigator.brave.isBrave === "function"
+          ) {
+            if (await globalThis.navigator.brave.isBrave()) {
+              return "brave";
+            }
+          }
+        } catch {}
+        if (
+          /chromium/i.test(brandText) &&
+          !/google chrome/i.test(brandText)
+        ) {
+          return "chromium";
+        }
+        return "chrome";
+      })();
+    }
+    try {
+      return await detectedMcpBrowserPromise;
+    } catch {
+      return null;
+    }
+  }
+  function buildMcpSetupEnvLine(extensionId) {
+    return `${MCP_EXTENSION_IDS_ENV_KEY}=${String(extensionId || "").trim()}`;
+  }
+  function getMcpServerCommand() {
+    const platform = String(globalThis.navigator?.platform || "").toLowerCase();
+    const userAgent = String(globalThis.navigator?.userAgent || "").toLowerCase();
+    return platform.includes("win") || userAgent.includes("windows")
+      ? MCP_WINDOWS_SERVER_COMMAND
+      : MCP_SERVER_COMMAND;
+  }
+  async function buildMcpServerConfigSnippet(extensionId) {
+    const runtimeId = String(extensionId || "").trim();
+    const detectedBrowser = await detectMcpBrowserId();
+    const serverConfig = {
+      command: getMcpServerCommand(),
+      args: ["serve"],
+    };
+    const env = {};
+    if (detectedBrowser) {
+      env[MCP_BIND_BROWSER_ENV_KEY] = detectedBrowser;
+    }
+    if (runtimeId && runtimeId !== MCP_DEFAULT_EXTENSION_ID) {
+      env[MCP_EXTENSION_IDS_ENV_KEY] = runtimeId;
+    }
+    if (Object.keys(env).length) {
+      serverConfig.env = env;
+    }
+    return JSON.stringify(
+      {
+        mcpServers: {
+          [MCP_SERVER_NAME]: serverConfig,
+        },
+      },
+      null,
+      2,
+    );
+  }
   const createEmptyConfig =
     helpers.createEmptyConfig ||
     function () {
@@ -1120,7 +1271,7 @@
           }
           if (
             parent.closest(
-              `#${ROOT_ID}, #${SESSION_ROOT_ID}, #${PROMPT_ROOT_ID}, #${DEBUG_ROOT_ID}`,
+              `#${ROOT_ID}, #${WORKFLOW_ROOT_ID}, #${SESSION_ROOT_ID}, #${PROMPT_ROOT_ID}, #${MCP_ROOT_ID}, #${DEBUG_ROOT_ID}`,
             )
           ) {
             return NodeFilter.FILTER_REJECT;
@@ -1203,8 +1354,10 @@
         navigatorLanguage: navigator.language,
         ignoredSelectors: [
           "#" + ROOT_ID,
+          "#" + WORKFLOW_ROOT_ID,
           "#" + SESSION_ROOT_ID,
           "#" + PROMPT_ROOT_ID,
+          "#" + MCP_ROOT_ID,
           "#" + DEBUG_ROOT_ID,
         ],
         zhPageHints: [
@@ -2101,6 +2254,29 @@
       white-space: pre;
       tab-size: 2;
       resize: vertical;
+    }
+    .cp-mcp-setup-code {
+      margin: 0;
+      min-height: auto;
+      font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+      font-size: 0.875rem;
+      line-height: 1.55;
+      white-space: pre-wrap;
+      word-break: break-word;
+      overflow-x: auto;
+    }
+    .cp-mcp-setup-notes {
+      display: grid;
+      gap: 0.375rem;
+    }
+    .cp-page-link {
+      color: hsl(var(--brand-100));
+      text-decoration: underline;
+      text-underline-offset: 0.18em;
+      word-break: break-all;
+    }
+    .cp-page-link:hover {
+      color: hsl(var(--brand-200, var(--brand-100)));
     }
     .cp-workflow-header-actions {
       align-items: stretch;
@@ -3153,6 +3329,9 @@
     if (value === "prompt" || value === "prompts") {
       return "prompt";
     }
+    if (value === "mcp") {
+      return "mcp";
+    }
     if (value === "session" || value === "sessions") {
       return "session";
     }
@@ -3173,6 +3352,9 @@
   function isPromptViewActive() {
     return getCustomSubview() === "prompt";
   }
+  function isMcpViewActive() {
+    return getCustomSubview() === "mcp";
+  }
   function setCustomSubview(view) {
     const nextHash =
       view === "provider"
@@ -3183,7 +3365,9 @@
             ? "options?provider=session"
             : view === "prompt"
               ? "options?provider=prompt"
-              : "options";
+              : view === "mcp"
+                ? "options?provider=mcp"
+                : "options";
     if (window.location.hash.replace(/^#/, "") !== nextHash) {
       window.location.hash = nextHash;
     }
@@ -3228,7 +3412,8 @@
           node.id !== NAV_ITEM_ID &&
           node.id !== WORKFLOW_NAV_ITEM_ID &&
           node.id !== SESSION_NAV_ITEM_ID &&
-          node.id !== PROMPT_NAV_ITEM_ID
+          node.id !== PROMPT_NAV_ITEM_ID &&
+          node.id !== MCP_NAV_ITEM_ID
         );
       })
       .map(findNavButton)
@@ -3313,6 +3498,7 @@
     const workflowActive = isWorkflowViewActive();
     const sessionActive = isSessionViewActive();
     const promptActive = isPromptViewActive();
+    const mcpActive = isMcpViewActive();
     const providerNavItem = ensureCustomNavItem({
       list,
       optionsItem,
@@ -3373,6 +3559,21 @@
         setCustomSubview("prompt");
       },
     });
+    const mcpNavItem = ensureCustomNavItem({
+      list,
+      optionsItem,
+      optionsButton,
+      id: MCP_NAV_ITEM_ID,
+      label: strings.mcpNavTitle || "MCP",
+      active: mcpActive,
+      onClick() {
+        debugLog("customProvider.nav.click", {
+          currentHash: location.hash,
+          target: "mcp",
+        });
+        setCustomSubview("mcp");
+      },
+    });
     const nativeClassNames = getNativeNavButtonClassNames(list, optionsItem);
     if (providerNavItem && optionsItem.nextElementSibling !== providerNavItem) {
       optionsItem.insertAdjacentElement("afterend", providerNavItem);
@@ -3408,8 +3609,25 @@
         optionsItem
       ).insertAdjacentElement("afterend", promptNavItem);
     }
+    if (
+      mcpNavItem &&
+      (promptNavItem || sessionNavItem || workflowNavItem || providerNavItem)
+        ?.nextElementSibling !== mcpNavItem
+    ) {
+      (
+        promptNavItem ||
+        sessionNavItem ||
+        workflowNavItem ||
+        providerNavItem ||
+        optionsItem
+      ).insertAdjacentElement("afterend", mcpNavItem);
+    }
     const nextInactive =
-      providerActive || workflowActive || sessionActive || promptActive;
+      providerActive ||
+      workflowActive ||
+      sessionActive ||
+      promptActive ||
+      mcpActive;
     if (
       optionsItem.classList.contains("cp-nav-override-inactive") !==
       nextInactive
@@ -3421,6 +3639,7 @@
       workflowNavItem,
       sessionNavItem,
       promptNavItem,
+      mcpNavItem,
       nativeClassNames,
     };
   }
@@ -3468,6 +3687,9 @@
     const workflowRoot = createNode("div", "space-y-6");
     workflowRoot.id = WORKFLOW_ROOT_ID;
     workflowRoot.hidden = true;
+    const mcpRoot = createNode("div", "space-y-6");
+    mcpRoot.id = MCP_ROOT_ID;
+    mcpRoot.hidden = true;
     const debugMountRoot = createNode("div", "space-y-6 mt-6");
     debugMountRoot.id = DEBUG_ROOT_ID;
     const panel = createNode(
@@ -4285,6 +4507,11 @@
     promptPanel.appendChild(promptStack);
     promptRoot.appendChild(promptPanel);
     promptRoot.appendChild(promptFloatingShell);
+    const mcpPanel = createNode(
+      "section",
+      "cp-page-card cp-page-panel bg-bg-100 border border-border-300 rounded-xl px-6 pt-6 pb-6 md:px-8 md:pt-8 md:pb-8",
+    );
+    const mcpStack = createNode("div", "cp-page-stack");
     const debugPanel = createNode(
       "section",
       "cp-page-card cp-page-panel bg-bg-100 border border-border-300 rounded-xl px-6 pt-6 pb-6 md:px-8 md:pt-8 md:pb-8",
@@ -4305,6 +4532,85 @@
         strings.debugSubtitle,
       ),
     );
+    const mcpSetupSection = createNode("div", "cp-page-stack");
+    const mcpSetupHeader = createNode("div", "cp-page-row-copy");
+    mcpSetupHeader.appendChild(
+      createNode("div", "cp-page-row-title", strings.mcpSetupTitle),
+    );
+    const mcpSetupEnvBlock = createNode("div", "cp-page-stack");
+    const mcpSetupEnvHeader = createNode("div", "cp-page-row");
+    const mcpSetupEnvCopy = createNode("div", "cp-page-row-copy");
+    mcpSetupEnvCopy.appendChild(
+      createNode("div", "cp-page-row-title", strings.mcpSetupEnvLabel),
+    );
+    mcpSetupEnvCopy.appendChild(
+      createNode("div", "cp-page-meta", strings.mcpSetupEnvHelp),
+    );
+    const copyEnvButton = createNode(
+      "button",
+      `cp-page-btn cp-page-btn-quiet ${SHARED_FRAME_CLASS}`,
+      strings.copyVariable,
+    );
+    copyEnvButton.type = "button";
+    copyEnvButton.style.whiteSpace = "nowrap";
+    const mcpSetupEnvCode = createNode(
+      "pre",
+      `cp-page-input cp-page-input-mono cp-mcp-setup-code ${SHARED_FRAME_CLASS}`,
+    );
+    mcpSetupEnvCode.setAttribute("aria-label", strings.mcpSetupEnvLabel);
+    mcpSetupEnvCode.tabIndex = 0;
+    mcpSetupEnvHeader.appendChild(mcpSetupEnvCopy);
+    mcpSetupEnvHeader.appendChild(copyEnvButton);
+    mcpSetupEnvBlock.appendChild(mcpSetupEnvHeader);
+    mcpSetupEnvBlock.appendChild(mcpSetupEnvCode);
+    const mcpSetupConfigBlock = createNode("div", "cp-page-stack");
+    const mcpSetupConfigHeader = createNode("div", "cp-page-row");
+    const mcpSetupConfigCopy = createNode("div", "cp-page-row-copy");
+    mcpSetupConfigCopy.appendChild(
+      createNode("div", "cp-page-row-title", strings.mcpSetupConfigLabel),
+    );
+    mcpSetupConfigCopy.appendChild(
+      createNode("div", "cp-page-meta", strings.mcpSetupConfigHelp),
+    );
+    const copyConfigButton = createNode(
+      "button",
+      `cp-page-btn cp-page-btn-quiet ${SHARED_FRAME_CLASS}`,
+      strings.copyConfig,
+    );
+    copyConfigButton.type = "button";
+    copyConfigButton.style.whiteSpace = "nowrap";
+    const mcpSetupConfigCode = createNode(
+      "pre",
+      `cp-page-input cp-page-input-mono cp-mcp-setup-code ${SHARED_FRAME_CLASS}`,
+    );
+    mcpSetupConfigCode.setAttribute("aria-label", strings.mcpSetupConfigLabel);
+    mcpSetupConfigCode.tabIndex = 0;
+    mcpSetupConfigHeader.appendChild(mcpSetupConfigCopy);
+    mcpSetupConfigHeader.appendChild(copyConfigButton);
+    mcpSetupConfigBlock.appendChild(mcpSetupConfigHeader);
+    mcpSetupConfigBlock.appendChild(mcpSetupConfigCode);
+    const mcpSetupNotes = createNode("div", "cp-mcp-setup-notes");
+    const mcpSetupRepoMeta = createNode("div", "cp-page-meta");
+    mcpSetupRepoMeta.appendChild(
+      document.createTextNode(`${strings.mcpSetupRepoLabel} `),
+    );
+    const mcpSetupRepoLink = createNode(
+      "a",
+      "cp-page-link",
+      "https://github.com/S-Trespassing/claw-in-chrome-mcp",
+    );
+    mcpSetupRepoLink.href =
+      "https://github.com/S-Trespassing/claw-in-chrome-mcp";
+    mcpSetupRepoLink.target = "_blank";
+    mcpSetupRepoLink.rel = "noopener noreferrer";
+    mcpSetupRepoMeta.appendChild(mcpSetupRepoLink);
+    mcpSetupNotes.appendChild(mcpSetupRepoMeta);
+    const mcpSetupStatus = createNode("div", "cp-page-status");
+    mcpSetupSection.appendChild(mcpSetupHeader);
+    mcpSetupSection.appendChild(mcpSetupConfigBlock);
+    mcpSetupSection.appendChild(mcpSetupEnvBlock);
+    mcpSetupSection.appendChild(mcpSetupNotes);
+    mcpSetupSection.appendChild(mcpSetupStatus);
     const createToggleMetaNode = function () {
       const metaNode = createNode("div", "cp-page-meta");
       metaNode.hidden = true;
@@ -4457,6 +4763,23 @@
     debugLogsRow.appendChild(debugLogsCopy);
     debugLogsRow.appendChild(debugButtonRow);
     const debugStatus = createNode("div", "cp-page-status");
+    async function renderMcpSetupSection() {
+      const extensionId = getCurrentExtensionId();
+      const shouldShowExtensionOverride =
+        !!extensionId && extensionId !== MCP_DEFAULT_EXTENSION_ID;
+      mcpSetupEnvCode.textContent = buildMcpSetupEnvLine(extensionId);
+      mcpSetupEnvBlock.hidden = !shouldShowExtensionOverride;
+      mcpSetupEnvBlock.setAttribute(
+        "aria-hidden",
+        shouldShowExtensionOverride ? "false" : "true",
+      );
+      mcpSetupConfigCode.textContent = await buildMcpServerConfigSnippet(
+        extensionId,
+      );
+    }
+    mcpStack.appendChild(mcpSetupSection);
+    mcpPanel.appendChild(mcpStack);
+    mcpRoot.appendChild(mcpPanel);
     debugStack.appendChild(debugHeader);
     debugStack.appendChild(toolResultDetailsRow);
     debugStack.appendChild(traceIdsRow);
@@ -4528,6 +4851,7 @@
       showToolResultDetails: false,
       showToolResultDetailsPending: false,
     };
+    void renderMcpSetupSection().catch(function () {});
     const formatLabelByValue = new Map(providerFormatOptions);
     function normalizeModelOption(item) {
       const value = String(item?.value || item?.model || "").trim();
@@ -7509,6 +7833,40 @@
         function () {},
       );
     });
+    copyEnvButton.addEventListener("click", async function () {
+      try {
+        await renderMcpSetupSection();
+        await copyTextToClipboard(mcpSetupEnvCode.textContent || "");
+        setStatus(mcpSetupStatus, "success", strings.mcpSetupCopyEnvSuccess);
+      } catch (error) {
+        setStatus(
+          mcpSetupStatus,
+          "error",
+          error && typeof error.message === "string"
+            ? error.message
+            : strings.mcpSetupCopyFailure,
+        );
+      }
+    });
+    copyConfigButton.addEventListener("click", async function () {
+      try {
+        await renderMcpSetupSection();
+        await copyTextToClipboard(mcpSetupConfigCode.textContent || "");
+        setStatus(
+          mcpSetupStatus,
+          "success",
+          strings.mcpSetupCopyConfigSuccess,
+        );
+      } catch (error) {
+        setStatus(
+          mcpSetupStatus,
+          "error",
+          error && typeof error.message === "string"
+            ? error.message
+            : strings.mcpSetupCopyFailure,
+        );
+      }
+    });
     copyLogsButton.addEventListener("click", async function () {
       try {
         await refreshDebug();
@@ -7516,7 +7874,7 @@
           setStatus(debugStatus, "error", strings.debugLogsEmpty);
           return;
         }
-        await navigator.clipboard.writeText(
+        await copyTextToClipboard(
           buildDebugExport(debugState.logs, debugState.meta),
         );
         setStatus(debugStatus, "success", strings.copyLogsSuccess);
@@ -7818,10 +8176,12 @@
       const workflowActive = isWorkflowViewActive();
       const sessionActive = isSessionViewActive();
       const promptActive = isPromptViewActive();
+      const mcpActive = isMcpViewActive();
       providerRoot.hidden = !providerActive;
       workflowRoot.hidden = !workflowActive;
       sessionRoot.hidden = !sessionActive;
       promptRoot.hidden = !promptActive;
+      mcpRoot.hidden = !mcpActive;
       if (!providerActive && !promptActive) {
         closeManualModelDialog();
       }
@@ -7833,6 +8193,7 @@
         workflowActive,
         sessionActive,
         promptActive,
+        mcpActive,
       };
     }
     async function syncMount() {
@@ -7846,11 +8207,17 @@
         scheduleUiRebuild();
         return;
       }
-      const { providerActive, workflowActive, sessionActive, promptActive } =
-        syncSubviewVisibility();
+      const {
+        providerActive,
+        workflowActive,
+        sessionActive,
+        promptActive,
+        mcpActive,
+      } = syncSubviewVisibility();
       const providerHost = findMountAnchor(PROVIDER_ANCHOR_ID);
       const sessionHost = findMountAnchor(SESSION_ANCHOR_ID);
       const promptHost = findMountAnchor(PROMPT_ANCHOR_ID);
+      const mcpHost = findMountAnchor(MCP_ANCHOR_ID);
       const debugHost = findMountAnchor(DEBUG_ANCHOR_ID);
       if (!isOptionsTabActive()) {
         closeManualModelDialog();
@@ -7871,13 +8238,22 @@
         if (promptRoot.parentNode) {
           promptRoot.remove();
         }
+        if (mcpRoot.parentNode) {
+          mcpRoot.remove();
+        }
         if (debugMountRoot.parentNode) {
           debugMountRoot.remove();
         }
         lastHost = null;
         return;
       }
-      if (!providerHost || !sessionHost || !promptHost || !debugHost) {
+      if (
+        !providerHost ||
+        !sessionHost ||
+        !promptHost ||
+        !mcpHost ||
+        !debugHost
+      ) {
         closeManualModelDialog();
         closeSessionRecordDialog();
         if (providerRoot.parentNode) {
@@ -7892,6 +8268,9 @@
         if (promptRoot.parentNode) {
           promptRoot.remove();
         }
+        if (mcpRoot.parentNode) {
+          mcpRoot.remove();
+        }
         if (debugMountRoot.parentNode) {
           debugMountRoot.remove();
         }
@@ -7902,20 +8281,24 @@
       const workflowNeedsRefresh = workflowRoot.parentNode !== providerHost;
       const sessionNeedsRefresh = sessionRoot.parentNode !== sessionHost;
       const promptNeedsRefresh = promptRoot.parentNode !== promptHost;
+      const mcpNeedsRefresh = mcpRoot.parentNode !== mcpHost;
       const debugNeedsRefresh = debugMountRoot.parentNode !== debugHost;
       debugLog("customProvider.syncMount.host", {
         providerActive,
         workflowActive,
         sessionActive,
         promptActive,
+        mcpActive,
         providerNeedsRefresh,
         workflowNeedsRefresh,
         sessionNeedsRefresh,
         promptNeedsRefresh,
+        mcpNeedsRefresh,
         debugNeedsRefresh,
         providerHostTag: providerHost.tagName,
         sessionHostTag: sessionHost.tagName,
         promptHostTag: promptHost.tagName,
+        mcpHostTag: mcpHost.tagName,
         debugHostTag: debugHost.tagName,
       });
       if (providerRoot.parentNode !== providerHost) {
@@ -7930,6 +8313,9 @@
       if (promptRoot.parentNode !== promptHost) {
         promptHost.appendChild(promptRoot);
       }
+      if (mcpRoot.parentNode !== mcpHost) {
+        mcpHost.appendChild(mcpRoot);
+      }
       if (debugMountRoot.parentNode !== debugHost) {
         debugHost.appendChild(debugMountRoot);
       }
@@ -7940,7 +8326,9 @@
             ? sessionHost
             : promptActive
               ? promptHost
-              : debugHost;
+              : mcpActive
+                ? mcpHost
+                : debugHost;
       const refreshTasks = [];
       if (providerNeedsRefresh) {
         refreshTasks.push(refresh(true));
@@ -7964,6 +8352,7 @@
           workflowActive,
           sessionActive,
           promptActive,
+          mcpActive,
           refreshCount: refreshTasks.length,
         });
       }
@@ -8063,6 +8452,9 @@
       }
       if (promptRoot.parentNode) {
         promptRoot.remove();
+      }
+      if (mcpRoot.parentNode) {
+        mcpRoot.remove();
       }
       if (debugMountRoot.parentNode) {
         debugMountRoot.remove();

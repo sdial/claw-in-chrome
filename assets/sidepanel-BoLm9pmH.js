@@ -31086,6 +31086,43 @@ const Rx = a.memo(({
   });
 });
 Rx.displayName = "StandardMarkDown";
+const __cpSidepanelOpenImageInNewTab = (e, t = "Image Preview") => {
+  if (!e || typeof e != "string") {
+    return;
+  }
+  if (!e.startsWith("data:")) {
+    window.open(e, "_blank", "noopener,noreferrer");
+    return;
+  }
+  const n = window.open("", "_blank");
+  if (!n) {
+    return;
+  }
+  try {
+    const s = n.document;
+    s.title = t;
+    const r = s.createElement("meta");
+    r.name = "viewport";
+    r.content = "width=device-width, initial-scale=1";
+    s.head.appendChild(r);
+    const i = s.createElement("style");
+    i.textContent = "html,body{margin:0;height:100%;background:#0b0f17}body{display:flex;align-items:center;justify-content:center;padding:24px;box-sizing:border-box}img{max-width:100%;max-height:100%;object-fit:contain;box-shadow:0 12px 40px rgba(0,0,0,.35);border-radius:12px}";
+    s.head.appendChild(i);
+    const o = s.body || s.documentElement;
+    o.textContent = "";
+    const a = s.createElement("img");
+    a.src = e;
+    a.alt = t;
+    a.decoding = "async";
+    o.appendChild(a);
+    try {
+      n.opener = null;
+    } catch {}
+  } catch (s) {
+    n.close();
+    throw s;
+  }
+};
 const Dx = ({
   src: e,
   ...t
@@ -31098,7 +31135,7 @@ const Dx = ({
     });
   }
   const r = () => {
-    window.open(e, "_blank", "noopener,noreferrer");
+    __cpSidepanelOpenImageInNewTab(e);
   };
   return l.jsxs(l.Fragment, {
     children: [l.jsx("button", {
@@ -33697,19 +33734,20 @@ function Pb({
   className: i = ""
 }) {
   const o = t();
+  const a = o.formatMessage({
+    defaultMessage: "Screenshot",
+    id: "9a+SKtXKhe"
+  });
   return l.jsxs("div", {
     className: i,
     children: [l.jsx("img", {
       src: e,
-      alt: o.formatMessage({
-        defaultMessage: "Screenshot",
-        id: "9a+SKtXKhe"
-      }),
+      alt: a,
       className: "max-w-full h-auto rounded border border-border-300 cursor-pointer hover:opacity-90 hover:rotate-2 transition-all duration-150 ease-out",
       style: {
         maxHeight: r
       },
-      onClick: () => window.open(e, "_blank"),
+      onClick: () => __cpSidepanelOpenImageInNewTab(e, a),
       title: o.formatMessage({
         defaultMessage: "Click to open in new tab",
         id: "A+vguREwVx"
@@ -83020,7 +83058,12 @@ function __cpResolvePermissionScopeFromPrompt(e) {
   }
   let t = "";
   try {
-    t = new URL(e.url).host;
+    const n = new URL(e.url);
+    if (n.host) {
+      t = n.host;
+    } else if (n.protocol) {
+      t = n.protocol === "file:" ? "file://" : n.protocol;
+    }
   } catch {
     t = String(e.url || "").trim();
   }
@@ -92144,6 +92187,12 @@ function __cpSerializeSessionMessage(e) {
     role: t,
     content: n
   };
+  if (e._synthetic === true) {
+    s._synthetic = true;
+  }
+  if (e._syntheticResult === true) {
+    s._syntheticResult = true;
+  }
   if (e.isCompactSummary === true) {
     s.isCompactSummary = true;
   }
@@ -95728,7 +95777,7 @@ function o1() {
   const __cpHandlePermissionRequiredPrompt = async e => {
     i.setPermissionPrompt(e);
     try {
-      const t = e.url ? new URL(e.url).hostname : "this page";
+      const t = e.url ? __cpResolvePermissionScopeFromPrompt(e).netloc || "this page" : "this page";
       const __cpSidepanelContractMessages = globalThis.__CP_CONTRACT__?.messages;
       const __cpSidepanelOutgoingMessageTypeShowPermissionNotification = __cpSidepanelContractMessages?.SHOW_PERMISSION_NOTIFICATION ?? "SHOW_PERMISSION_NOTIFICATION";
       chrome.runtime.sendMessage({
@@ -98429,12 +98478,9 @@ function o1() {
           onConfirm: async () => {
             if (!we) {
               if (i.permissionPrompt && i.permissionPrompt.type === "permission_required") {
-                const {
-                  host: e
-                } = new URL(i.permissionPrompt.url);
                 const t = {
                   type: "netloc",
-                  netloc: e
+                  netloc: __cpResolvePermissionScopeFromPrompt(i.permissionPrompt).netloc
                 };
                 nn(w.ONCE, t);
               }

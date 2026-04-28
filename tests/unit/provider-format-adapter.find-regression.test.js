@@ -95,6 +95,14 @@ async function runAdapterWithUpstreamHandler(upstreamHandler, options = {}) {
     body: JSON.stringify(requestBody)
   });
   const response = await sandbox.fetch(request);
+  if (options.responseType === "text") {
+    return {
+      status: response.status,
+      text: await response.text(),
+      headers: Object.fromEntries(response.headers.entries()),
+      upstreamCalls
+    };
+  }
   return {
     status: response.status,
     json: await response.json(),
@@ -102,13 +110,13 @@ async function runAdapterWithUpstreamHandler(upstreamHandler, options = {}) {
   };
 }
 
-async function runAdapterWithPayload(providerPayload) {
+async function runAdapterWithPayload(providerPayload, options = {}) {
   return runAdapterWithUpstreamHandler(async () => new Response(JSON.stringify(providerPayload), {
     status: 200,
     headers: {
       "content-type": "application/json; charset=utf-8"
     }
-  }));
+  }), options);
 }
 
 async function testOutputTextPartsSurviveOpenAIChatTransform() {
@@ -882,6 +890,549 @@ async function testContentFilterMapsToEndTurnWithoutToolUse() {
   ]);
 }
 
+async function testDeepSeekReasoningContentIsConvertedToThinking() {
+  const payload = {
+    id: "chatcmpl-deepseek-reasoning",
+    model: "deepseek-chat",
+    choices: [
+      {
+        index: 0,
+        finish_reason: "tool_calls",
+        message: {
+          role: "assistant",
+          reasoning_content: "Need to call get_weather before answering.",
+          content: "我先查一下天气。",
+          tool_calls: [
+            {
+              id: "call_weather_1",
+              type: "function",
+              function: {
+                name: "get_weather",
+                arguments: "{\"location\":\"杭州\",\"date\":\"2026-04-28\"}"
+              }
+            }
+          ]
+        }
+      }
+    ]
+  };
+  const result = await runAdapterWithPayload(payload, {
+    config: {
+      name: "DeepSeek",
+      defaultModel: "deepseek-chat"
+    }
+  });
+  assert.deepEqual(result.json.content, [
+    {
+      type: "text",
+      text: "我先查一下天气。"
+    },
+    {
+      type: "tool_use",
+      id: "call_weather_1",
+      name: "get_weather",
+      input: {
+        location: "杭州",
+        date: "2026-04-28"
+      }
+    },
+    {
+      type: "thinking",
+      thinking: "Need to call get_weather before answering."
+    }
+  ]);
+  assert.equal(result.json.stop_reason, "tool_use");
+}
+
+async function testDeepSeekReasoningContentDoesNotPrecedeToolUseBlocks() {
+  const payload = {
+    id: "chatcmpl-deepseek-tool-order",
+    model: "deepseek-chat",
+    choices: [
+      {
+        index: 0,
+        finish_reason: "tool_calls",
+        message: {
+          role: "assistant",
+          reasoning_content: "Need to call get_weather before answering.",
+          content: "我先查一下天气。",
+          tool_calls: [
+            {
+              id: "call_weather_1",
+              type: "function",
+              function: {
+                name: "get_weather",
+                arguments: "{\"location\":\"杭州\"}"
+              }
+            }
+          ]
+        }
+      }
+    ]
+  };
+  const result = await runAdapterWithPayload(payload, {
+    config: {
+      name: "DeepSeek",
+      defaultModel: "deepseek-chat"
+    }
+  });
+  const toolUseIndex = result.json.content.findIndex((block) => block.type === "tool_use");
+  const thinkingIndex = result.json.content.findIndex((block) => block.type === "thinking");
+  assert.ok(toolUseIndex >= 0, "DeepSeek tool_calls should become Anthropic tool_use blocks");
+  assert.ok(thinkingIndex > toolUseIndex, "DeepSeek reasoning_content must not be emitted before tool_use blocks");
+}
+
+async function testDeepSeekThinkingIsRoundTrippedAsReasoningContent() {
+  const result = await runAdapterWithUpstreamHandler(async () => new Response(JSON.stringify({
+    id: "chatcmpl-deepseek-roundtrip",
+    model: "deepseek-chat",
+    choices: [
+      {
+        index: 0,
+        finish_reason: "stop",
+        message: {
+          role: "assistant",
+          content: "杭州明天天气多云。"
+        }
+      }
+    ]
+  }), {
+    status: 200,
+    headers: {
+      "content-type": "application/json; charset=utf-8"
+    }
+  }), {
+    config: {
+      name: "DeepSeek",
+      defaultModel: "deepseek-chat"
+    },
+    requestBody: {
+      model: "deepseek-chat",
+      max_tokens: 256,
+      stream: false,
+      tools: [
+        {
+          name: "get_weather",
+          description: "查询天气",
+          input_schema: {
+            type: "object",
+            properties: {
+              location: {
+                type: "string"
+              },
+              date: {
+                type: "string"
+              }
+            },
+            required: ["location", "date"]
+          }
+        }
+      ],
+      messages: [
+        {
+          role: "user",
+          content: "帮我看下杭州明天天气"
+        },
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "thinking",
+              thinking: "Need to call get_weather before answering."
+            },
+            {
+              type: "text",
+              text: "我先查一下天气。"
+            },
+            {
+              type: "tool_use",
+              id: "call_weather_1",
+              name: "get_weather",
+              input: {
+                location: "杭州",
+                date: "2026-04-28"
+              }
+            }
+          ]
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "call_weather_1",
+              content: "Cloudy 7~13°C"
+            }
+          ]
+        }
+      ]
+    }
+  });
+  const assistantMessage = result.upstreamCalls[0].body.messages[1];
+  assert.equal(assistantMessage.reasoning_content, "Need to call get_weather before answering.");
+  assert.equal(assistantMessage.content, "我先查一下天气。");
+  assert.deepEqual(assistantMessage.tool_calls, [
+    {
+      id: "call_weather_1",
+      type: "function",
+      function: {
+        name: "get_weather",
+        arguments: "{\"location\":\"杭州\",\"date\":\"2026-04-28\"}"
+      }
+    }
+  ]);
+  assert.equal(JSON.stringify(assistantMessage).includes("<think>"), false, "DeepSeek round-trip should use reasoning_content instead of think tags");
+}
+
+async function testDeepSeekPlainThinkingIsOmittedWithoutToolContext() {
+  const result = await runAdapterWithUpstreamHandler(async () => new Response(JSON.stringify({
+    id: "chatcmpl-deepseek-plain",
+    model: "deepseek-reasoner",
+    choices: [
+      {
+        index: 0,
+        finish_reason: "stop",
+        message: {
+          role: "assistant",
+          content: "ok"
+        }
+      }
+    ]
+  }), {
+    status: 200,
+    headers: {
+      "content-type": "application/json; charset=utf-8"
+    }
+  }), {
+    config: {
+      name: "DeepSeek",
+      defaultModel: "deepseek-reasoner"
+    },
+    requestBody: {
+      model: "deepseek-reasoner",
+      max_tokens: 256,
+      stream: false,
+      messages: [
+        {
+          role: "user",
+          content: "直接回答"
+        },
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "thinking",
+              thinking: "No tool is needed."
+            },
+            {
+              type: "text",
+              text: "可以直接回答。"
+            }
+          ]
+        },
+        {
+          role: "user",
+          content: "继续"
+        }
+      ]
+    }
+  });
+  const assistantMessage = result.upstreamCalls[0].body.messages[1];
+  assert.equal("reasoning_content" in assistantMessage, false);
+  assert.equal(assistantMessage.content, "可以直接回答。");
+  assert.equal(JSON.stringify(assistantMessage).includes("<think>"), false, "DeepSeek plain no-tool turns should not fall back to think tags");
+}
+
+async function testDeepSeekToolTurnFinalThinkingIsStillReplayed() {
+  const result = await runAdapterWithUpstreamHandler(async () => new Response(JSON.stringify({
+    id: "chatcmpl-deepseek-tool-final",
+    model: "deepseek-chat",
+    choices: [
+      {
+        index: 0,
+        finish_reason: "stop",
+        message: {
+          role: "assistant",
+          content: "ok"
+        }
+      }
+    ]
+  }), {
+    status: 200,
+    headers: {
+      "content-type": "application/json; charset=utf-8"
+    }
+  }), {
+    config: {
+      name: "DeepSeek",
+      defaultModel: "deepseek-chat"
+    },
+    requestBody: {
+      model: "deepseek-chat",
+      max_tokens: 256,
+      stream: false,
+      messages: [
+        {
+          role: "user",
+          content: "帮我看下杭州天气"
+        },
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "thinking",
+              thinking: "Need to call get_weather before answering."
+            },
+            {
+              type: "text",
+              text: "我先查一下天气。"
+            },
+            {
+              type: "tool_use",
+              id: "call_weather_1",
+              name: "get_weather",
+              input: {
+                location: "杭州"
+              }
+            }
+          ]
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "call_weather_1",
+              content: "Cloudy 7~13°C"
+            }
+          ]
+        },
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "thinking",
+              thinking: "Use the weather result to answer."
+            },
+            {
+              type: "text",
+              text: "杭州天气多云。"
+            }
+          ]
+        },
+        {
+          role: "user",
+          content: "那适合出门吗？"
+        }
+      ]
+    }
+  });
+  const messages = result.upstreamCalls[0].body.messages;
+  const toolAssistant = messages.find((message) => {
+    return message.role === "assistant" && Array.isArray(message.tool_calls);
+  });
+  const finalAssistant = messages.find((message) => {
+    return message.role === "assistant" && message.content === "杭州天气多云。";
+  });
+  assert.equal(toolAssistant.reasoning_content, "Need to call get_weather before answering.");
+  assert.equal(finalAssistant.reasoning_content, "Use the weather result to answer.");
+  assert.equal(JSON.stringify(messages).includes("<think>"), false, "DeepSeek tool turns must replay reasoning_content instead of think tags");
+}
+
+async function testDeepSeekReasoningStaysAttachedBeforeToolResult() {
+  const result = await runAdapterWithUpstreamHandler(async () => new Response(JSON.stringify({
+    id: "chatcmpl-deepseek-tool-result-order",
+    model: "deepseek-chat",
+    choices: [
+      {
+        index: 0,
+        finish_reason: "stop",
+        message: {
+          role: "assistant",
+          content: "ok"
+        }
+      }
+    ]
+  }), {
+    status: 200,
+    headers: {
+      "content-type": "application/json; charset=utf-8"
+    }
+  }), {
+    config: {
+      name: "DeepSeek",
+      defaultModel: "deepseek-chat"
+    },
+    requestBody: {
+      model: "deepseek-chat",
+      max_tokens: 256,
+      stream: false,
+      messages: [
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "tool_use",
+              id: "call_weather_1",
+              name: "get_weather",
+              input: {
+                location: "杭州"
+              }
+            },
+            {
+              type: "tool_result",
+              tool_use_id: "call_weather_1",
+              content: "Cloudy 7~13°C"
+            },
+            {
+              type: "thinking",
+              thinking: "Now answer with the weather result."
+            },
+            {
+              type: "tool_result",
+              tool_use_id: "call_weather_1",
+              content: "Still cloudy"
+            }
+          ]
+        }
+      ]
+    }
+  });
+  const messages = result.upstreamCalls[0].body.messages;
+  assert.equal(messages[0].role, "assistant");
+  assert.deepEqual(messages[0].tool_calls, [
+    {
+      id: "call_weather_1",
+      type: "function",
+      function: {
+        name: "get_weather",
+        arguments: "{\"location\":\"杭州\"}"
+      }
+    }
+  ]);
+  assert.equal(messages[0].reasoning_content, "Now answer with the weather result.");
+  assert.equal(messages[1].role, "tool");
+  assert.equal(messages[2].role, "tool");
+  assert.equal(
+    messages.some((message, index) => index > 0 && message.role === "assistant" && message.reasoning_content),
+    false,
+    "reasoning-only assistant messages must not be inserted between tool results",
+  );
+}
+
+async function testDeepSeekStreamReasoningContentIsConvertedToThinking() {
+  const result = await runAdapterWithUpstreamHandler(async ({ callIndex, call }) => {
+    if (callIndex === 0) {
+      return new Response(JSON.stringify({
+        id: "chatcmpl-deepseek-empty",
+        model: "deepseek-chat",
+        choices: [
+          {
+            index: 0,
+            finish_reason: "stop",
+            message: {
+              role: "assistant"
+            }
+          }
+        ],
+        usage: {
+          prompt_tokens: 12,
+          completion_tokens: 5,
+          total_tokens: 17
+        }
+      }), {
+        status: 200,
+        headers: {
+          "content-type": "text/event-stream",
+          "content-length": "240"
+        }
+      });
+    }
+    assert.equal(call.body.stream, true, "stream fallback should request streaming");
+    return new Response([
+      "data: {\"id\":\"chatcmpl-deepseek-stream\",\"object\":\"chat.completion.chunk\",\"model\":\"deepseek-chat\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\"},\"finish_reason\":null}]}",
+      "",
+      "data: {\"id\":\"chatcmpl-deepseek-stream\",\"object\":\"chat.completion.chunk\",\"model\":\"deepseek-chat\",\"choices\":[{\"index\":0,\"delta\":{\"reasoning_content\":\"Need to verify weather.\",\"content\":\"我先查一下。\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":12,\"completion_tokens\":5,\"total_tokens\":17}}",
+      "",
+      "data: [DONE]",
+      ""
+    ].join("\n"), {
+      status: 200,
+      headers: {
+        "content-type": "text/event-stream"
+      }
+    });
+  }, {
+    config: {
+      name: "DeepSeek",
+      defaultModel: "deepseek-chat"
+    },
+    requestBody: {
+      model: "deepseek-chat",
+      max_tokens: 128,
+      stream: false,
+      messages: [
+        {
+          role: "user",
+          content: "帮我查天气"
+        }
+      ]
+    }
+  });
+  assert.equal(result.upstreamCalls.length, 2, "should retry once with streaming fallback");
+  assert.deepEqual(result.json.content, [
+    {
+      type: "thinking",
+      thinking: "Need to verify weather."
+    },
+    {
+      type: "text",
+      text: "我先查一下。"
+    }
+  ]);
+}
+
+async function testDeepSeekDirectStreamReasoningContentIsConvertedToThinkingDelta() {
+  const result = await runAdapterWithUpstreamHandler(async ({ call }) => {
+    assert.equal(call.body.stream, true, "direct stream request should be forwarded as streaming");
+    return new Response([
+      "data: {\"id\":\"chatcmpl-deepseek-direct-stream\",\"object\":\"chat.completion.chunk\",\"model\":\"deepseek-chat\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\"},\"finish_reason\":null}]}",
+      "",
+      "data: {\"id\":\"chatcmpl-deepseek-direct-stream\",\"object\":\"chat.completion.chunk\",\"model\":\"deepseek-chat\",\"choices\":[{\"index\":0,\"delta\":{\"reasoning_content\":\"Need direct stream reasoning.\",\"content\":\"直接流式回复。\"},\"finish_reason\":null}]}",
+      "",
+      "data: {\"id\":\"chatcmpl-deepseek-direct-stream\",\"object\":\"chat.completion.chunk\",\"model\":\"deepseek-chat\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":12,\"completion_tokens\":5,\"total_tokens\":17}}",
+      "",
+      "data: [DONE]",
+      ""
+    ].join("\n"), {
+      status: 200,
+      headers: {
+        "content-type": "text/event-stream"
+      }
+    });
+  }, {
+    config: {
+      name: "DeepSeek",
+      defaultModel: "deepseek-chat"
+    },
+    responseType: "text",
+    requestBody: {
+      model: "deepseek-chat",
+      max_tokens: 128,
+      stream: true,
+      messages: [
+        {
+          role: "user",
+          content: "直接流式测试"
+        }
+      ]
+    }
+  });
+  assert.equal(result.headers["content-type"], "text/event-stream; charset=utf-8");
+  assert.equal(result.text.includes("\"type\":\"thinking_delta\",\"thinking\":\"Need direct stream reasoning.\""), true);
+  assert.equal(result.text.includes("\"type\":\"text_delta\",\"text\":\"直接流式回复。\""), true);
+}
+
 async function main() {
   await testOutputTextPartsSurviveOpenAIChatTransform();
   await testStringContentStillWorks();
@@ -902,6 +1453,14 @@ async function main() {
   await testMessageOutputTextFallbackCanPromoteInlineToolCall();
   await testStreamingDeltaToolCallsAreReassembledAcrossChunks();
   await testContentFilterMapsToEndTurnWithoutToolUse();
+  await testDeepSeekReasoningContentIsConvertedToThinking();
+  await testDeepSeekReasoningContentDoesNotPrecedeToolUseBlocks();
+  await testDeepSeekThinkingIsRoundTrippedAsReasoningContent();
+  await testDeepSeekPlainThinkingIsOmittedWithoutToolContext();
+  await testDeepSeekToolTurnFinalThinkingIsStillReplayed();
+  await testDeepSeekReasoningStaysAttachedBeforeToolResult();
+  await testDeepSeekStreamReasoningContentIsConvertedToThinking();
+  await testDeepSeekDirectStreamReasoningContentIsConvertedToThinkingDelta();
   console.log("provider-format-adapter find regression tests passed");
 }
 

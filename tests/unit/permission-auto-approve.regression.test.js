@@ -8,6 +8,7 @@ const contractPath = path.join(rootDir, "claw-contract.js");
 const mcpPermissionsPath = path.join(rootDir, "assets", "mcpPermissions-qqAoJjJ8.js");
 const sidepanelPath = path.join(rootDir, "assets", "sidepanel-BoLm9pmH.js");
 const optionsPath = path.join(rootDir, "assets", "options-Hyb_OzME.js");
+const enUsPath = path.join(rootDir, "i18n", "en-US.json");
 const zhCnPath = path.join(rootDir, "i18n", "zh-CN.json");
 const zhTwPath = path.join(rootDir, "i18n", "zh-TW.json");
 
@@ -15,6 +16,7 @@ const contractSource = fs.readFileSync(contractPath, "utf8");
 const mcpPermissionsSource = fs.readFileSync(mcpPermissionsPath, "utf8");
 const sidepanelSource = fs.readFileSync(sidepanelPath, "utf8");
 const optionsSource = fs.readFileSync(optionsPath, "utf8");
+const enUsStrings = JSON.parse(fs.readFileSync(enUsPath, "utf8"));
 const zhCnStrings = JSON.parse(fs.readFileSync(zhCnPath, "utf8"));
 const zhTwStrings = JSON.parse(fs.readFileSync(zhTwPath, "utf8"));
 
@@ -220,8 +222,8 @@ function testOptionsBundleKeepsAutoApproveSettingsToggle() {
   );
 }
 
-function testChineseLocaleFilesCoverAutoApproveSettingsCopy() {
-  const ids = [
+function testLocaleFilesCoverAutoApproveSettingsCopy() {
+  const sharedChineseIds = [
     "Ik6gCYf6Og",
     "gJsw6oh4TA",
     "lA0hYw8dJm",
@@ -229,11 +231,31 @@ function testChineseLocaleFilesCoverAutoApproveSettingsCopy() {
     "Rr4v7Xc1iT",
     "BvsF9JQ8oT",
   ];
-  for (const id of ids) {
-    assert.equal(typeof zhCnStrings[id], "string", `zh-CN should include ${id}`);
-    assert.equal(zhCnStrings[id].trim().length > 0, true, `zh-CN ${id} should not be empty`);
-    assert.equal(typeof zhTwStrings[id], "string", `zh-TW should include ${id}`);
-    assert.equal(zhTwStrings[id].trim().length > 0, true, `zh-TW ${id} should not be empty`);
+  const popupIds = [
+    "bp7E2oF6fQ",
+    "x5J5dM6P6M",
+    "4c6SH4z8sL",
+  ];
+  const chineseLocaleEntries = [
+    ["zh-CN", zhCnStrings],
+    ["zh-TW", zhTwStrings],
+  ];
+  for (const [locale, strings] of chineseLocaleEntries) {
+    for (const id of sharedChineseIds) {
+      assert.equal(typeof strings[id], "string", `${locale} should include ${id}`);
+      assert.equal(strings[id].trim().length > 0, true, `${locale} ${id} should not be empty`);
+    }
+  }
+
+  const popupLocaleEntries = [
+    ["en-US", enUsStrings],
+    ...chineseLocaleEntries,
+  ];
+  for (const [locale, strings] of popupLocaleEntries) {
+    for (const id of popupIds) {
+      assert.equal(typeof strings[id], "string", `${locale} should include ${id}`);
+      assert.equal(strings[id].trim().length > 0, true, `${locale} ${id} should not be empty`);
+    }
   }
 }
 
@@ -256,7 +278,7 @@ function main() {
   testBackgroundBundleKeepsAutoApproveShortCircuit();
   testSidepanelBundleKeepsAutoApproveUiHooks();
   testOptionsBundleKeepsAutoApproveSettingsToggle();
-  testChineseLocaleFilesCoverAutoApproveSettingsCopy();
+  testLocaleFilesCoverAutoApproveSettingsCopy();
   testEditedFunctionsStillParse();
   console.log("permission auto approve regression test passed");
 }

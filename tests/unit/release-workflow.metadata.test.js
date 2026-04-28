@@ -6,6 +6,7 @@ const path = require("node:path");
 const workflowPath = path.join(__dirname, "..", "..", ".github", "workflows", "release-extension.yml");
 const packageListPath = path.join(__dirname, "..", "..", ".github", "release-package-items.txt");
 const packageJsonPath = path.join(__dirname, "..", "..", "package.json");
+const buildReleaseImportScriptPath = path.join(__dirname, "..", "..", "scripts", "build-release-import.ps1");
 const checkScriptPath = path.join(__dirname, "..", "..", "scripts", "check-release-package.js");
 const optionsHtmlPath = path.join(__dirname, "..", "..", "options.html");
 const sidepanelHtmlPath = path.join(__dirname, "..", "..", "sidepanel.html");
@@ -16,6 +17,7 @@ const serviceWorkerLoaderPath = path.join(__dirname, "..", "..", "service-worker
 const workflowSource = fs.readFileSync(workflowPath, "utf8");
 const packageListSource = fs.readFileSync(packageListPath, "utf8");
 const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf8"));
+const buildReleaseImportScriptSource = fs.readFileSync(buildReleaseImportScriptPath, "utf8");
 const optionsHtml = fs.readFileSync(optionsHtmlPath, "utf8");
 const sidepanelHtml = fs.readFileSync(sidepanelHtmlPath, "utf8");
 const pairingHtml = fs.readFileSync(pairingHtmlPath, "utf8");
@@ -124,6 +126,11 @@ function testReleasePackageCheckIsWiredIntoScriptsAndWorkflow() {
     workflowSource,
     /Verify release package manifest[\s\S]*npm run check:release-package/m,
     "release workflow should verify the release package manifest before archiving"
+  );
+  assert.match(
+    buildReleaseImportScriptSource,
+    /& node \$releasePackageCheckScriptPath/,
+    "local import build script should run the release package checker before copying files"
   );
 }
 
