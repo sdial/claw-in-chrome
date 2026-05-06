@@ -1,12 +1,35 @@
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
+const vm = require("node:vm");
 
 const rootDir = path.join(__dirname, "..", "..");
 const sourcePath = path.join(rootDir, "assets", "sidepanel-BoLm9pmH.js");
 
 function readSource() {
   return fs.readFileSync(sourcePath, "utf8").replace(/\r\n/g, "\n");
+}
+
+function extractFunctionSource(source, functionName) {
+  const start = source.indexOf(`function ${functionName}(`);
+  assert.notEqual(start, -1, `source should include function ${functionName}`);
+  const brace = source.indexOf("{", start);
+  assert.notEqual(brace, -1, `function ${functionName} should have a body`);
+
+  let depth = 0;
+  for (let index = brace; index < source.length; index += 1) {
+    const char = source[index];
+    if (char === "{") {
+      depth += 1;
+    } else if (char === "}") {
+      depth -= 1;
+      if (depth === 0) {
+        return source.slice(start, index + 1);
+      }
+    }
+  }
+
+  assert.fail(`function ${functionName} should be terminated`);
 }
 
 function indexOfOrFail(source, token, label) {
@@ -28,6 +51,56 @@ function assertFollowedBy(source, anchor, snippet, label, maxDistance = 2500) {
   const snippetIndex = source.indexOf(snippet, anchorIndex);
   assert.notEqual(snippetIndex, -1, `${label} should include the expected follow-up snippet`);
   assert.ok(snippetIndex - anchorIndex <= maxDistance, `${label} should keep the follow-up snippet close to the anchor`);
+}
+
+function testSessionSerializationPreservesMarkdownStructure(source) {
+  const sandbox = {};
+  const functions = [
+    "__cpTrimSessionText",
+    "__cpTrimSessionContentText",
+    "__cpStripSessionDisplayArtifacts",
+    "__cpExtractSessionDisplayText",
+    "__cpSanitizeSessionJsonValue",
+    "__cpExtractSessionText",
+    "__cpSerializeSessionToolResult",
+    "__cpSerializeSessionContent",
+    "__cpSerializeSessionMessage"
+  ].map((functionName) => extractFunctionSource(source, functionName));
+
+  vm.runInNewContext(
+    [
+      "const __CP_CHAT_SESSION_TEXT_LIMIT = 4000;",
+      "const __CP_CHAT_SESSION_JSON_TEXT_LIMIT = 800;",
+      ...functions,
+      `const markdown = "## 标题\\n\\n- 第一项\\n- 第二项";`,
+      `serializedAssistant = __cpSerializeSessionMessage({ role: "assistant", content: [{ type: "text", text: markdown }] });`,
+      `serializedString = __cpSerializeSessionMessage({ role: "assistant", content: markdown });`,
+      `serializedToolResult = __cpSerializeSessionMessage({ role: "user", content: [{ type: "tool_result", tool_use_id: "toolu_1", content: "line 1\\nline 2" }] });`,
+      `displayPreview = __cpExtractSessionDisplayText([{ type: "text", text: markdown }], 80);`
+    ].join("\n"),
+    sandbox
+  );
+
+  assert.equal(
+    sandbox.serializedAssistant.content[0].text,
+    "## 标题\n\n- 第一项\n- 第二项",
+    "assistant text blocks in saved sessions should keep Markdown line breaks"
+  );
+  assert.equal(
+    sandbox.serializedString.content,
+    "## 标题\n\n- 第一项\n- 第二项",
+    "string assistant content in saved sessions should keep Markdown line breaks"
+  );
+  assert.equal(
+    sandbox.serializedToolResult.content[0].content[0].text,
+    "line 1\nline 2",
+    "tool result text in saved sessions should keep rendered line breaks"
+  );
+  assert.equal(
+    sandbox.displayPreview,
+    "## 标题 - 第一项 - 第二项",
+    "session title and preview extraction should still collapse whitespace for compact display"
+  );
 }
 
 function testBootstrapRejectsStaleTabs(source) {
@@ -241,6 +314,7 @@ function testAllExplicitTabsGetThenPathsHandleStaleTabs(source) {
 function main() {
   const source = readSource();
 
+  testSessionSerializationPreservesMarkdownStructure(source);
   testBootstrapRejectsStaleTabs(source);
   testWindowBootstrapFallsBackToRestoreUrl(source);
   testScopeNormalizationPreservesNull(source);

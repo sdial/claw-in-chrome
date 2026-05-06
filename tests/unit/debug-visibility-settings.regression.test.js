@@ -5,6 +5,7 @@ const path = require("node:path");
 const rootDir = path.join(__dirname, "..", "..");
 const contractPath = path.join(rootDir, "claw-contract.js");
 const settingsPath = path.join(rootDir, "custom-provider-settings.js");
+const optionsEnhancerPath = path.join(rootDir, "options-update-enhancer.js");
 const permissionManagerPath = path.join(
   rootDir,
   "assets",
@@ -18,6 +19,7 @@ const zhTwCustomI18nPath = path.join(rootDir, "i18n", "custom", "zh-TW.js");
 function main() {
   const contractSource = fs.readFileSync(contractPath, "utf8");
   const settingsSource = fs.readFileSync(settingsPath, "utf8");
+  const optionsEnhancerSource = fs.readFileSync(optionsEnhancerPath, "utf8");
   const permissionManagerSource = fs.readFileSync(permissionManagerPath, "utf8");
   const sidepanelSource = fs.readFileSync(sidepanelPath, "utf8");
   const sidepanelLoggerSource = fs.readFileSync(sidepanelLoggerPath, "utf8");
@@ -43,6 +45,12 @@ function main() {
   );
 
   assert.match(
+    contractSource,
+    /INCOGNITO_MODE_STORAGE_KEY:\s*"incognitoMode"/,
+    "shared contract should expose the incognito mode storage key",
+  );
+
+  assert.match(
     settingsSource,
     /const DEBUG_MODE_STORAGE_KEY =\s*uiContract\.DEBUG_MODE_STORAGE_KEY \|\|\s*"debugMode";/s,
     "settings page should read the shared debug mode storage key",
@@ -58,6 +66,24 @@ function main() {
     settingsSource,
     /const SHOW_SYSTEM_REMINDERS_STORAGE_KEY =\s*uiContract\.SHOW_SYSTEM_REMINDERS_STORAGE_KEY \|\|\s*"showSystemReminders";/s,
     "settings page should read the shared system reminders storage key",
+  );
+
+  assert.doesNotMatch(
+    settingsSource,
+    /INCOGNITO_MODE_STORAGE_KEY/,
+    "custom provider settings should no longer own the incognito mode switch",
+  );
+
+  assert.match(
+    optionsEnhancerSource,
+    /const INCOGNITO_MODE_STORAGE_KEY =\s*uiContract\.INCOGNITO_MODE_STORAGE_KEY \|\|\s*"incognitoMode";/s,
+    "options enhancer should read the shared incognito mode storage key",
+  );
+
+  assert.match(
+    optionsEnhancerSource,
+    /const INCOGNITO_PANEL_ID = "cp-options-incognito-mode-panel";/,
+    "options enhancer should reserve a standalone incognito mode panel",
   );
 
   assert.match(
@@ -78,6 +104,12 @@ function main() {
     "settings page should define a system reminders toggle label",
   );
 
+  assert.match(
+    optionsEnhancerSource,
+    /incognitoCardTitle:\s*"Incognito mode"[\s\S]*incognitoCardSubtitle:\s*"Each chat starts without previous context and is never written to local history\."[\s\S]*incognitoToggleHelp:\s*"Useful when questions keep changing: avoid sending irrelevant prior context to save tokens\."/,
+    "options enhancer should explain no previous context, no local history, and token savings",
+  );
+
   assert.doesNotMatch(
     settingsSource,
     /debugStack\.appendChild\(debugModeRow\);/,
@@ -94,6 +126,12 @@ function main() {
     settingsSource,
     /const systemRemindersToggle = createNode\(\s*"button",\s*"cp-page-toggle cp-update-enhancer-toggle",\s*\);/s,
     "settings page should render the system reminders switch with the shared toggle styling",
+  );
+
+  assert.match(
+    optionsEnhancerSource,
+    /function renderIncognitoPanel\(panel\) \{[\s\S]*toggle\.className = "cp-page-toggle cp-update-enhancer-toggle";/s,
+    "options enhancer should render the incognito mode switch with the shared toggle styling",
   );
 
   assert.match(
@@ -127,9 +165,27 @@ function main() {
   );
 
   assert.match(
+    optionsEnhancerSource,
+    /chrome\.storage\.local\.set\(\{[\s\S]*\[INCOGNITO_MODE_STORAGE_KEY\]: nextEnabled,/s,
+    "options enhancer should persist the incognito mode preference",
+  );
+
+  assert.match(
     settingsSource,
-    /DEBUG_MODE_STORAGE_KEY in changes[\s\S]*SHOW_TRACE_IDS_STORAGE_KEY in changes[\s\S]*SHOW_SYSTEM_REMINDERS_STORAGE_KEY in changes[\s\S]*refreshDebug\(\)\.catch/s,
+    /DEBUG_MODE_STORAGE_KEY in changes[\s\S]*SHOW_TRACE_IDS_STORAGE_KEY in changes[\s\S]*SHOW_SYSTEM_REMINDERS_STORAGE_KEY in changes[\s\S]*SHOW_TOOL_RESULT_DETAILS_STORAGE_KEY in changes[\s\S]*refreshDebug\(\)\.catch/s,
     "settings page should refresh the debug section when hidden debug preferences change",
+  );
+
+  assert.match(
+    optionsEnhancerSource,
+    /renderIncognitoPanel\(panel\);\s*renderHttpPanel\(panel\);/s,
+    "options enhancer should place incognito mode before the HTTP panel",
+  );
+
+  assert.match(
+    optionsEnhancerSource,
+    /changes\[INCOGNITO_MODE_STORAGE_KEY\]/,
+    "options enhancer should refresh when incognito mode changes",
   );
 
   assert.match(
@@ -182,6 +238,66 @@ function main() {
 
   assert.match(
     sidepanelLoggerSource,
+    /const INCOGNITO_MODE_STORAGE_KEY = uiContract\.INCOGNITO_MODE_STORAGE_KEY \|\| "incognitoMode";/,
+    "sidepanel debug logger should reuse the shared incognito mode storage key",
+  );
+
+  assert.match(
+    sidepanelLoggerSource,
+    /function installIncognitoStorageGuard\(\) \{/,
+    "sidepanel debug logger should install the incognito storage guard before the sidepanel app loads",
+  );
+
+  assert.match(
+    sidepanelLoggerSource,
+    /filterMessagesForRequest\(messages, sessionKey\) \{[\s\S]*filterMessagesForIncognitoRequest\(visibleMessages, incognitoModeEnabled\);/,
+    "sidepanel debug logger should expose a request filter for incognito mode",
+  );
+
+  assert.match(
+    sidepanelLoggerSource,
+    /beginTemporaryMessages[\s\S]*endTemporaryMessages[\s\S]*filterMessagesForPersistence\(messages, sessionKey\)/,
+    "sidepanel debug logger should track and discard temporary incognito message ranges",
+  );
+
+  assert.match(
+    sidepanelSource,
+    /filterMessagesForRequest\?\.\(y\.messages, s\) \|\| y\.messages/,
+    "sidepanel small-model helper requests should filter prior context in incognito mode",
+  );
+
+  assert.match(
+    sidepanelSource,
+    /calculateProjectedMetricsFromMessages\(__cpFilterIncognitoRequestMessages\(L\), __cpMaxOutputTokens, __cpContextWindow\)/,
+    "sidepanel standard chat metrics should use incognito-filtered request context",
+  );
+
+  assert.match(
+    sidepanelSource,
+    /let p = be\(__cpFilterIncognitoRequestMessages\(L\)\);/,
+    "sidepanel standard chat requests should not send previous turns in incognito mode",
+  );
+
+  assert.match(
+    sidepanelSource,
+    /let f = AQ\(__cpIncognitoRuntime\?\.filterMessagesForRequest\?\.\(r, I\.current\) \|\| r\);/,
+    "sidepanel quick-mode requests should not send previous turns in incognito mode",
+  );
+
+  assert.match(
+    sidepanelSource,
+    /incognito\.boundary_started[\s\S]*incognito\.boundary_discarded/,
+    "sidepanel should start a temporary incognito boundary on enable and discard it on disable",
+  );
+
+  assert.match(
+    sidepanelSource,
+    /const __cpPersistentMessages = __cpIncognitoRuntime\?\.filterMessagesForPersistence\?\.\(dt, o\.sessionId\) \|\| dt;/,
+    "sidepanel persistence should exclude temporary incognito messages before writing session snapshots",
+  );
+
+  assert.match(
+    sidepanelLoggerSource,
     /let debugEnabled = true;/,
     "sidepanel debug logger should default to enabled",
   );
@@ -217,6 +333,12 @@ function main() {
   );
 
   assert.match(
+    zhCustomI18nSource,
+    /"optionsUpdateEnhancer": \{[\s\S]*"incognitoCardTitle": "无痕模式"[\s\S]*"incognitoCardSubtitle": "每次对话都不携带之前上下文，也不会写入本地历史。"[\s\S]*"incognitoToggleHelp": "适合问题不断变化的场景：避免反复携带无关历史上下文，从而节省 token。"/,
+    "zh-CN custom strings should describe incognito mode context and token behavior",
+  );
+
+  assert.match(
     zhTwCustomI18nSource,
     /"debugTitle": "開發 \/ 偵錯"/,
     "zh-TW custom strings should translate the developer/debug section",
@@ -232,6 +354,12 @@ function main() {
     zhTwCustomI18nSource,
     /"systemRemindersTitle": "顯示系統提醒"/,
     "zh-TW custom strings should translate the system reminders toggle",
+  );
+
+  assert.match(
+    zhTwCustomI18nSource,
+    /"optionsUpdateEnhancer": \{[\s\S]*"incognitoCardTitle": "無痕模式"[\s\S]*"incognitoCardSubtitle": "每次對話都不攜帶先前上下文，也不會寫入本機歷史。"[\s\S]*"incognitoToggleHelp": "適合問題不斷變化的場景：避免反覆攜帶無關歷史上下文，從而節省 token。"/,
+    "zh-TW custom strings should describe incognito mode context and token behavior",
   );
 
   assert.match(

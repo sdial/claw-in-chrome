@@ -86,6 +86,12 @@ function main() {
 
   assert.match(
     settingsSource,
+    /mcpSetupHeader\.appendChild\([\s\S]*createNode\([\s\S]*"h3",[\s\S]*"cp-page-heading text-text-100 font-xl-bold",[\s\S]*strings\.mcpSetupTitle/s,
+    "settings page should render the MCP setup title with the shared page heading style",
+  );
+
+  assert.match(
+    settingsSource,
     /const mcpSetupEnvHeader = createNode\("div", "cp-page-row"\);[\s\S]*const mcpSetupEnvCopy = createNode\("div", "cp-page-row-copy"\);/s,
     "settings page should reuse the shared row controls for the MCP env block",
   );

@@ -201,6 +201,44 @@ ${source.slice(builderStart, builderEnd)}
   assert.equal(displayMetrics.contextWindow, 40000);
 }
 
+async function testSidepanelContextUsageIgnoresSyntheticZeroUsage() {
+  const source = read(sidepanelPath);
+  const zxStart = source.indexOf("const ZX = new class {");
+  const zxEnd = source.indexOf("function __cpFormatContextUsageTokenCount", zxStart);
+
+  assert.notEqual(zxStart, -1, "sidepanel bundle should include token metrics helper");
+  assert.notEqual(zxEnd, -1, "token metrics helper should end before context usage helpers");
+
+  const { ZX } = vm.runInNewContext(
+    `${source.slice(zxStart, zxEnd)}
+({ ZX });`,
+    {},
+  );
+  const messages = [
+    {
+      role: "user",
+      content: "x".repeat(4000),
+    },
+    {
+      role: "assistant",
+      content: "ok",
+      usage: {
+        input_tokens: 0,
+        output_tokens: 0,
+        cache_read_input_tokens: 0,
+        cache_creation_input_tokens: 0,
+      },
+    },
+  ];
+
+  const metrics = ZX.calculateProjectedMetricsFromMessages(messages, 0, 200000);
+  assert.ok(
+    metrics.totalTokens > 0,
+    "zero usage placeholders should fall back to estimated context instead of displaying 0",
+  );
+  assert.ok(metrics.percentUsed > 0, "context usage indicator should show non-zero usage for non-empty chats");
+}
+
 async function testSidepanelStripsCustomToolTypeForCustomAnthropicProviders() {
   const source = read(sidepanelPath);
   const start = source.indexOf("function __cpNormalizeProviderFormat");
@@ -288,6 +326,142 @@ async function testSidepanelRetriesTransientStreamErrorsAnchorsExist() {
   assertIncludes(source, "t.includes(\"received from peer\")", "transient stream retry guard");
   assertIncludes(source, "__cpPanelDebugLog(\"chat.retry_transient_error\"", "transient stream retry guard");
   assertIncludes(source, "} else if (__cpIsRetryableTransientChatError(n) && g + 1 < m) {", "transient stream retry guard");
+
+  const start = source.indexOf("function __cpIsRetryableTransientChatError");
+  const end = source.indexOf("const MQ", start);
+  assert.notEqual(start, -1, "sidepanel bundle should include retry classifier");
+  assert.notEqual(end, -1, "retry classifier should end before PURL defaults");
+  const { __cpIsRetryableTransientChatError } = vm.runInNewContext(
+    `${source.slice(start, end)}
+({ __cpIsRetryableTransientChatError });`,
+    {},
+  );
+  assert.equal(__cpIsRetryableTransientChatError("stream error: received from peer"), true);
+  assert.equal(__cpIsRetryableTransientChatError("overloaded, please retry"), true);
+  assert.equal(
+    __cpIsRetryableTransientChatError("This request would exceed the rate limit for your provider."),
+    false,
+    "provider rate-limit errors must not enter the transient retry loop",
+  );
+}
+
+async function testSidepanelCustomProvider429DoesNotBecomeMessageLimit() {
+  const source = read(sidepanelPath);
+  const start = source.indexOf("function iQ");
+  const end = source.indexOf("function aQ", start);
+  assert.notEqual(start, -1, "sidepanel bundle should include message limit header parser");
+  assert.notEqual(end, -1, "message limit parser block should end before change detector");
+
+  class AnthropicLikeError extends Error {
+    constructor(status, message) {
+      super(message);
+      this.status = status;
+    }
+  }
+
+  const { oQ } = vm.runInNewContext(
+    `${source.slice(start, end)}
+({ oQ });`,
+    {
+      xt: AnthropicLikeError,
+      Date,
+      Headers,
+    },
+  );
+
+  const provider429 = new AnthropicLikeError(
+    429,
+    '429 {"type":"error","error":{"type":"invalid_request_error","message":"自定义供应商限流，请稍后再试。"}}',
+  );
+  assert.equal(
+    oQ(provider429),
+    null,
+    "custom provider 429 must stay a normal provider error instead of becoming Claude messageLimit",
+  );
+
+  const genericHeaders429 = {
+    status: 429,
+    headers: new Headers({
+      "retry-after": "60",
+      "x-ratelimit-reset": "123456",
+    }),
+  };
+  assert.equal(
+    oQ(genericHeaders429),
+    null,
+    "generic provider rate-limit headers must not synthesize a Claude usage-limit reset time",
+  );
+
+  const realMessageLimit = new AnthropicLikeError(
+    429,
+    '429 {"type":"error","error":{"type":"rate_limit_error","message":"{\\"type\\":\\"exceeded_limit\\",\\"resetsAt\\":123456}"}}',
+  );
+  const parsedMessageLimit = oQ(realMessageLimit);
+  assert.equal(
+    parsedMessageLimit?.type,
+    "exceeded_limit",
+    "structured Claude message_limit payloads should still render the usage-limit banner",
+  );
+  assert.equal(parsedMessageLimit?.resetsAt, 123456);
+
+  const anthropicHeaders429 = {
+    status: 429,
+    headers: new Headers({
+      "anthropic-ratelimit-unified-status": "rejected",
+      "anthropic-ratelimit-unified-reset": "123456",
+    }),
+  };
+  const parsedAnthropicHeaders = oQ(anthropicHeaders429);
+  assert.equal(
+    parsedAnthropicHeaders?.type,
+    "exceeded_limit",
+    "Anthropic unified rate-limit headers should still parse as messageLimit",
+  );
+  assert.equal(parsedAnthropicHeaders?.resetsAt, 123456);
+  assert.deepEqual(Object.keys(parsedAnthropicHeaders?.windows || {}), []);
+}
+
+async function testSidepanelQuickModeKeepsCustomProviderErrorsLocal() {
+  const source = read(sidepanelPath);
+  assert.equal(
+    source.includes("extra usage is required for fast mode"),
+    false,
+    "quick mode must not classify custom-provider errors as Claude fast-mode extra-usage errors",
+  );
+  assert.equal(
+    source.includes("Extra usage must be enabled to use this model in quick mode"),
+    false,
+    "quick mode must not replace provider errors with Claude settings guidance",
+  );
+  assert.equal(
+    source.includes('url: "https://claude.ai/settings/usage"'),
+    false,
+    "quick mode must not redirect custom-provider failures to Claude usage settings",
+  );
+}
+
+async function testSidepanelCustomProviderRefusalStopReasonStaysLocal() {
+  const source = read(sidepanelPath);
+  assertIncludes(
+    source,
+    'const __cpStopReason = __cpHasUsableProviderConfig && n.stop_reason === "refusal" ? "end_turn" : n.stop_reason;',
+    "standard chat custom-provider refusal stop reason guard",
+  );
+  assertIncludes(
+    source,
+    "reason: __cpStopReason",
+    "standard chat custom-provider refusal stop reason guard",
+  );
+  assertIncludes(
+    source,
+    'const __cpQuickStopReason = __cpHasUsableProviderConfig && L.stop_reason === "refusal" ? "end_turn" : L.stop_reason || "end_turn";',
+    "quick mode custom-provider refusal stop reason guard",
+  );
+  assertIncludes(
+    source,
+    "reason: __cpQuickStopReason",
+    "quick mode custom-provider refusal stop reason guard",
+  );
 }
 
 async function testSidepanelAnchorsExist() {
@@ -1477,9 +1651,13 @@ async function main() {
   await testCompactConversationCompactsWithoutTdz();
   await testSidepanelContextUsageIndicatorAnchorsExist();
   await testSidepanelContextUsageIndicatorUsesConfiguredWindowForDisplay();
+  await testSidepanelContextUsageIgnoresSyntheticZeroUsage();
   await testSidepanelStripsCustomToolTypeForCustomAnthropicProviders();
   await testSidepanelCompactionBlocksConcurrentSendAnchorsExist();
   await testSidepanelRetriesTransientStreamErrorsAnchorsExist();
+  await testSidepanelCustomProvider429DoesNotBecomeMessageLimit();
+  await testSidepanelQuickModeKeepsCustomProviderErrorsLocal();
+  await testSidepanelCustomProviderRefusalStopReasonStaysLocal();
   await testSidepanelAnchorsExist();
   await testServiceWorkerBundleAnchorsExist();
   await testAccessibilityTreeAnchorsExist();

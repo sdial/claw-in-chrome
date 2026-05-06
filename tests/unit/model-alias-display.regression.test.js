@@ -5,6 +5,7 @@ const path = require("node:path");
 const rootDir = path.join(__dirname, "..", "..");
 const storageChunkPath = path.join(rootDir, "assets", "useStorageState-hbwNMVUA.js");
 const sidepanelBundlePath = path.join(rootDir, "assets", "sidepanel-BoLm9pmH.js");
+const optionsBundlePath = path.join(rootDir, "assets", "options-Hyb_OzME.js");
 
 function read(filePath) {
   return fs.readFileSync(filePath, "utf8");
@@ -54,6 +55,31 @@ function testModelsConfigReaderSupportsValueLabelAliases() {
   );
   assertIncludesNormalized(
     source,
+    'return __cpUseResolvedModelsConfig(t);',
+    "models config reader should overlay custom provider models for scheduler surfaces",
+  );
+  assertIncludesNormalized(
+    source,
+    'const __cpCustomProviderConfigStorageKeyForModels = "customProviderConfig";',
+    "models config reader should listen to the custom provider profile",
+  );
+  assertIncludesNormalized(
+    source,
+    'function __cpBuildCustomProviderModelsConfig(e, t) {',
+    "models config reader should build selectable options from custom provider profiles",
+  );
+  assertIncludesNormalized(
+    source,
+    '__cpReadCachedProviderModelOptionsForModels(t, n)',
+    "models config reader should include cached fetched provider models",
+  );
+  assertIncludesNormalized(
+    source,
+    '(!e.name || e.name === e.model) && n.name && n.name !== n.model',
+    "models config reader should keep fetched aliases when default ids are added first",
+  );
+  assertIncludesNormalized(
+    source,
     '.map(e => __cpNormalizeModelsConfigOptionEntry(e, R || {}))',
     "scheduler model selector should reuse normalized alias entries",
   );
@@ -61,6 +87,20 @@ function testModelsConfigReaderSupportsValueLabelAliases() {
     source,
     '.filter(Boolean);',
     "scheduler model selector should discard invalid alias entries after normalization",
+  );
+}
+
+function testShortcutModalTracksResolvedDefaultModel() {
+  const source = read(optionsBundlePath);
+  assertIncludesNormalized(
+    source,
+    'const __cpShortcutFallbackModelId = "claude-sonnet-4-5-20250929";',
+    "shortcut modal should name the temporary fallback model explicitly",
+  );
+  assertIncludesNormalized(
+    source,
+    'if (!r || r === __cpShortcutFallbackModelId || (t.length && !i)) { return e; }',
+    "shortcut modal should switch new shortcuts to the resolved provider default once it loads",
   );
 }
 
@@ -91,11 +131,32 @@ function testSidepanelNormalizesAliasOptionsBeforeBootstrap() {
     'modelConfig: { ...__cpResolvedModelConfig, options: __cpNormalizedAvailableModelOptions }',
     "sidepanel should expose normalized options to the dropdown",
   );
+  assertIncludesNormalized(
+    source,
+    'const le = Ge();',
+    "sidepanel shortcut editor should read the shared resolved model config",
+  );
+  assertIncludesNormalized(
+    source,
+    'modelConfig: le',
+    "sidepanel shortcut scheduler should receive the resolved model config",
+  );
+  assertIncludesNormalized(
+    source,
+    'const r = n && (!e.length || t(n)) ? n : s;',
+    "sidepanel shortcut editor should prefer the resolved current model only when it exists in the selectable options",
+  );
+  assertIncludesNormalized(
+    source,
+    'if (!n || (Array.isArray(le.options) && le.options.length > 0 && !t(n))) { return r; }',
+    "sidepanel shortcut editor should switch empty or stale model state to the resolved provider default",
+  );
 }
 
 function main() {
   testModelsConfigReaderSupportsValueLabelAliases();
   testSidepanelNormalizesAliasOptionsBeforeBootstrap();
+  testShortcutModalTracksResolvedDefaultModel();
   console.log("model alias display regression tests passed");
 }
 

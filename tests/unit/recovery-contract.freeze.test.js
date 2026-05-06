@@ -26,6 +26,11 @@ const releasePackageListPath = path.join(
   ".github",
   "release-package-items.txt",
 );
+const runtimeFontPreloadHrefs = Object.freeze([
+  "/assets/AnthropicSans-Romans-Variable-25x258-Bpr3wWwO.woff2",
+  "/assets/AnthropicSerif-Romans-Variable-25x258-B6fyXDVc.woff2",
+  "/assets/AnthropicMono20250717_TKVF-B2MNN231.woff2"
+]);
 
 function createSandbox(overrides = {}) {
   const sandbox = {
@@ -56,6 +61,40 @@ function indexOfOrFail(source, token, label) {
   const index = source.indexOf(token);
   assert.notEqual(index, -1, `${label} should include ${token}`);
   return index;
+}
+
+function getLinkTagContaining(source, token, label) {
+  const tokenIndex = indexOfOrFail(source, token, label);
+  const tagStart = source.lastIndexOf("<link", tokenIndex);
+  const tagEnd = source.indexOf(">", tokenIndex);
+
+  assert.notEqual(tagStart, -1, `${label} should be inside a link tag`);
+  assert.notEqual(tagEnd, -1, `${label} link tag should be closed`);
+
+  return {
+    index: tokenIndex,
+    tag: source.slice(tagStart, tagEnd + 1)
+  };
+}
+
+function assertFontPreloadBeforeIndexStylesheet(source, href, label) {
+  const { index, tag } = getLinkTagContaining(source, `href="${href}"`, label);
+  const stylesheetIndex = indexOfOrFail(
+    source,
+    'href="/assets/index-BKzrDHDt.css"',
+    `${label} index stylesheet`
+  );
+  const fontPath = path.join(rootDir, href.replace(/^\/+/, ""));
+
+  assert.ok(
+    index < stylesheetIndex,
+    `${label} should preload ${href} before the stylesheet that declares runtime fonts`
+  );
+  assert.match(tag, /(?:^|\s)rel="preload"(?:\s|>|\/)/, `${label} ${href} should use preload`);
+  assert.match(tag, /(?:^|\s)as="font"(?:\s|>|\/)/, `${label} ${href} should preload as font`);
+  assert.match(tag, /(?:^|\s)type="font\/woff2"(?:\s|>|\/)/, `${label} ${href} should declare woff2`);
+  assert.match(tag, /\bcrossorigin\b/, `${label} ${href} should match the @font-face request mode`);
+  assert.ok(fs.existsSync(fontPath), `${label} ${href} should point to an existing packaged font`);
 }
 
 async function testContractExposesFrozenStableKeys() {
@@ -314,6 +353,39 @@ async function testShellEntryPointsLoadContractBeforeRecoveredModules() {
   assert.ok(loaderBundleIndex < loaderDetachedRuntimeIndex);
 }
 
+async function testHtmlEntryPointsPreloadRuntimeFontsBeforeStylesheets() {
+  const htmlEntryNames = fs
+    .readdirSync(rootDir)
+    .filter(name => name.endsWith(".html"))
+    .sort();
+  const checkedEntryNames = [];
+
+  for (const htmlEntryName of htmlEntryNames) {
+    const htmlPath = path.join(rootDir, htmlEntryName);
+    const htmlSource = fs.readFileSync(htmlPath, "utf8");
+
+    if (!htmlSource.includes('href="/assets/index-BKzrDHDt.css"')) {
+      continue;
+    }
+
+    checkedEntryNames.push(htmlEntryName);
+
+    for (const href of runtimeFontPreloadHrefs) {
+      assertFontPreloadBeforeIndexStylesheet(
+        htmlSource,
+        href,
+        htmlEntryName
+      );
+    }
+  }
+
+  assert.deepEqual(
+    checkedEntryNames,
+    ["options.html", "pairing.html", "sidepanel.html", "visualizer.html"],
+    "every shell that loads the runtime CSS should be covered by the font preload regression check"
+  );
+}
+
 async function testReleaseAndManifestKeepFrozenShellInterfaces() {
   const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
   const workflow = fs.readFileSync(releaseWorkflowPath, "utf8");
@@ -335,6 +407,7 @@ async function main() {
   await testRecoveredModulesReadFrozenContract();
   await testServiceWorkerRuntimeAcceptsContractMessageType();
   await testShellEntryPointsLoadContractBeforeRecoveredModules();
+  await testHtmlEntryPointsPreloadRuntimeFontsBeforeStylesheets();
   await testReleaseAndManifestKeepFrozenShellInterfaces();
   console.log("recovery contract freeze tests passed");
 }
